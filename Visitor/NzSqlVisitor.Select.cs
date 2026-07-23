@@ -368,18 +368,27 @@ public partial class NzSqlVisitor
         {
             foreach (var item in cte.Query.SelectList)
             {
-                var name = item.Alias ?? InferSelectItemName(item.Expression);
-                if (name is not null)
+                // Handle qualified star (D.*) — parser creates ColumnReference with Name="*"
+                if (item.Expression is ColumnReference cr && cr.Name == "*")
                 {
-                    var dataType = item.Alias is null
-                        ? ResolveSelectItemDataType(item.Expression)
-                        : null;
-                    cols.Add(new ColumnInfo(name, DataType: dataType));
+                    var expanded = ExpandStarColumns(cte.Query.From, cr.Qualifier);
+                    cols.AddRange(expanded.Select(c => new ColumnInfo(c)));
                 }
                 else if (item.Expression is StarExpression star)
                 {
                     var expanded = ExpandStarColumns(cte.Query.From, star.Qualifier);
                     cols.AddRange(expanded.Select(c => new ColumnInfo(c)));
+                }
+                else
+                {
+                    var name = item.Alias ?? InferSelectItemName(item.Expression);
+                    if (name is not null)
+                    {
+                        var dataType = item.Alias is null
+                            ? ResolveSelectItemDataType(item.Expression)
+                            : null;
+                        cols.Add(new ColumnInfo(name, DataType: dataType));
+                    }
                 }
             }
         }

@@ -715,6 +715,64 @@ FROM TESTDB..EMPLOYEES;",
         Assert.Equal(diag.Position.Column + "FAKE_COLUMN".Length, diag.EndColumn);
     }
 
+    // ========================================================================
+    // CTE with SELECT * wildcard expansion
+    // ========================================================================
+
+    [Fact]
+    public void CteWithSelectStarQualified_ExpandsColumns()
+    {
+        // Reproduce the bug: CTE with D.* (qualified star) was parsed as
+        // ColumnReference(Name="*", Qualifier="D") instead of StarExpression,
+        // so BuildCteColumns never expanded the wildcard into actual column names.
+        var schema = new InMemorySchemaProvider();
+        schema.AddTable(new TableInfo("DIMDATE", "ADMIN", "JUST_DATA", Columns: new[]
+        {
+            new ColumnInfo("DATEKEY"), new ColumnInfo("CALENDARQUARTER")
+        }));
+
+        SqlTestHelpers.ExpectValid(
+            @"WITH CTE1 AS (
+    SELECT D.* FROM JUST_DATA..DIMDATE D
+)
+SELECT C.DATEKEY FROM CTE1 C
+WHERE C.CALENDARQUARTER > 0", schema);
+    }
+
+    [Fact]
+    public void CteWithUnqualifiedStar_ExpandsColumns()
+    {
+        var schema = new InMemorySchemaProvider();
+        schema.AddTable(new TableInfo("DIMDATE", "ADMIN", "JUST_DATA", Columns: new[]
+        {
+            new ColumnInfo("DATEKEY"), new ColumnInfo("CALENDARQUARTER")
+        }));
+
+        SqlTestHelpers.ExpectValid(
+            @"WITH CTE1 AS (
+    SELECT * FROM JUST_DATA..DIMDATE
+)
+SELECT DATEKEY FROM CTE1 WHERE CALENDARQUARTER > 0", schema);
+    }
+
+    [Fact]
+    public void CteWithSelectStarQualified_ReportsErrorOnNonExistentColumn()
+    {
+        var schema = new InMemorySchemaProvider();
+        schema.AddTable(new TableInfo("DIMDATE", "ADMIN", "JUST_DATA", Columns: new[]
+        {
+            new ColumnInfo("DATEKEY"), new ColumnInfo("CALENDARQUARTER")
+        }));
+
+        SqlTestHelpers.ExpectErrorCode(
+            @"WITH CTE1 AS (
+    SELECT D.* FROM JUST_DATA..DIMDATE D
+)
+SELECT C.NONEXISTENT FROM CTE1 C",
+            "SQL004",
+            schema);
+    }
+
     [Fact]
     public void SQL004_CTE_SameColumnBothCTE_AtLeastOneErrorWithPosition()
     {
