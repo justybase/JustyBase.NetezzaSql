@@ -19,7 +19,7 @@ obj/
 
 ## Test & coverage
 TestResults/
-coverage/
+/coverage/
 
 ## Artifacts
 artifacts/

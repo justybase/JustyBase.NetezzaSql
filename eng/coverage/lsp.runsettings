@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="XPlat Code Coverage">
+        <Configuration>
+          <Format>cobertura</Format>
+          <Include>[JustyBase.NetezzaSqlLsp]JustyBase.NetezzaSqlLsp.Protocol.*,[JustyBase.NetezzaSqlLsp]JustyBase.NetezzaSqlLsp.Handlers.*,[JustyBase.NetezzaSqlLsp]JustyBase.NetezzaSqlLsp.LspServer*</Include>
+          <ExcludeByFile>**/Program.cs,**/obj/**</ExcludeByFile>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>
