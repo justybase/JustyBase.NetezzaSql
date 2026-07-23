@@ -19,8 +19,17 @@ $assemblyResolver = [ResolveEventHandler]{
     param($sender, $eventArgs)
     $name = [Reflection.AssemblyName]$eventArgs.Name
     if ($name.Name -eq 'Superpower') {
-        $path = Join-Path $env:USERPROFILE '.nuget/packages/superpower/3.2.1/lib/netstandard2.0/Superpower.dll'
-        if (Test-Path $path) { return [Reflection.Assembly]::LoadFrom($path) }
+        # Derive search paths from the assembly output directories
+        $searchPaths = $assemblies | ForEach-Object {
+            Join-Path $repoRoot (Split-Path $_.Path -Parent)
+        } | Sort-Object -Unique
+        foreach ($dir in $searchPaths) {
+            $path = Join-Path $dir 'Superpower.dll'
+            if (Test-Path $path) { return [Reflection.Assembly]::LoadFrom($path) }
+        }
+        # Fallback: NuGet global cache (cross-platform)
+        $fallback = Join-Path $HOME '.nuget/packages/superpower/3.2.1/lib/netstandard2.0/Superpower.dll'
+        if (Test-Path $fallback) { return [Reflection.Assembly]::LoadFrom($fallback) }
     }
     return $null
 }
