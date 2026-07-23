@@ -9,6 +9,7 @@
     <OutputType>Exe</OutputType>
     <PublishAot>true</PublishAot>
     <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
+    <IsPackable>false</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>
