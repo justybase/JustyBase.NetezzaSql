@@ -22,16 +22,16 @@ jobs:
         uses: actions/setup-dotnet@v6
 
       - name: Restore
-        run: dotnet restore
+        run: dotnet restore JustyBase.NetezzaSql.sln
 
       - name: Build
-        run: dotnet build --no-restore -c Release
+        run: dotnet build JustyBase.NetezzaSql.sln --no-restore -c Release
 
       - name: Test
-        run: dotnet test --no-build -c Release --verbosity normal
+        run: dotnet test JustyBase.NetezzaSql.sln --no-build -c Release --verbosity normal
 
       - name: Pack
-        run: dotnet pack --no-build -c Release -o ./artifacts
+        run: dotnet pack JustyBase.NetezzaSql.sln --no-build -c Release -o ./artifacts
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
