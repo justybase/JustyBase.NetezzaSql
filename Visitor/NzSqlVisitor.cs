@@ -262,6 +262,13 @@ public partial class NzSqlVisitor
         var cols = new List<ColumnInfo>();
         foreach (var item in stmt.SelectList)
         {
+            // Skip star expressions (both unqualified * and qualified D.*).
+            // InferColumnsFromSelect is static and cannot access ExpandStarColumns
+            // which needs schema access, so we just skip them to avoid adding a
+            // bogus column named "*".
+            if (item.Expression is StarExpression) continue;
+            if (item.Expression is ColumnReference { Name: "*" }) continue;
+
             var name = item.Alias ?? InferSelectItemName(item.Expression);
             if (name is not null) cols.Add(new ColumnInfo(name));
         }

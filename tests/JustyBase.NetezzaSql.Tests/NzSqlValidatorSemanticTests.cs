@@ -774,6 +774,105 @@ SELECT C.NONEXISTENT FROM CTE1 C",
     }
 
     [Fact]
+    public void CteWithJoinAndMultipleQualifiedStars_ExpandsColumns()
+    {
+        var schema = new InMemorySchemaProvider();
+        schema.AddTable(new TableInfo("EMPLOYEES", "PUBLIC", "HR", Columns: new[]
+        {
+            new ColumnInfo("EMP_ID"), new ColumnInfo("EMP_NAME"), new ColumnInfo("DEPT_FK")
+        }));
+        schema.AddTable(new TableInfo("DEPARTMENTS", "PUBLIC", "HR", Columns: new[]
+        {
+            new ColumnInfo("DEPT_ID"), new ColumnInfo("DEPT_NAME")
+        }));
+
+        SqlTestHelpers.ExpectValid(
+            @"WITH CTE_JOIN AS (
+    SELECT E.*, D.*
+    FROM HR..EMPLOYEES E
+    JOIN HR..DEPARTMENTS D ON E.DEPT_FK = D.DEPT_ID
+)
+SELECT CJ.EMP_ID, CJ.DEPT_NAME FROM CTE_JOIN CJ
+WHERE CJ.EMP_ID > 0", schema);
+    }
+
+    [Fact]
+    public void CteWithJoinAndMultipleQualifiedStars_ReportsErrorOnNonExistentColumn()
+    {
+        var schema = new InMemorySchemaProvider();
+        schema.AddTable(new TableInfo("EMPLOYEES", "PUBLIC", "HR", Columns: new[]
+        {
+            new ColumnInfo("EMP_ID"), new ColumnInfo("EMP_NAME"), new ColumnInfo("DEPT_FK")
+        }));
+        schema.AddTable(new TableInfo("DEPARTMENTS", "PUBLIC", "HR", Columns: new[]
+        {
+            new ColumnInfo("DEPT_ID"), new ColumnInfo("DEPT_NAME")
+        }));
+
+        SqlTestHelpers.ExpectErrorCode(
+            @"WITH CTE_JOIN AS (
+    SELECT E.*, D.*
+    FROM HR..EMPLOYEES E
+    JOIN HR..DEPARTMENTS D ON E.DEPT_FK = D.DEPT_ID
+)
+SELECT CJ.NONEXISTENT FROM CTE_JOIN CJ",
+            "SQL004",
+            schema);
+    }
+
+    // ========================================================================
+    // Subquery with SELECT * wildcard (InferColumnsFromSelect)
+    // ========================================================================
+
+    [Fact]
+    public void SubqueryWithUnqualifiedStar_SkipsColumnInference()
+    {
+        // When a subquery in FROM/JOIN uses SELECT *, InferColumnsFromSelect
+        // should skip it (no columns inferred) rather than adding a bogus "*" column.
+        var schema = new InMemorySchemaProvider();
+        schema.AddTable(new TableInfo("DIMDATE", "ADMIN", "JUST_DATA", Columns: new[]
+        {
+            new ColumnInfo("DATEKEY"), new ColumnInfo("CALENDARQUARTER")
+        }));
+
+        // The subquery has no alias for its columns, so we can't reference them
+        // by name - but it should not crash and should not produce bogus errors.
+        var result = SqlTestHelpers.Validate(
+            @"SELECT * FROM (SELECT * FROM JUST_DATA..DIMDATE) SQ", schema);
+        Assert.Empty(result.Errors);
+    }
+
+    [Fact]
+    public void SubqueryExplicitColumn_ResolvesCorrectly()
+    {
+        var schema = new InMemorySchemaProvider();
+        schema.AddTable(new TableInfo("DIMDATE", "ADMIN", "JUST_DATA", Columns: new[]
+        {
+            new ColumnInfo("DATEKEY"), new ColumnInfo("CALENDARQUARTER")
+        }));
+
+        SqlTestHelpers.ExpectValid(
+            @"SELECT SQ.DATEKEY FROM (SELECT D.DATEKEY FROM JUST_DATA..DIMDATE D) SQ", schema);
+    }
+
+    [Fact]
+    public void SubqueryWithQualifiedStar_GracefulDegradation()
+    {
+        // When a subquery uses D.*, InferColumnsFromSelect (static, no schema)
+        // skips it rather than adding a bogus "*" column. The subquery alias
+        // has no columns — should not crash, should not produce false errors.
+        var schema = new InMemorySchemaProvider();
+        schema.AddTable(new TableInfo("DIMDATE", "ADMIN", "JUST_DATA", Columns: new[]
+        {
+            new ColumnInfo("DATEKEY"), new ColumnInfo("CALENDARQUARTER")
+        }));
+
+        var result = SqlTestHelpers.Validate(
+            @"SELECT * FROM (SELECT D.* FROM JUST_DATA..DIMDATE D) SQ", schema);
+        Assert.Empty(result.Errors);
+    }
+
+    [Fact]
     public void SQL004_CTE_SameColumnBothCTE_AtLeastOneErrorWithPosition()
     {
         var sql = @"

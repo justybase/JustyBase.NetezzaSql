@@ -88,6 +88,28 @@ public sealed class NzLinterTests : IDisposable
     }
 
     [Fact]
+    public void NZ006_OrderByWithFetchFirst_NoIssue()
+    {
+        var issues = _engine.RunCheapRules("SELECT * FROM t ORDER BY col1 FETCH FIRST 10 ROWS ONLY");
+        Assert.DoesNotContain(issues, i => i.RuleId == "NZ006");
+    }
+
+    [Fact]
+    public void NZ006_OrderByInsideWindowOver_NoIssue()
+    {
+        var issues = _engine.RunCheapRules("SELECT ROW_NUMBER() OVER (PARTITION BY col2 ORDER BY col1 DESC) AS rn FROM t");
+        Assert.DoesNotContain(issues, i => i.RuleId == "NZ006");
+    }
+
+    [Fact]
+    public void NZ006_OrderByInsideWithinGroup_NoIssue()
+    {
+        var issues = _engine.RunCheapRules(
+            "SELECT d.CALENDARQUARTER, PERCENTILE_CONT(0.4) WITHIN GROUP (ORDER BY D.CALENDARQUARTER) AS fortieth FROM DIMDATE D GROUP BY d.CALENDARQUARTER");
+        Assert.DoesNotContain(issues, i => i.RuleId == "NZ006");
+    }
+
+    [Fact]
     public void NZ008_Truncate_Detected()
     {
         var issues = _engine.RunCheapRules("TRUNCATE TABLE t");
