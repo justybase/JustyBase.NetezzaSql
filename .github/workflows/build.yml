@@ -59,4 +59,8 @@ jobs:
           path: ./artifacts
 
       - name: Push to NuGet
-        run: dotnet nuget push ./artifacts/*.nupkg --source https://api.nuget.org/v3/index.json
+        shell: pwsh
+        run: |
+          foreach ($file in Get-ChildItem ./artifacts/*.nupkg) {
+            dotnet nuget push $file.FullName --source https://api.nuget.org/v3/index.json
+          }
