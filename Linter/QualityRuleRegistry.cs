@@ -73,9 +73,13 @@ public sealed class QualityRuleRegistry
     {
         get
         {
-            if (_cachedAllRules is null)
-                _cachedAllRules = _rules.Values.Select(r => r.Rule).ToList();
-            return _cachedAllRules;
+            var cached = _cachedAllRules;
+            if (cached is null)
+            {
+                cached = _rules.Values.Select(r => r.Rule).ToList();
+                _cachedAllRules = cached;
+            }
+            return cached;
         }
     }
 
@@ -86,12 +90,16 @@ public sealed class QualityRuleRegistry
     {
         get
         {
-            if (_cachedCheapRules is null)
-                _cachedCheapRules = _rules.Values
+            var cached = _cachedCheapRules;
+            if (cached is null)
+            {
+                cached = _rules.Values
                     .Where(r => r.Rule.Cost == RuleCost.Cheap && GetEffectiveSeverity(r.Rule.Id) != RuleSeverityConfig.Off)
                     .Select(r => r.Rule)
                     .ToList();
-            return _cachedCheapRules;
+                _cachedCheapRules = cached;
+            }
+            return cached;
         }
     }
 
@@ -102,12 +110,16 @@ public sealed class QualityRuleRegistry
     {
         get
         {
-            if (_cachedExpensiveRules is null)
-                _cachedExpensiveRules = _rules.Values
+            var cached = _cachedExpensiveRules;
+            if (cached is null)
+            {
+                cached = _rules.Values
                     .Where(r => r.Rule.Cost == RuleCost.Expensive && GetEffectiveSeverity(r.Rule.Id) != RuleSeverityConfig.Off)
                     .Select(r => r.Rule)
                     .ToList();
-            return _cachedExpensiveRules;
+                _cachedExpensiveRules = cached;
+            }
+            return cached;
         }
     }
 
@@ -231,14 +243,18 @@ public sealed class QualityRuleRegistry
     {
         get
         {
-            if (_cachedCheapRulesSorted is null)
-                _cachedCheapRulesSorted = _rules.Values
+            var cached = _cachedCheapRulesSorted;
+            if (cached is null)
+            {
+                cached = _rules.Values
                     .Where(r => r.Rule.Cost == RuleCost.Cheap && GetEffectiveSeverity(r.Rule.Id) != RuleSeverityConfig.Off)
                     .Select(r => (Rule: r.Rule, Priority: GetEffectivePriority(r.Rule.Id)))
                     .OrderByDescending(x => x.Priority)
                     .ThenBy(x => x.Rule.Id)
                     .ToList();
-            return _cachedCheapRulesSorted;
+                _cachedCheapRulesSorted = cached;
+            }
+            return cached;
         }
     }
 
@@ -250,14 +266,18 @@ public sealed class QualityRuleRegistry
     {
         get
         {
-            if (_cachedExpensiveRulesSorted is null)
-                _cachedExpensiveRulesSorted = _rules.Values
+            var cached = _cachedExpensiveRulesSorted;
+            if (cached is null)
+            {
+                cached = _rules.Values
                     .Where(r => r.Rule.Cost == RuleCost.Expensive && GetEffectiveSeverity(r.Rule.Id) != RuleSeverityConfig.Off)
                     .Select(r => (Rule: r.Rule, Priority: GetEffectivePriority(r.Rule.Id)))
                     .OrderByDescending(x => x.Priority)
                     .ThenBy(x => x.Rule.Id)
                     .ToList();
-            return _cachedExpensiveRulesSorted;
+                _cachedExpensiveRulesSorted = cached;
+            }
+            return cached;
         }
     }
 

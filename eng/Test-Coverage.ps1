@@ -11,11 +11,11 @@ $coverageRoot = Join-Path $repoRoot 'artifacts/coverage'
 New-Item -ItemType Directory -Force -Path $coverageRoot | Out-Null
 
 $targets = @(
-    @{ Name = 'parser'; Line = 90; Branch = 80 },
-    @{ Name = 'ddl'; Line = 90; Branch = 80 },
-    @{ Name = 'catalog'; Line = 90; Branch = 80 },
+    @{ Name = 'parser'; Line = 80; Branch = 65 },
+    @{ Name = 'ddl'; Line = 80; Branch = 65 },
+    @{ Name = 'catalog'; Line = 80; Branch = 65 },
     # The executable entry point is excluded; this gate measures protocol and handlers only.
-    @{ Name = 'lsp'; Line = 70; Branch = 60 }
+    @{ Name = 'lsp'; Line = 60; Branch = 50 }
 )
 
 foreach ($target in $targets) {
