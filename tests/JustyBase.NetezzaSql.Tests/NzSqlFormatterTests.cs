@@ -35,7 +35,7 @@ public sealed class NzSqlFormatterTests
     public void Format_SelectFrom_RoundTrips()
     {
         var result = ParseAndFormat("SELECT col1 FROM employees");
-        Assert.Equal("SELECT col1\r\nFROM employees", result);
+        Assert.Equal("SELECT col1" + Environment.NewLine + "FROM employees", result);
     }
 
     [Fact]

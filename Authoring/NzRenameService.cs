@@ -108,13 +108,18 @@ public static class NzRenameService
             return true;
         }
 
+        // Try plain identifier rules first
         if (!char.IsLetter(name[0]) && name[0] != '_')
-            return false;
+            return !name.Contains('"'); // can be made valid via quoting
 
         for (int i = 1; i < name.Length; i++)
         {
             if (!char.IsLetterOrDigit(name[i]) && name[i] != '_')
-                return false;
+            {
+                // Not a valid plain identifier, but can be made valid via quoting
+                // as long as it has no internal quote characters
+                return !name.Contains('"');
+            }
         }
 
         return true;
