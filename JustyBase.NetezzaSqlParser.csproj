@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsAotCompatible>true</IsAotCompatible>
+    <RootNamespace>JustyBase.NetezzaSqlParser</RootNamespace>
+    <AssemblyName>JustyBase.NetezzaSqlParser</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+    <PackageReference Include="Superpower" Version="3.2.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="JustyBase.NetezzaCatalogSql\**\*.cs" />
+    <Compile Remove="JustyBase.NetezzaDdl\**\*.cs" />
+    <Compile Remove="JustyBase.NetezzaSqlLsp\**\*.cs" />
+    <Compile Remove="tests\**\*.cs" />
+    <Compile Remove="samples\**\*.cs" />
+    <Compile Remove="artifacts\**\*.cs" />
+  </ItemGroup>
+
+</Project>

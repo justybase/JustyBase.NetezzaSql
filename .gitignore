@@ -1,0 +1,47 @@
+## Build
+bin/
+obj/
+[Bb]uild/
+*.nupkg
+*.snupkg
+*.apphost
+
+## IDE
+.vs/
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+*.user
+*.suo
+*.DotSettings.user
+
+## Test & coverage
+TestResults/
+coverage/
+
+## Artifacts
+artifacts/
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Temp & backup
+*.log
+*.tmp
+*.orig
+*.bak
+*~
+*.swp
+
+## Misc
+*.dbmdl
+*.dbmdl.bak
+*.rsuser
+*.tlog
+*.ilk
+*.metaproj
+*.cache
+[Ll]ogs/

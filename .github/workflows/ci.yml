@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test-sample:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore JustyBase.NetezzaSql.sln
+
+      - name: Build
+        run: dotnet build JustyBase.NetezzaSql.sln --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test JustyBase.NetezzaSql.sln --no-build --configuration Release --logger trx --collect:"XPlat Code Coverage"
+
+      - name: Verify public API baselines
+        shell: pwsh
+        run: ./eng/Assert-PublicApi.ps1 -Configuration Release
+
+      - name: Verify per-library coverage
+        shell: pwsh
+        run: ./eng/Test-Coverage.ps1 -Configuration Release
+
+      - name: Check package vulnerabilities
+        run: dotnet list JustyBase.NetezzaSql.sln package --vulnerable --include-transitive
+
+      - name: Pack libraries
+        shell: bash
+        run: |
+          dotnet pack JustyBase.NetezzaSqlParser.csproj --no-build --configuration Release --output artifacts/packages
+          dotnet pack JustyBase.NetezzaDdl/JustyBase.NetezzaDdl.csproj --no-build --configuration Release --output artifacts/packages
+          dotnet pack JustyBase.NetezzaCatalogSql/JustyBase.NetezzaCatalogSql.csproj --no-build --configuration Release --output artifacts/packages
+
+      - name: Build a package-only consumer
+        shell: pwsh
+        run: ./eng/Test-PackageConsumer.ps1 -Configuration Release
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: netezza-sql-packages
+          path: |
+            artifacts/packages/*.nupkg
+            artifacts/coverage/*.cobertura.xml
+
+      - name: Check whitespace
+        shell: pwsh
+        run: git diff --check
