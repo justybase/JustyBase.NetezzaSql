@@ -59,7 +59,4 @@ jobs:
           path: ./artifacts
 
       - name: Push to NuGet
-        uses: nuget/publish@v1
-        with:
-          packages-path: ./artifacts/*.nupkg
-          use-trusted-publishing: true
+        run: dotnet nuget push ./artifacts/*.nupkg --source https://api.nuget.org/v3/index.json
