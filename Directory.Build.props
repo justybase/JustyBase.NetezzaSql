@@ -6,13 +6,13 @@
     <Authors>Krzysztof Dusko</Authors>
     <PackageDescription>.NET libraries for Netezza SQL parsing, authoring, DDL generation, and catalog metadata queries.</PackageDescription>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/KrzysztofDusko/JustyBase.NetezzaSql</PackageProjectUrl>
+    <PackageProjectUrl>https://github.com/justybase/JustyBase.NetezzaSql</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <PackageTags>netezza;sql;parser;nzsql;nzplsql;ddl;catalog</PackageTags>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
-    <RepositoryUrl>https://github.com/KrzysztofDusko/JustyBase.NetezzaSql</RepositoryUrl>
+    <RepositoryUrl>https://github.com/justybase/JustyBase.NetezzaSql</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
