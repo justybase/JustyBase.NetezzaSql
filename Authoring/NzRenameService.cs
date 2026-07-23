@@ -68,8 +68,30 @@ public static class NzRenameService
 
         // A rename must always remain a valid SQL identifier. Quoted names
         // are accepted as document syntax; plain names use identifier rules.
-        if (!IsValidIdentifier(newName))
+
+        // Determine if the original occurrences were quoted identifiers.
+        // If so, the new name can be auto-quoted by PreserveCasing.
+        bool originalIsQuoted = false;
+        if (renameInfo.Occurrences.Count > 0)
+        {
+            var first = renameInfo.Occurrences[0];
+            if (first.StartAbsolute >= 0 && first.EndAbsolute <= text.Length)
+            {
+                var originalText = text[first.StartAbsolute..first.EndAbsolute];
+                originalIsQuoted = originalText.Length > 0 && originalText[0] == '"';
+            }
+        }
+
+        if (originalIsQuoted)
+        {
+            // Accept any non-empty name that can be auto-quoted (no internal ")
+            if (string.IsNullOrWhiteSpace(newName) || newName.Contains('"'))
+                return text;
+        }
+        else if (!IsValidIdentifier(newName))
+        {
             return text;
+        }
 
         var replacements = renameInfo.Occurrences
             .OrderByDescending(o => o.StartAbsolute)
@@ -108,18 +130,13 @@ public static class NzRenameService
             return true;
         }
 
-        // Try plain identifier rules first
         if (!char.IsLetter(name[0]) && name[0] != '_')
-            return !name.Contains('"'); // can be made valid via quoting
+            return false;
 
         for (int i = 1; i < name.Length; i++)
         {
             if (!char.IsLetterOrDigit(name[i]) && name[i] != '_')
-            {
-                // Not a valid plain identifier, but can be made valid via quoting
-                // as long as it has no internal quote characters
-                return !name.Contains('"');
-            }
+                return false;
         }
 
         return true;
