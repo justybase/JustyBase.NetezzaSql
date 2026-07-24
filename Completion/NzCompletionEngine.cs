@@ -11,7 +11,8 @@ public record CompletionItem(
     string Label,
     CompletionKind Kind,
     string? Detail = null,
-    int Priority = 0
+    int Priority = 0,
+    string? InsertText = null
 );
 
 public enum CompletionKind

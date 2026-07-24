@@ -1063,6 +1063,7 @@ public static class NzLintRulesExtensions
         new RuleNZP019_MissingDefault(),
         // NZP020: Implicit type conversion
         new RuleNZP020_ImplicitConversion(),
+        // NZP021: intentional gap vs Lite — no automatic Problems rule with that ID in Lite's default Problems set.
         // NZP022: OUT parameter without assignment
         new RuleNZP022_OutParamAssignment(),
         // NZP023: Unclosed cursor

@@ -39,7 +39,8 @@ public sealed class CompletionWildcardResolver
         var displayQualifier = qualifier.Contains('.') ? qualifier.Split('.')[^1] : qualifier;
         var snippet = string.Join(", ", columns.Select(c => $"{displayQualifier}.{c}"));
         return new CompletionItem(snippet, CompletionKind.Snippet,
-            Detail: $"Expand {qualifier}.* ({columns.Count} columns)", Priority: 100);
+            Detail: $"Expand {qualifier}.* ({columns.Count} columns)", Priority: 100,
+            InsertText: snippet);
     }
 
     private static string ExtractQualifierBeforeDot(string before, int dotIndex)
