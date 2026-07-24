@@ -201,7 +201,8 @@ public partial class NzSqlVisitor
             if (_schema is not null && !table.IsCte)
             {
                 var schemaTable = _schema.GetTable(table.Database, table.Schema, table.Name);
-                if (schemaTable?.Columns is not null)
+                // Empty list = deferred hydration; keep Columns unset so validation skips (not SQL005).
+                if (schemaTable?.Columns is { Count: > 0 })
                     table = new TableInfo(table.Name, table.Schema, table.Database,
                         table.IsCte, table.IsTempTable, table.Alias, schemaTable.Columns, table.Position);
             }

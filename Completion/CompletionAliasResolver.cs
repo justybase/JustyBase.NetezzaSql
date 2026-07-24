@@ -6,7 +6,7 @@ namespace JustyBase.NetezzaSqlParser.Completion;
 /// <summary>
 /// Shared alias and qualified table-name resolution for completion and wildcard expansion.
 /// </summary>
-internal static class CompletionAliasResolver
+public static class CompletionAliasResolver
 {
     public readonly record struct TablePath(string Name, string? Schema, string? Database);
 

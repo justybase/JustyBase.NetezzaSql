@@ -462,23 +462,46 @@ public sealed class NzValidatorServiceTests
     }
 
     [Fact]
-    public void Validate_Sql005Warning_QualifiedColumnRefUncachedTable()
+    public void Validate_QualifiedColumnRefUncachedTable_DoesNotWarnSql005()
     {
-        // SQL005: Cannot validate column — table not in schema cache
-        // Use a table that exists but WITHOUT columns in the schema
+        // Deferred / empty column cache must not look like a missing table (false SQL005).
         var provider = new InMemorySchemaProvider();
         provider.AddTable(new TableInfo("UNKNOWN_TABLE", null, null, Columns: null));
+        provider.AddTable(new TableInfo("EMPTY_COLS", "ADMIN", "JUST_DATA", Columns: []));
         var result = SqlTestHelpers.Validate(
-            "SELECT UNKNOWN_TABLE.COL FROM UNKNOWN_TABLE",
+            "SELECT A.OPERATOR FROM JUST_DATA.ADMIN.EMPTY_COLS A WHERE A.OPERATOR > 0",
             provider);
 
-        Assert.Contains(result.Warnings, w => w.Code == "SQL005");
+        Assert.DoesNotContain(result.Warnings, w => w.Code == "SQL005");
+        Assert.DoesNotContain(result.Errors, e => e.Code == "SQL005");
     }
 
     [Fact]
-    public void Validate_Sql005Warning_SkipsForCte()
+    public void Validate_DimAccountOperator_DeferredEmptyColumns_NoSql005()
     {
-        // SQL005 should NOT fire for CTEs (their columns come from the query, not schema)
+        // Regression: autocomplete could suggest OPERATOR while lint emitted
+        // SQL005 "table not found in schema cache" because columns were deferred ([]).
+        var provider = new InMemorySchemaProvider();
+        provider.AddTable(new TableInfo("DIMACCOUNT", "ADMIN", "JUST_DATA", Columns: []));
+        provider.AddTable(new TableInfo("OTHER", "ADMIN", "JUST_DATA",
+            Columns: [new ColumnInfo("X")]));
+
+        var result = SqlTestHelpers.Validate(
+            """
+            SELECT A.* FROM
+            JUST_DATA.ADMIN.DIMACCOUNT A
+            WHERE A.OPERATOR > 0
+            """,
+            provider);
+
+        Assert.DoesNotContain(result.Warnings, w => w.Code == "SQL005");
+        Assert.DoesNotContain(result.Errors, e => e.Code == "SQL005");
+        Assert.DoesNotContain(result.Errors, e => e.Code == "SQL006");
+    }
+
+    [Fact]
+    public void Validate_QualifiedColumnOnCte_DoesNotWarnSql005()
+    {
         var schema = SqlTestHelpers.CreateStandardMockSchema();
         var result = SqlTestHelpers.Validate(
             "WITH MYCTE AS (SELECT EMPLOYEE_ID FROM TESTDB..EMPLOYEES) SELECT MYCTE.EMPLOYEE_ID FROM MYCTE",

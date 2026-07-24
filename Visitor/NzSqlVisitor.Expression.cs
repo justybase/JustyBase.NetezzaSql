@@ -112,16 +112,13 @@ public partial class NzSqlVisitor
 
             if (table.Columns is null || table.Columns.Count == 0)
             {
-                // Table found but has no cached columns — warn that validation is not possible
-                // Skip warning for CTEs and temp tables (their columns come from the query, not schema)
-                if (!table.IsCte && !table.IsTempTable)
-                {
-                    AddError(
-                        $"Cannot validate column '{cr.Name}' - table '{table.Name}' not found in schema cache. Try refreshing the schema or the table may not exist.",
-                        "warning", "SQL005", cr.Position);
-                }
+                // Table is in scope but columns are not hydrated yet (deferred metadata /
+                // lazy load). Same as unqualified refs: skip — cannot validate ≠ invalid.
+                // Hosts should hydrate columns before lint when they want SQL004 checks.
+                return;
             }
-            else if (!table.Columns.Any(c => c.Name.Equals(cr.Name, StringComparison.OrdinalIgnoreCase)))
+
+            if (!table.Columns.Any(c => c.Name.Equals(cr.Name, StringComparison.OrdinalIgnoreCase)))
             {
                 var endCol = cr.Position.Column + cr.Name.Length;
                 AddError(

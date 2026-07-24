@@ -689,7 +689,7 @@ public class NzCompletionEngine
             if (_schema is not null)
             {
                 var info = _schema.GetTable(database, schema, tableName);
-                if (info?.Columns is not null)
+                if (info?.Columns is { Count: > 0 })
                 {
                     foreach (var col in info.Columns)
                     {
@@ -735,7 +735,7 @@ public class NzCompletionEngine
             if (_schema is not null)
             {
                 var directInfo = _schema.GetTable(null, null, qualifier);
-                if (directInfo?.Columns is not null)
+                if (directInfo?.Columns is { Count: > 0 })
                 {
                     foreach (var col in directInfo.Columns)
                     {
@@ -790,7 +790,7 @@ public class NzCompletionEngine
                 if (resolvedPath is { } path)
                 {
                     var pathInfo = _schema.GetTable(path.Database, path.Schema, path.Name);
-                    if (pathInfo?.Columns is not null)
+                    if (pathInfo?.Columns is { Count: > 0 })
                     {
                         foreach (var col in pathInfo.Columns)
                         {
@@ -802,7 +802,7 @@ public class NzCompletionEngine
                 }
 
                 var info = _schema.GetTable(null, null, resolvedName);
-                if (info?.Columns is not null)
+                if (info?.Columns is { Count: > 0 })
                 {
                     foreach (var col in info.Columns)
                     {
@@ -818,7 +818,7 @@ public class NzCompletionEngine
         if (_schema is not null)
         {
             var directInfo = _schema.GetTable(null, null, qualifier);
-            if (directInfo?.Columns is not null)
+            if (directInfo?.Columns is { Count: > 0 })
             {
                 foreach (var col in directInfo.Columns)
                 {
@@ -837,7 +837,8 @@ public class NzCompletionEngine
         if (tablePath is not { } path) return false;
 
         var info = _schema.GetTable(path.Database, path.Schema, path.Name);
-        if (info?.Columns is null) return false;
+        // Empty column list means deferred hydration — treat as miss so the host can lazy-load.
+        if (info?.Columns is not { Count: > 0 }) return false;
 
         foreach (var col in info.Columns)
         {
