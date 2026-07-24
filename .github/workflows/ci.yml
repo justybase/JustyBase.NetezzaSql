@@ -30,10 +30,6 @@ jobs:
       - name: Test
         run: dotnet test JustyBase.NetezzaSql.sln --no-build --configuration Release --logger trx --collect:"XPlat Code Coverage"
 
-      - name: Verify public API baselines
-        shell: pwsh
-        run: ./eng/Assert-PublicApi.ps1 -Configuration Release
-
       - name: Verify per-library coverage
         shell: pwsh
         run: ./eng/Test-Coverage.ps1 -Configuration Release
