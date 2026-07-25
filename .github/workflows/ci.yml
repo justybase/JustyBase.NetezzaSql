@@ -43,6 +43,7 @@ jobs:
           dotnet pack JustyBase.NetezzaSqlParser.csproj --no-build --configuration Release --output artifacts/packages
           dotnet pack JustyBase.NetezzaDdl/JustyBase.NetezzaDdl.csproj --no-build --configuration Release --output artifacts/packages
           dotnet pack JustyBase.NetezzaCatalogSql/JustyBase.NetezzaCatalogSql.csproj --no-build --configuration Release --output artifacts/packages
+          dotnet pack JustyBase.Netezza/JustyBase.Netezza.csproj --no-build --configuration Release --output artifacts/packages
 
       - name: Build a package-only consumer
         shell: pwsh

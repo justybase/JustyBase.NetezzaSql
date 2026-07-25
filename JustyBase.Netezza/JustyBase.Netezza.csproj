@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsAotCompatible>true</IsAotCompatible>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <PackageId>JustyBase.Netezza</PackageId>
+    <RootNamespace>JustyBase.Netezza</RootNamespace>
+    <AssemblyName>JustyBase.Netezza</AssemblyName>
+    <PackageDescription>UI-agnostic Netezza metadata, parser schema, and DDL integration components.</PackageDescription>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>netezza;metadata;schema;ddl;justybase</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\JustyBase.NetezzaSqlParser.csproj" />
+    <ProjectReference Include="..\JustyBase.NetezzaDdl\JustyBase.NetezzaDdl.csproj" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0-preview.3.25171.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

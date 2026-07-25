@@ -4,7 +4,7 @@
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <Authors>Krzysztof Dusko</Authors>
-    <PackageDescription>.NET libraries for Netezza SQL parsing, authoring, DDL generation, and catalog metadata queries.</PackageDescription>
+    <PackageDescription>.NET libraries for Netezza SQL parsing, authoring, DDL generation, catalog metadata queries, and UI-agnostic schema/DDL integration.</PackageDescription>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/justybase/JustyBase.NetezzaSql</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>

@@ -2,13 +2,14 @@
 
 Open-source .NET libraries for working with Netezza SQL without requiring a live database connection.
 
-The solution contains three libraries:
+The solution contains four libraries:
 
 | Library | Purpose |
 | --- | --- |
 | `JustyBase.NetezzaSqlParser` | Lexer, recursive-descent parser, AST, formatter, linter, completion, and editor-authoring services. |
 | `JustyBase.NetezzaDdl` | Netezza DDL text builders, identifier/literal helpers, and external-table option mapping. |
 | `JustyBase.NetezzaCatalogSql` | Reusable SQL statements for reading Netezza catalog metadata. |
+| `JustyBase.Netezza` | UI-agnostic metadata models, schema adapter for the parser, and DDL input mapping. |
 
 ## Status
 
@@ -98,15 +99,16 @@ Optional database-backed smoke tests are documented in [docs/live-tests.md](docs
 
 ## Create NuGet packages
 
-The three libraries can be packed independently:
+The four libraries can be packed independently:
 
 ```powershell
 dotnet pack .\JustyBase.NetezzaSqlParser.csproj -c Release
 dotnet pack .\JustyBase.NetezzaDdl\JustyBase.NetezzaDdl.csproj -c Release
 dotnet pack .\JustyBase.NetezzaCatalogSql\JustyBase.NetezzaCatalogSql.csproj -c Release
+dotnet pack .\JustyBase.Netezza\JustyBase.Netezza.csproj -c Release
 ```
 
-Each package includes this README and XML documentation. The CI workflow builds, tests, packs, and uploads all three packages as one artifact.
+Each package includes README and XML documentation. The CI workflow builds, tests, packs, and uploads all four packages as one artifact.
 
 ## Runnable examples
 

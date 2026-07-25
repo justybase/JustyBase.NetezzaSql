@@ -6,22 +6,24 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$testProject = Join-Path $repoRoot 'tests/JustyBase.NetezzaSql.Tests/JustyBase.NetezzaSql.Tests.csproj'
+$sqlTestProject = Join-Path $repoRoot 'tests/JustyBase.NetezzaSql.Tests/JustyBase.NetezzaSql.Tests.csproj'
+$netezzaTestProject = Join-Path $repoRoot 'tests/JustyBase.Netezza.Tests/JustyBase.Netezza.Tests.csproj'
 $coverageRoot = Join-Path $repoRoot 'artifacts/coverage'
 New-Item -ItemType Directory -Force -Path $coverageRoot | Out-Null
 
 $targets = @(
-    @{ Name = 'parser'; Line = 80; Branch = 65 },
-    @{ Name = 'ddl'; Line = 80; Branch = 65 },
-    @{ Name = 'catalog'; Line = 80; Branch = 65 },
+    @{ Name = 'parser'; Line = 80; Branch = 65; TestProject = $sqlTestProject },
+    @{ Name = 'ddl'; Line = 80; Branch = 65; TestProject = $sqlTestProject },
+    @{ Name = 'catalog'; Line = 80; Branch = 65; TestProject = $sqlTestProject },
     # The executable entry point is excluded; this gate measures protocol and handlers only.
-    @{ Name = 'lsp'; Line = 60; Branch = 50 }
+    @{ Name = 'lsp'; Line = 60; Branch = 50; TestProject = $sqlTestProject },
+    @{ Name = 'netezza'; Line = 80; Branch = 65; TestProject = $netezzaTestProject }
 )
 
 foreach ($target in $targets) {
     $resultsDirectory = Join-Path $coverageRoot "$($target.Name)-results"
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $resultsDirectory
-    dotnet test $testProject --no-build --configuration $Configuration --settings (Join-Path $PSScriptRoot "coverage/$($target.Name).runsettings") --collect:'XPlat Code Coverage' --results-directory $resultsDirectory
+    dotnet test $target.TestProject --no-build --configuration $Configuration --settings (Join-Path $PSScriptRoot "coverage/$($target.Name).runsettings") --collect:'XPlat Code Coverage' --results-directory $resultsDirectory
     if ($LASTEXITCODE -ne 0) { throw "Tests failed while collecting $($target.Name) coverage." }
 
     $report = Get-ChildItem -Path $resultsDirectory -Recurse -Filter 'coverage.cobertura.xml' | Select-Object -First 1

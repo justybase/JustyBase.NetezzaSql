@@ -8,7 +8,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $packages = Get-ChildItem -Path $PackageDirectory -Filter '*.nupkg' | Where-Object { $_.Name -notlike '*.symbols.nupkg' }
-$required = 'JustyBase.NetezzaSqlParser', 'JustyBase.NetezzaDdl', 'JustyBase.NetezzaCatalogSql'
+$required = 'JustyBase.NetezzaSqlParser', 'JustyBase.NetezzaDdl', 'JustyBase.NetezzaCatalogSql', 'JustyBase.Netezza'
 $versions = @{}
 foreach ($id in $required) {
     $package = $packages | Where-Object { $_.Name -match "^$([regex]::Escape($id))\.(.+)\.nupkg$" } | Select-Object -First 1
@@ -27,10 +27,12 @@ $escapedSource = [Security.SecurityElement]::Escape((Resolve-Path $PackageDirect
     <PackageReference Include="JustyBase.NetezzaSqlParser" Version="$($versions['JustyBase.NetezzaSqlParser'])" />
     <PackageReference Include="JustyBase.NetezzaDdl" Version="$($versions['JustyBase.NetezzaDdl'])" />
     <PackageReference Include="JustyBase.NetezzaCatalogSql" Version="$($versions['JustyBase.NetezzaCatalogSql'])" />
+    <PackageReference Include="JustyBase.Netezza" Version="$($versions['JustyBase.Netezza'])" />
   </ItemGroup>
 </Project>
 "@ | Set-Content -NoNewline (Join-Path $consumerRoot 'PackageConsumer.csproj')
 @"
+using JustyBase.Netezza;
 using JustyBase.NetezzaCatalogSql;
 using JustyBase.NetezzaDdl;
 using JustyBase.NetezzaSqlParser.Lexer;
@@ -38,6 +40,7 @@ using JustyBase.NetezzaSqlParser.Lexer;
 Console.WriteLine(NzLexer.Tokenize("SELECT 1").Count());
 Console.WriteLine(NetezzaNameHelper.QuoteNameIfNeeded("sample"));
 Console.WriteLine(NetezzaCatalogSql.GetSchemasSql("SAMPLE"));
+Console.WriteLine(NetezzaResult<int>.Ok(42).Value);
 "@ | Set-Content -NoNewline (Join-Path $consumerRoot 'Program.cs')
 
 dotnet build (Join-Path $consumerRoot 'PackageConsumer.csproj') --configuration $Configuration

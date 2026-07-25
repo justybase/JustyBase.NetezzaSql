@@ -15,6 +15,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Remove="JustyBase.Netezza\**\*.cs" />
     <Compile Remove="JustyBase.NetezzaCatalogSql\**\*.cs" />
     <Compile Remove="JustyBase.NetezzaDdl\**\*.cs" />
     <Compile Remove="JustyBase.NetezzaSqlLsp\**\*.cs" />
