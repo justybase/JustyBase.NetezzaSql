@@ -4,6 +4,10 @@ All notable changes to this project will be documented here.
 
 ## Unreleased
 
+_No unreleased changes._
+
+## 0.2.0-preview.7
+
 - Merge `JustyBase.Netezza` into this repository as a fourth library package
   (`JustyBase.Netezza/`). One restore/build/test/pack covers parser, DDL,
   catalog, and the integration layer under a shared `PackageVersion`.
