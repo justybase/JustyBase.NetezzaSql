@@ -33,7 +33,8 @@ public sealed class NetezzaDdlTextBuilder
 
         var columnLines = input.Columns.Select(column =>
         {
-            string line = $"{NetezzaNameHelper.QuoteNameIfNeeded(column.Name)} {column.FullTypeName}";
+            string typeName = NetezzaNameHelper.StripEmbeddedNotNull(column.FullTypeName);
+            string line = $"{NetezzaNameHelper.QuoteNameIfNeeded(column.Name)} {typeName}";
             if (column.NotNull)
                 line += " NOT NULL";
             if (!string.IsNullOrWhiteSpace(column.ColDefault))
@@ -128,7 +129,7 @@ public sealed class NetezzaDdlTextBuilder
         sb.AppendLine($"CREATE EXTERNAL TABLE {cleanDatabase}.{cleanSchema}.{cleanTableName}");
         sb.AppendLine("(");
         sb.AppendLine(string.Join($",{Environment.NewLine}", input.Columns.Select(o =>
-            $"    {NetezzaNameHelper.QuoteNameIfNeeded(o.Name)} {o.FullTypeName}{(o.NotNull ? " NOT NULL" : string.Empty)}")));
+            $"    {NetezzaNameHelper.QuoteNameIfNeeded(o.Name)} {NetezzaNameHelper.StripEmbeddedNotNull(o.FullTypeName)}{(o.NotNull ? " NOT NULL" : string.Empty)}")));
         sb.AppendLine(")");
         sb.AppendLine("USING");
         sb.AppendLine("(");

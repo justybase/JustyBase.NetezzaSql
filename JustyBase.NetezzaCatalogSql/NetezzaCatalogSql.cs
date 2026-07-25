@@ -135,7 +135,7 @@ public static partial class NetezzaCatalogSql
                     X.OBJID::INT AS OBJID
                     , X.ATTNAME
                     , X.DESCRIPTION
-                    , CASE WHEN X.ATTNOTNULL THEN X.FORMAT_TYPE || ' NOT NULL'  ELSE X.FORMAT_TYPE END
+                    , X.FORMAT_TYPE
                     , X.ATTNOTNULL::BOOL AS ATTNOTNULL
                     , X.COLDEFAULT
                 FROM
@@ -146,6 +146,122 @@ public static partial class NetezzaCatalogSql
                     AND DATABASE = '{dbLiteral}'
                 ORDER BY 
                     X.OBJID, X.ATTNUM
+            """;
+    }
+
+    /// <summary>
+    /// Column metadata for a single table (FORMAT_TYPE without embedded NOT NULL).
+    /// Mirrors JustyBaseLite NZ_QUERIES.getTableColumns.
+    /// </summary>
+    public static string GetTableColumnsSql(string database, string schema, string tableName)
+    {
+        database = NormalizeDatabaseIdentifier(database, nameof(database));
+        ArgumentException.ThrowIfNullOrWhiteSpace(schema, nameof(schema));
+        ArgumentException.ThrowIfNullOrWhiteSpace(tableName, nameof(tableName));
+
+        string dbLiteral = EscapeSqlLiteral(database);
+        string schemaLiteral = EscapeSqlLiteral(schema.ToUpperInvariant());
+        string tableLiteral = EscapeSqlLiteral(tableName.ToUpperInvariant());
+
+        return
+            $"""
+            SELECT 
+                X.OBJID::INT AS OBJID,
+                X.ATTNAME,
+                X.DESCRIPTION,
+                X.FORMAT_TYPE AS FULL_TYPE,
+                X.ATTNOTNULL::BOOL AS ATTNOTNULL,
+                X.COLDEFAULT
+            FROM {database}.._V_RELATION_COLUMN X
+            INNER JOIN {database}.._V_OBJECT_DATA D ON X.OBJID = D.OBJID
+            WHERE X.TYPE IN ('TABLE','VIEW','EXTERNAL TABLE','SEQUENCE','SYSTEM VIEW','SYSTEM TABLE')
+                AND X.OBJID NOT IN (4,5)
+                AND UPPER(D.SCHEMA) = '{schemaLiteral}'
+                AND UPPER(D.OBJNAME) = '{tableLiteral}'
+                AND D.DBNAME = '{dbLiteral}'
+            ORDER BY X.OBJID, X.ATTNUM
+            """;
+    }
+
+    /// <summary>
+    /// Full column metadata including PK/FK/distribution flags for a single table.
+    /// Mirrors JustyBaseLite netezzaMetadataProvider.buildColumnMetadataQuery.
+    /// </summary>
+    public static string GetColumnMetadataSql(string database, string schema, string tableName)
+    {
+        database = NormalizeDatabaseIdentifier(database, nameof(database));
+        ArgumentException.ThrowIfNullOrWhiteSpace(schema, nameof(schema));
+        ArgumentException.ThrowIfNullOrWhiteSpace(tableName, nameof(tableName));
+
+        string dbLiteral = EscapeSqlLiteral(database);
+        string schemaLiteral = EscapeSqlLiteral(schema);
+        string tableLiteral = EscapeSqlLiteral(tableName);
+
+        return
+            $"""
+            SELECT 
+                X.ATTNAME
+                , X.FORMAT_TYPE
+                , CASE WHEN X.ATTNOTNULL THEN 1 ELSE 0 END AS IS_NOT_NULL
+                , X.COLDEFAULT
+                , COALESCE(X.DESCRIPTION, '') AS DESCRIPTION
+                , MAX(CASE WHEN K.CONTYPE = 'p' THEN 1 ELSE 0 END) AS IS_PK
+                , MAX(CASE WHEN K.CONTYPE = 'f' THEN 1 ELSE 0 END) AS IS_FK
+                , MAX(CASE WHEN D.ATTNAME IS NOT NULL THEN 1 ELSE 0 END) AS IS_DISTRIBUTION_KEY
+            FROM
+                {database}.._V_RELATION_COLUMN X
+            INNER JOIN
+                {database}.._V_OBJECT_DATA O ON X.OBJID = O.OBJID
+            LEFT JOIN
+                {database}.._V_RELATION_KEYDATA K 
+                ON K.OBJID = O.OBJID
+                AND K.ATTNAME = X.ATTNAME
+                AND K.CONTYPE IN ('p', 'f')
+            LEFT JOIN
+                {database}.._V_TABLE_DIST_MAP D
+                ON D.OBJID = O.OBJID
+                AND D.ATTNAME = X.ATTNAME
+            WHERE
+                UPPER(O.OBJNAME) = UPPER('{tableLiteral}')
+                AND UPPER(O.DBNAME) = UPPER('{dbLiteral}')
+                AND UPPER(O.SCHEMA) = UPPER('{schemaLiteral}')
+            GROUP BY 
+                X.ATTNAME, X.FORMAT_TYPE, X.ATTNOTNULL, X.COLDEFAULT, X.DESCRIPTION, X.ATTNUM
+            ORDER BY 
+                X.ATTNUM
+            """;
+    }
+
+    /// <summary>
+    /// Bulk column fetch for batch DDL (FORMAT_TYPE + ATTNOTNULL, no embedded NOT NULL).
+    /// Mirrors JustyBaseLite batchDDL columnsQuery.
+    /// </summary>
+    public static string GetBatchColumnsSql(string database, string? schema = null)
+    {
+        database = NormalizeDatabaseIdentifier(database, nameof(database));
+        string dbLiteral = EscapeSqlLiteral(database);
+        string schemaClause = string.IsNullOrWhiteSpace(schema)
+            ? string.Empty
+            : $"AND UPPER(D.SCHEMA) = UPPER('{EscapeSqlLiteral(schema)}')";
+
+        return
+            $"""
+            SELECT 
+                D.SCHEMA,
+                D.OBJNAME,
+                D.OBJTYPE,
+                X.ATTNAME,
+                X.DESCRIPTION,
+                X.FORMAT_TYPE AS FULL_TYPE,
+                X.ATTNOTNULL::BOOL AS ATTNOTNULL,
+                X.COLDEFAULT,
+                X.ATTNUM
+            FROM {database}.._V_RELATION_COLUMN X
+            INNER JOIN {database}.._V_OBJECT_DATA D ON X.OBJID = D.OBJID
+            WHERE D.DBNAME = '{dbLiteral}'
+                AND D.OBJTYPE IN ('TABLE', 'VIEW', 'EXTERNAL TABLE')
+                {schemaClause}
+            ORDER BY D.SCHEMA, D.OBJNAME, X.ATTNUM
             """;
     }
 
@@ -290,9 +406,7 @@ public static partial class NetezzaCatalogSql
                     , E1.REJECTFILE 
                 FROM 
                     {database}.._V_EXTERNAL E1
-                    JOIN {database}.._V_EXTOBJECT E2 ON E1.DATABASE = E2.DATABASE
-                        AND E1.SCHEMA = E2.SCHEMA
-                        AND E1.TABLENAME = E2.TABLENAME
+                    JOIN {database}.._V_EXTOBJECT E2 ON E1.RELID = E2.OBJID
                 WHERE 
                     E1.DATABASE = '{EscapeSqlLiteral(database)}';
             """;

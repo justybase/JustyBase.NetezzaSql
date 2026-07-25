@@ -104,7 +104,7 @@ public static partial class NetezzaCatalogSql
                 , X.ATTNAME 
                 , X.DESCRIPTION
                 , X.FORMAT_TYPE
-                , X.ATTNOTNULL::BOOL AS ATTNOTNULL
+                , (NOT X.ATTNOTNULL)::BOOL AS IS_NULLABLE
                 , DM.DISTSEQNO::BYTEINT
                 , DS.ORGSEQNO::BYTEINT
                 , X.COLDEFAULT

@@ -89,6 +89,7 @@ public sealed class DdlSurfaceCoverageTests
             CrInString = true, RecordDelim = "\n", RequireQuotes = false
         });
         Assert.Equal("\\t", options.Delimiter);
+        Assert.Equal("\\n", options.RecordDelim);
         Assert.Equal(3, options.SkipRows);
         Assert.True(options.CrInString);
 

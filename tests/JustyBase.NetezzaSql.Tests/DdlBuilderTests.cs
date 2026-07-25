@@ -131,6 +131,86 @@ public sealed class DdlBuilderTests
     }
 
     [Fact]
+    public void BuildCreateTable_StripsEmbeddedNotNullFromTypeName()
+    {
+        var ddl = _builder.BuildCreateTable(new NetezzaTableDdlInput(
+            "DB", "S", "T",
+            [
+                new NetezzaColumnDdl("ID", "INTEGER NOT NULL", NotNull: true),
+                new NetezzaColumnDdl("NAME", "VARCHAR(100) NOT NULL", NotNull: false)
+            ]));
+
+        Assert.Contains("ID INTEGER NOT NULL", ddl);
+        Assert.Contains("NAME VARCHAR(100)", ddl);
+        Assert.DoesNotContain("INTEGER NOT NULL NOT NULL", ddl);
+        Assert.DoesNotContain("VARCHAR(100) NOT NULL", ddl);
+    }
+
+    [Fact]
+    public void BuildCreateTable_DimDateGoldenMatchesReferenceNotNullPlacement()
+    {
+        var columns = new NetezzaColumnDdl[]
+        {
+            new("DATEKEY", "INTEGER", NotNull: true),
+            new("FULLDATEALTERNATEKEY", "TIMESTAMP", Description: "Full date alternate key"),
+            new("DAYNUMBEROFWEEK", "INTEGER", Description: "test comment 2"),
+            new("ENGLISHDAYNAMEOFWEEK", "NATIONAL CHARACTER VARYING(14)"),
+            new("SPANISHDAYNAMEOFWEEK", "NATIONAL CHARACTER VARYING(14)"),
+            new("FRENCHDAYNAMEOFWEEK", "NATIONAL CHARACTER VARYING(13)", Description: "comment 3"),
+            new("DAYNUMBEROFMONTH", "INTEGER"),
+            new("DAYNUMBEROFYEAR", "INTEGER"),
+            new("WEEKNUMBEROFYEAR", "INTEGER"),
+            new("ENGLISHMONTHNAME", "NATIONAL CHARACTER VARYING(14)"),
+            new("SPANISHMONTHNAME", "NATIONAL CHARACTER VARYING(15)"),
+            new("FRENCHMONTHNAME", "NATIONAL CHARACTER VARYING(14)"),
+            new("MONTHNUMBEROFYEAR", "INTEGER"),
+            new("CALENDARQUARTER", "INTEGER"),
+            new("CALENDARYEAR", "INTEGER"),
+            new("CALENDARSEMESTER", "INTEGER"),
+            new("FISCALQUARTER", "INTEGER"),
+            new("FISCALYEAR", "INTEGER"),
+            new("FISCALSEMESTER", "INTEGER"),
+        };
+
+        var ddl = _builder.BuildCreateTable(new NetezzaTableDdlInput(
+            "JUST_DATA", "ADMIN", "DIMDATE",
+            columns,
+            Keys: [new NetezzaKeyDdl('p', "PK_DIMDATE", ["DATEKEY"])],
+            TableComment: "test comment"));
+
+        Assert.Contains("DATEKEY INTEGER NOT NULL", ddl);
+        Assert.Contains("FULLDATEALTERNATEKEY TIMESTAMP,", ddl);
+        Assert.Contains("DAYNUMBEROFWEEK INTEGER,", ddl);
+        Assert.Contains("ENGLISHDAYNAMEOFWEEK NATIONAL CHARACTER VARYING(14),", ddl);
+        Assert.DoesNotContain("FULLDATEALTERNATEKEY TIMESTAMP NOT NULL", ddl);
+        Assert.DoesNotContain("DAYNUMBEROFWEEK INTEGER NOT NULL", ddl);
+        Assert.Contains("DISTRIBUTE ON RANDOM", ddl);
+        Assert.Contains("ADD CONSTRAINT PK_DIMDATE PRIMARY KEY (DATEKEY)", ddl);
+        Assert.Contains("COMMENT ON TABLE JUST_DATA.ADMIN.DIMDATE IS 'test comment';", ddl);
+        Assert.Contains("COMMENT ON COLUMN JUST_DATA.ADMIN.DIMDATE.FULLDATEALTERNATEKEY IS 'Full date alternate key';", ddl);
+        Assert.Contains("COMMENT ON COLUMN JUST_DATA.ADMIN.DIMDATE.DAYNUMBEROFWEEK IS 'test comment 2';", ddl);
+        Assert.Contains("COMMENT ON COLUMN JUST_DATA.ADMIN.DIMDATE.FRENCHDAYNAMEOFWEEK IS 'comment 3';", ddl);
+    }
+
+    [Fact]
+    public void BuildRecreateTable_UsesSameNotNullPlacementAsCreate()
+    {
+        var ddl = _builder.BuildRecreateTable(new NetezzaTableDdlInput(
+            "JUST_DATA", "ADMIN", "DIMDATE",
+            [
+                new NetezzaColumnDdl("DATEKEY", "INTEGER", NotNull: true),
+                new NetezzaColumnDdl("FULLDATEALTERNATEKEY", "TIMESTAMP")
+            ],
+            Keys: [new NetezzaKeyDdl('p', "PK_DIMDATE", ["DATEKEY"])]));
+
+        Assert.Contains("DATEKEY INTEGER NOT NULL", ddl);
+        Assert.Contains("FULLDATEALTERNATEKEY TIMESTAMP", ddl);
+        Assert.DoesNotContain("FULLDATEALTERNATEKEY TIMESTAMP NOT NULL", ddl);
+        Assert.Contains("INSERT INTO JUST_DATA.ADMIN.", ddl);
+        Assert.Contains("SET PRIVILEGES TO", ddl);
+    }
+
+    [Fact]
     public void BuildCreateTable_EmptyColumnsReturnsReferenceComment()
     {
         var ddl = _builder.BuildCreateTable(new NetezzaTableDdlInput("MYDB", "ADMIN", "MYTABLE", []));

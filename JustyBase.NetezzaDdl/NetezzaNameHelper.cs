@@ -101,6 +101,23 @@ public static class NetezzaNameHelper
         };
     }
 
+    /// <summary>
+    /// Removes a trailing <c> NOT NULL</c> that some catalog queries historically embedded in FORMAT_TYPE.
+    /// DDL builders emit nullability separately via <see cref="Models.NetezzaColumnDdl.NotNull"/>.
+    /// </summary>
+    public static string StripEmbeddedNotNull(string? fullTypeName)
+    {
+        if (string.IsNullOrWhiteSpace(fullTypeName))
+            return fullTypeName ?? string.Empty;
+
+        const string suffix = " NOT NULL";
+        var trimmed = fullTypeName.TrimEnd();
+        if (trimmed.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            return trimmed[..^suffix.Length].TrimEnd();
+
+        return trimmed;
+    }
+
     private static bool IsGoodName(string word)
     {
         if (word.Length == 0 || char.IsDigit(word[0]))

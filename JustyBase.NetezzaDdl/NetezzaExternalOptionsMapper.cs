@@ -37,7 +37,7 @@ public static class NetezzaExternalOptionsMapper
             BoolStyle = info.BoolStyle,
             Format = info.Format,
             SocketBufSize = info.SocketBufSize,
-            RecordDelim = info.RecordDelim,
+            RecordDelim = NormalizeRecordDelim(info.RecordDelim),
             MaxRows = info.MaxRows,
             RequireQuotes = info.RequireQuotes,
             RecordLength = info.RecordLength,
@@ -75,7 +75,7 @@ public static class NetezzaExternalOptionsMapper
             BoolStyle = rd.GetValue(24) as string,
             Format = rd.GetValue(25) as string,
             SocketBufSize = ReadInt32(rd.GetValue(26)),
-            RecordDelim = rd.GetValue(27) as string,
+            RecordDelim = NormalizeRecordDelim(rd.GetValue(27) as string),
             MaxRows = ReadInt64(rd.GetValue(28)),
             RequireQuotes = ReadBool(rd.GetValue(29)),
             RecordLength = rd.GetValue(30)?.ToString(),
@@ -85,7 +85,7 @@ public static class NetezzaExternalOptionsMapper
 
     public static NetezzaExternalTableCachedInfo FromLegacyReader(DbDataReader rd)
     {
-        string? recordDelim = rd.GetString(31).Replace("\r", "\\r").Replace("\n", "\\n");
+        string? recordDelim = NormalizeRecordDelim(rd.GetString(31));
         return new NetezzaExternalTableCachedInfo
         {
             DataObject = rd.GetValue(2) as string,
@@ -132,6 +132,17 @@ public static class NetezzaExternalOptionsMapper
 
         string text = value.ToString()!;
         return text == "\t" ? "\\t" : text;
+    }
+
+    /// <summary>
+    /// Catalog returns real CR/LF; DDL must emit escaped <c>\n</c>/<c>\r</c> literals.
+    /// </summary>
+    private static string? NormalizeRecordDelim(string? value)
+    {
+        if (value is null)
+            return null;
+
+        return value.Replace("\r", "\\r").Replace("\n", "\\n");
     }
 
     private static bool? ReadBool(object? value)

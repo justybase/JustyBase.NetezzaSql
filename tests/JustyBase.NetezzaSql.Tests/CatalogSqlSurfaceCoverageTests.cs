@@ -33,7 +33,11 @@ public sealed class CatalogSqlSurfaceCoverageTests
             CatalogSql.GetLegacyProcSql(database),
             CatalogSql.GetLegacySynonymSql(database),
             CatalogSql.GetLegacyViewSql(database),
-            CatalogSql.GetLegacyExternalSql(database)
+            CatalogSql.GetLegacyExternalSql(database),
+            CatalogSql.GetTableColumnsSql(database, "admin", "orders"),
+            CatalogSql.GetColumnMetadataSql(database, "admin", "orders"),
+            CatalogSql.GetBatchColumnsSql(database),
+            CatalogSql.GetBatchColumnsSql(database, "admin")
         };
 
         Assert.All(queries, sql =>
@@ -73,8 +77,47 @@ public sealed class CatalogSqlSurfaceCoverageTests
         Assert.Contains("D1.SCHEMA", schema, StringComparison.Ordinal);
         Assert.Contains("D1.OWNER", ownerFallback, StringComparison.Ordinal);
         Assert.Contains("_V_TABLE_DIST_MAP", columns, StringComparison.Ordinal);
+        Assert.Contains("IS_NULLABLE", columns, StringComparison.Ordinal);
+        Assert.Contains("(NOT X.ATTNOTNULL)", columns, StringComparison.Ordinal);
+        Assert.DoesNotContain("AS ATTNOTNULL", columns, StringComparison.Ordinal);
         Assert.Contains("%NEEDLE''NAME%", search, StringComparison.Ordinal);
         Assert.Contains("DATABASEID = 17", functions, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void GetSqlOfColumns_UsesFormatTypeWithoutEmbeddedNotNull()
+    {
+        var sql = CatalogSql.GetSqlOfColumns("sample");
+
+        Assert.Contains("X.FORMAT_TYPE", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("|| ' NOT NULL'", sql, StringComparison.Ordinal);
+        Assert.Contains("ATTNOTNULL", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void GetTableColumnsAndColumnMetadataSql_MatchReferenceShape()
+    {
+        var columns = CatalogSql.GetTableColumnsSql("JUST_DATA", "ADMIN", "DIMDATE");
+        var metadata = CatalogSql.GetColumnMetadataSql("JUST_DATA", "ADMIN", "DIMDATE");
+        var batch = CatalogSql.GetBatchColumnsSql("JUST_DATA", "ADMIN");
+
+        Assert.Contains("FORMAT_TYPE AS FULL_TYPE", columns, StringComparison.Ordinal);
+        Assert.Contains("ATTNOTNULL", columns, StringComparison.Ordinal);
+        Assert.DoesNotContain("|| ' NOT NULL'", columns, StringComparison.Ordinal);
+        Assert.Contains("IS_NOT_NULL", metadata, StringComparison.Ordinal);
+        Assert.Contains("IS_PK", metadata, StringComparison.Ordinal);
+        Assert.Contains("DIMDATE", metadata, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("FULL_TYPE", batch, StringComparison.Ordinal);
+        Assert.Contains("ADMIN", batch, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void GetExternalTableSql_JoinsOnRelid()
+    {
+        var sql = CatalogSql.GetExternalTableSql("sample");
+
+        Assert.Contains("E1.RELID = E2.OBJID", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("E1.DATABASE = E2.DATABASE", sql, StringComparison.Ordinal);
     }
 
     [Theory]
