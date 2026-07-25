@@ -230,6 +230,45 @@ public sealed class DdlBuilderTests
     }
 
     [Fact]
+    public void BuildCreateSequence_EmitsMinMaxAndCycleClauses()
+    {
+        var ddl = _builder.BuildCreateSequence(new NetezzaSequenceDdlInput(
+            "JUST_DATA", "ADMIN", "SEQ1", "BIGINT", "10", "2", "1", "100", Cycle: true));
+
+        Assert.Contains("CREATE SEQUENCE JUST_DATA.ADMIN.SEQ1", ddl);
+        Assert.Contains("AS BIGINT", ddl);
+        Assert.Contains("START WITH 10", ddl);
+        Assert.Contains("INCREMENT BY 2", ddl);
+        Assert.Contains("MINVALUE 1", ddl);
+        Assert.Contains("MAXVALUE 100", ddl);
+        Assert.Contains("CYCLE;", ddl);
+    }
+
+    [Fact]
+    public void BuildCreateSequence_UsesNoMaxValueForIntegerDefault()
+    {
+        var ddl = _builder.BuildCreateSequence(new NetezzaSequenceDdlInput(
+            "DB", "S", "SEQ", "INTEGER", "1", "1", MaxValue: "2147483647"));
+
+        Assert.Contains("NO MAXVALUE", ddl);
+        Assert.Contains("NO CYCLE;", ddl);
+    }
+
+    [Fact]
+    public void MaintenanceSql_BuildsGroomAndStats()
+    {
+        Assert.Equal(
+            "GROOM TABLE T1 VERSIONS RECLAIM BACKUPSET '42';",
+            NetezzaMaintenanceSql.BuildGroom("T1", "VERSIONS", "42"));
+        Assert.Equal(
+            "GENERATE EXPRESS STATISTICS ON DB.SCH.TBL;",
+            NetezzaMaintenanceSql.BuildGenerateStats("DB.SCH.TBL", express: true));
+        Assert.Equal(
+            "GENERATE STATISTICS ON SCH.TBL (COL1, COL2);",
+            NetezzaMaintenanceSql.BuildGenerateStats("SCH.TBL", express: false, "COL1, COL2"));
+    }
+
+    [Fact]
     public void BuildCreateExternal_EmitsNotNullAndEscapesOptions()
     {
         var ddl = _builder.BuildCreateExternal(new NetezzaExternalDdlInput(

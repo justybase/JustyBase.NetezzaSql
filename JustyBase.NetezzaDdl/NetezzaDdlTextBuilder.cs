@@ -267,6 +267,38 @@ public sealed class NetezzaDdlTextBuilder
         return sb.ToString();
     }
 
+    public void AppendCreateSequence(StringBuilder sb, NetezzaSequenceDdlInput input)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        var (database, schema, sequence) = NetezzaNameHelper.GetCleanedNames(
+            input.Database, input.Schema, input.SequenceName);
+
+        bool isDefaultMax = input.DataType == "INTEGER" && input.MaxValue == "2147483647"
+            || input.DataType == "BIGINT" && input.MaxValue == "9223372036854775807";
+
+        string minClause = string.IsNullOrEmpty(input.MinValue) ? "NO MINVALUE" : $"MINVALUE {input.MinValue}";
+        string maxClause = string.IsNullOrEmpty(input.MaxValue) || isDefaultMax
+            ? "NO MAXVALUE"
+            : $"MAXVALUE {input.MaxValue}";
+        string cycleClause = input.Cycle ? "CYCLE" : "NO CYCLE";
+
+        sb.AppendLine($"CREATE SEQUENCE {database}.{schema}.{sequence}");
+        sb.AppendLine($"AS {input.DataType}");
+        sb.AppendLine($"START WITH {input.StartWith}");
+        sb.AppendLine($"INCREMENT BY {input.IncrementBy}");
+        sb.AppendLine(minClause);
+        sb.AppendLine(maxClause);
+        sb.Append(cycleClause);
+        sb.AppendLine(";");
+    }
+
+    public string BuildCreateSequence(NetezzaSequenceDdlInput input)
+    {
+        var sb = new StringBuilder();
+        AppendCreateSequence(sb, input);
+        return sb.ToString();
+    }
+
     public void AppendCreateSynonym(StringBuilder sb, NetezzaSynonymDdlInput input)
     {
         var (database, schema, synonym) = NetezzaNameHelper.GetCleanedNames(

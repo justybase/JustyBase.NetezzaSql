@@ -4,7 +4,13 @@ All notable changes to this project will be documented here.
 
 ## Unreleased
 
-_No unreleased changes._
+- Extract shared host SQL/DDL helpers into packages: `NetezzaErrorLocator`,
+  `NetezzaMaintenanceSql`, session/skew SQL on `NetezzaSystemSql`,
+  `NetezzaDdlTextBuilder.BuildCreateSequence`, and import CREATE/INSERT prefixes
+  via `NetezzaImportSql`.
+- Fix `NetezzaErrorLocator`: prefer at-char slice offsets over the crude
+  `^ found` path; honor `UseRegexWordSearch` in `LocateInSql` (skip qualified
+  `alias.col` for ambiguous columns).
 
 ## 0.2.0-preview.7
 

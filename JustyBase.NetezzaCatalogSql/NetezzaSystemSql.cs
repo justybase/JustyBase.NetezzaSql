@@ -142,6 +142,36 @@ public static class NetezzaSystemSql
     public static string GetUserSessions(string database)
         => $"SELECT s.id AS \"Session ID\", s.pid AS \"PID\", s.username AS \"Login\", s.dbname AS \"Database\", s.status AS \"Status\", s.type AS \"Type\", s.conntime AS \"Connected\", s.priority AS \"Priority\", s.CID AS \"CID\", s.ipaddr AS \"Host\", s.command AS \"Command\", h.QH_PLANID AS \"Plan ID\", h.QH_TSUBMIT AS \"Submitted\", h.QH_TSTART AS \"Started\", h.QH_TEND AS \"Finished\", h.QH_ESTCOST AS \"Est. cost\", h.QH_ESTDISK AS \"Est. disk\", h.QH_ESTMEM AS \"Est. mem.\", h.QH_SNIPPETS AS \"Snippets\", h.QH_SNPTSDONE AS \"Snippets done\", h.QH_RESROWS AS \"Res. rows\", h.QH_RESBYTES AS \"Res. bytes\" FROM _V_SESSION s LEFT JOIN (SELECT h.QH_SESSIONID AS SESSION_ID, max(h.QH_PLANID) AS PLAN_ID FROM _V_QRYHIST h WHERE h.QH_SESSIONID IN (SELECT ID FROM _V_SESSION) GROUP BY h.QH_SESSIONID) p ON p.SESSION_ID = s.ID LEFT JOIN _V_QRYHIST h ON h.QH_SESSIONID = s.ID AND h.QH_PLANID = p.PLAN_ID WHERE s.dbname = '{NetezzaSqlIdentifier.Literal(NetezzaSqlIdentifier.Database(database))}'";
 
+    /// <summary>Lightweight session monitor snapshot (current sessions + latest qrystat SQL preview).</summary>
+    public const string SessionMonitorSnapshotSql = """
+        SELECT
+            S.ID,
+            S.USERNAME,
+            S.DBNAME,
+            S.STATUS,
+            S.COMMAND,
+            S.IPADDR,
+            SUBSTRING(Q.QS_SQL,1,500) AS QS_SQL
+        FROM _V_SESSION S
+        LEFT JOIN _V_QRYSTAT Q ON Q.QS_SESSIONID = S.ID
+        ORDER BY S.ID
+        """;
+
+    public static string GetTableSkewByDatasliceSql(string qualifiedTable)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(qualifiedTable);
+        return $"SELECT datasliceid, COUNT(*) AS row_count FROM {qualifiedTable} GROUP BY 1 ORDER BY 1;";
+    }
+
+    public static string GetDropSessionSql(long sessionId)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(sessionId);
+        return $"DROP SESSION {sessionId}";
+    }
+
+    public static string GetSessionIdByPidSql(int pid)
+        => $"SELECT ID FROM _V_SESSION WHERE PID = {pid}";
+
     public static string GetGroomTableCandidates(string database)
         => $"{SetCatalog(database)}\nSELECT CURRENT_CATALOG, OBJID, TABLENAME, SCHEMA, ALLOCATED_BYTES, USED_BYTES, 'GROOM TABLE \"' || CURRENT_CATALOG || '\".\"' || SCHEMA || '\".\"' || TABLENAME || '\" RECORDS ALL RECLAIM BACKUPSET NONE;' AS GROOM_CODE FROM _V_TABLE_STORAGE_STAT WHERE UPPER(OBJTYPE) = 'TABLE' AND OBJID IS NOT NULL ORDER BY TABLENAME, SCHEMA\n";
 
