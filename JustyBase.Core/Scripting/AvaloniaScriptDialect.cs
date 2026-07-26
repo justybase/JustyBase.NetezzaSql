@@ -129,10 +129,86 @@ public static partial class LegacyScriptDialectAdapter
         if (string.IsNullOrEmpty(sql))
             return sql;
 
-        sql = LegacySleepRegex().Replace(sql, "@sleep:$1");
+        sql = LegacySleepRegex().Replace(sql, match =>
+            IsInsideQuotedLiteral(sql, match.Index)
+                ? match.Value
+                : "@sleep:" + match.Groups[1].Value);
         sql = LegacySessionRegex().Replace(sql, "declare &$1=$2");
         sql = LegacyGlobalRegex().Replace(sql, "declare &$1=$2");
         return sql;
+    }
+
+    private static bool IsInsideQuotedLiteral(string text, int position)
+    {
+        if (position <= 0 || position >= text.Length)
+            return false;
+
+        bool inSingleQuote = false;
+        bool inDoubleQuote = false;
+        bool inLineComment = false;
+        bool inBlockComment = false;
+
+        for (int i = 0; i < position; i++)
+        {
+            char c = text[i];
+
+            if (inLineComment)
+            {
+                if (c is '\n' or '\r')
+                    inLineComment = false;
+                continue;
+            }
+
+            if (inBlockComment)
+            {
+                if (c == '*' && i + 1 < position && text[i + 1] == '/')
+                {
+                    inBlockComment = false;
+                    i++;
+                }
+                continue;
+            }
+
+            if (inSingleQuote)
+            {
+                if (c == '\'')
+                {
+                    if (i + 1 < position && text[i + 1] == '\'')
+                        i++;
+                    else
+                        inSingleQuote = false;
+                }
+                continue;
+            }
+
+            if (inDoubleQuote)
+            {
+                if (c == '"')
+                    inDoubleQuote = false;
+                continue;
+            }
+
+            if (c == '-' && i + 1 < position && text[i + 1] == '-')
+            {
+                inLineComment = true;
+                i++;
+                continue;
+            }
+
+            if (c == '/' && i + 1 < position && text[i + 1] == '*')
+            {
+                inBlockComment = true;
+                i++;
+                continue;
+            }
+
+            if (c == '\'')
+                inSingleQuote = true;
+            else if (c == '"')
+                inDoubleQuote = true;
+        }
+
+        return inSingleQuote || inDoubleQuote || inLineComment || inBlockComment;
     }
 
     [GeneratedRegex(@"___sleep\s*[: ]\s*(\d+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
