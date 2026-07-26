@@ -12,8 +12,7 @@ public sealed record LiveImportCase(
     IReadOnlyDictionary<string, string>? ExpectedInferredTypes = null,
     CsvImportOptions? CsvOptions = null,
     int VarcharLength = 255,
-    string? NullValue = "",
-    bool MapVarcharToNvarchar = true);
+    string? NullValue = "");
 
 /// <summary>
 /// Runs the shared host import path against a live Netezza connection:
@@ -47,11 +46,9 @@ internal static class LiveImportRoundTripRunner
             }
 
             string[] ddlColumns = detected
-                .Select(c => $"{NetezzaNameHelper.QuoteNameIfNeeded(c.Name)} {MapTypeForLiveDdl(c.NetezzaType, importCase.MapVarcharToNvarchar)}")
+                .Select(c => $"{NetezzaNameHelper.QuoteNameIfNeeded(c.Name)} {c.NetezzaType}")
                 .ToArray();
-            string[] externalColumns = detected
-                .Select(c => $"{NetezzaNameHelper.QuoteNameIfNeeded(c.Name)} {MapTypeForLiveDdl(c.NetezzaType, importCase.MapVarcharToNvarchar)}")
-                .ToArray();
+            string[] externalColumns = ddlColumns;
 
             string table = "JB_INF_" + Guid.NewGuid().ToString("N")[..12].ToUpperInvariant();
             string pipe = NetezzaPipeImportExecutor.CreatePipeName("jb_inf");
@@ -125,19 +122,6 @@ internal static class LiveImportRoundTripRunner
                 NetezzaLiveTestHost.TryDeleteDirectory(logDir);
             }
         }
-    }
-
-    /// <summary>
-    /// Live DDL mapping: legacy VARCHAR → NVARCHAR when Infer still emits VARCHAR.
-    /// Production Infer now prefers NVARCHAR; this remains a safe no-op for NVARCHAR.
-    /// </summary>
-    internal static string MapTypeForLiveDdl(string inferredType, bool mapVarcharToNvarchar)
-    {
-        if (!mapVarcharToNvarchar)
-            return inferredType;
-        if (inferredType.StartsWith("VARCHAR(", StringComparison.OrdinalIgnoreCase))
-            return "N" + inferredType;
-        return inferredType;
     }
 
     private static async Task<List<IReadOnlyList<string?>>> ParseDataRowsAsync(LiveImportCase importCase)

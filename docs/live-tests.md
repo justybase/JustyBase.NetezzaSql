@@ -18,7 +18,7 @@ The live suite executes `SELECT 1`, catalog queries, a typed named-pipe CREATE/I
 
 ### Type inference round-trips
 
-Additional cases prove CSV → `DatabaseTypeChooser.Infer` → CREATE → pipe INSERT → SELECT equality (simple types, escaping, quoted multiline CSV, adversarial payloads, mixed-type VARCHAR fallback). See [live-import-roundtrip.md](live-import-roundtrip.md).
+Additional cases prove CSV → `DatabaseTypeChooser.Infer` → CREATE → pipe INSERT → SELECT equality (simple types, escaping, quoted multiline CSV, adversarial payloads, mixed-type NVARCHAR fallback). See [live-import-roundtrip.md](live-import-roundtrip.md).
 
 ```powershell
 pwsh .\eng\Run-LiveImportProof.ps1

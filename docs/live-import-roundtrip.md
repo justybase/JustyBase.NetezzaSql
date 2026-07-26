@@ -34,13 +34,13 @@ This is **not** part of `eng\Verify-Local.ps1` (offline CI parity). Use Verify-L
 
 | Name | What it proves |
 |------|----------------|
-| `simple_types` | INTEGER / BOOLEAN / NUMERIC / DATETIME / VARCHAR infer + round-trip |
-| `nullable_empty` | Empty fields → null; nullable VARCHAR |
+| `simple_types` | INTEGER / BOOLEAN / NUMERIC / DATETIME / NVARCHAR infer + round-trip |
+| `nullable_empty` | Empty fields → null; nullable NVARCHAR |
 | `escaping` | Tab, newline, backslash in text after pipe escape |
 | `hard_quoted_csv` | Quoted commas, `""`, multiline CSV fields |
 | `adversarial` | SQL-like / HTML / Unicode payloads stored as data only |
-| `mixed_falls_back_varchar` | Mixed int+text column → VARCHAR (not INTEGER) |
-| `leading_zeros_varchar` | Values like `001`/`002` stay VARCHAR (preserve leading zeros) |
+| `mixed_falls_back_varchar` | Mixed int+text column → NVARCHAR (not INTEGER) |
+| `leading_zeros_varchar` | Values like `001`/`002` stay NVARCHAR (preserve leading zeros) |
 
 ## Adding a case
 
@@ -58,9 +58,9 @@ This is **not** part of `eng\Verify-Local.ps1` (offline CI parity). Use Verify-L
 | Pipe topology error, `NZ_REQUIRE_PIPE=1` | Fail |
 | Data / type mismatch after successful insert | Fail |
 
-## Live DDL note
+## Inference note
 
-Production `DatabaseTypeChooser` emits **`NVARCHAR(n)`** for text (not `VARCHAR`), with
+`DatabaseTypeChooser` emits **`NVARCHAR(n)`** for text columns, with
 `n = ceil(maxLen × 1.2)` rounded up to a multiple of 10 (e.g. length 12 → 20; length 8 → 10).
 BOOLEAN imports use `BoolStyle = TRUE_FALSE`. Leading-zero digit codes (`001`) stay textual.
 
