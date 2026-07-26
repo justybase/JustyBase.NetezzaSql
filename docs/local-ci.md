@@ -33,6 +33,16 @@ git config core.hooksPath eng/githooks
 
 Copy or rename [eng/githooks/pre-push.sample](../eng/githooks/pre-push.sample) to `pre-push` if your Git client requires an extensionless hook file.
 
+## Live Netezza import proof (optional, local only)
+
+`Verify-Local.ps1` does **not** require a database. To prove type-inference import round-trips against Netezza when `NZ_DEV_*` is set locally:
+
+```powershell
+pwsh .\eng\Run-LiveImportProof.ps1
+```
+
+Do not wire this into GitHub Actions. Details: [live-import-roundtrip.md](live-import-roundtrip.md).
+
 ## Common failures
 
 | Symptom | What to do |

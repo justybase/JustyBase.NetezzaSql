@@ -16,4 +16,12 @@ dotnet test .\tests\JustyBase.NetezzaSql.IntegrationTests\JustyBase.NetezzaSql.I
 
 The live suite executes `SELECT 1`, catalog queries, a typed named-pipe CREATE/INSERT round-trip (including delimiter/newline escaping), SAMEAS insert into an existing table, and a Fast raw-line pipe import with filter. All import `USING` clauses emit `REMOTESOURCE 'dotnet'` so the driver opens DATAOBJECT/pipe paths on the client. When any required variable is missing, it exits without opening a connection so the offline suite remains green.
 
+### Type inference round-trips
+
+Additional cases prove CSV → `DatabaseTypeChooser.Infer` → CREATE → pipe INSERT → SELECT equality (simple types, escaping, quoted multiline CSV, adversarial payloads, mixed-type VARCHAR fallback). See [live-import-roundtrip.md](live-import-roundtrip.md).
+
+```powershell
+pwsh .\eng\Run-LiveImportProof.ps1
+```
+
 Pipe round-trips still need a working Windows named-pipe server on the client. If the driver/topology rejects the pipe (for example a named-pipe error), the test soft-skips unless `NZ_REQUIRE_PIPE=1` is set.

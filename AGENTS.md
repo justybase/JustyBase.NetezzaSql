@@ -35,7 +35,7 @@ Follow the existing C# style: four-space indentation, file-scoped namespaces whe
 
 ## Testing Guidelines
 
-Unit and conformance tests are in `tests/JustyBase.NetezzaSql.Tests`; integration-layer tests are in `tests/JustyBase.Netezza.Tests`; driver-backed live checks are isolated in `tests/JustyBase.NetezzaSql.IntegrationTests`. Shared core production-vs-scaffold status is documented in `docs/shared-core-status.md`. Add focused tests named by behavior, for example `ParseSelect_WithWhereClause_ReturnsFilterNode`. Cover valid SQL, malformed input, and edge cases for parser, formatter, linter, catalog SQL, DDL, import/export, or integration-layer changes. Run `pwsh .\eng\Verify-Local.ps1` before pushing to `master`.
+Unit and conformance tests are in `tests/JustyBase.NetezzaSql.Tests`; integration-layer tests are in `tests/JustyBase.Netezza.Tests`; driver-backed live checks are isolated in `tests/JustyBase.NetezzaSql.IntegrationTests`. Shared core production-vs-scaffold status is documented in `docs/shared-core-status.md`. Add focused tests named by behavior, for example `ParseSelect_WithWhereClause_ReturnsFilterNode`. Cover valid SQL, malformed input, and edge cases for parser, formatter, linter, catalog SQL, DDL, import/export, or integration-layer changes. Run `pwsh .\eng\Verify-Local.ps1` before pushing to `master`. Live type-inference import round-trips (when `NZ_DEV_*` is set) use `pwsh .\eng\Run-LiveImportProof.ps1` — local only, not GitHub Actions; see [docs/live-import-roundtrip.md](docs/live-import-roundtrip.md).
 
 ## Commit & Pull Request Guidelines
 
