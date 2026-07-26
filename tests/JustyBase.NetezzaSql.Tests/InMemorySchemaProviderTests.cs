@@ -50,6 +50,20 @@ public sealed class InMemorySchemaProviderTests
     }
 
     [Fact]
+    public void GetTableNames_DeduplicatesShortNameAcrossSchemasWhenSchemaUnspecified()
+    {
+        var provider = new InMemorySchemaProvider();
+        provider.AddTable(new TableInfo("DIMDATE", "ADMIN", "JUST_DATA"));
+        provider.AddTable(new TableInfo("DIMDATE", "PUBLIC", "JUST_DATA"));
+        provider.AddTable(new TableInfo("DIMDATE", "STAGING", "JUST_DATA"));
+
+        var names = provider.GetTableNames(null, null)!.Select(item => item.Name).ToArray();
+
+        Assert.Equal(["DIMDATE"], names);
+        Assert.Equal(["DIMDATE"], provider.GetTableNames("JUST_DATA", null)!.Select(item => item.Name));
+    }
+
+    [Fact]
     public void QualificationProposals_ResolveQuotedLookupName()
     {
         var provider = new InMemorySchemaProvider();

@@ -168,9 +168,29 @@ public class InMemorySchemaProvider : ISchemaProvider
                     continue;
                 results.Add((info.Name, info.IsView ? TableKind.View : TableKind.Table));
             }
-            return results
+            var ordered = results
                 .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(item => item.Kind)
                 .ToArray();
+
+            if (schema is null)
+            {
+                ordered = ordered
+                    .GroupBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+                    .Select(g =>
+                    {
+                        foreach (var item in g)
+                        {
+                            if (item.Kind != TableKind.View)
+                                return item;
+                        }
+                        return g.First();
+                    })
+                    .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+
+            return ordered;
         }
     }
 

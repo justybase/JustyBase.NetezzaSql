@@ -110,9 +110,12 @@ public class NzCompletionEngine
 
             case CompletionContext.AfterFrom:
             case CompletionContext.FromList:
-                AddTablesAndViews(suggestions);
+            {
+                var fromScope = TryGetFromClauseObjectScope(contextTokens);
+                AddTablesAndViews(suggestions, fromScope.Database, fromScope.Schema);
                 AddCtes(suggestions, fullTokens, astScope);
                 break;
+            }
 
             case CompletionContext.AfterUpdate:
                 AddTables(suggestions);
@@ -140,10 +143,13 @@ public class NzCompletionEngine
                 break;
 
             case CompletionContext.AfterJoin:
+            {
                 AddKeywords(suggestions, SqlContext.JoinKeywords);
-                AddTablesAndViews(suggestions);
+                var joinScope = TryGetFromClauseObjectScope(contextTokens);
+                AddTablesAndViews(suggestions, joinScope.Database, joinScope.Schema);
                 AddCtes(suggestions, fullTokens, astScope);
                 break;
+            }
 
             case CompletionContext.AfterGroupBy:
             case CompletionContext.GroupByList:
@@ -541,10 +547,10 @@ public class NzCompletionEngine
         }
     }
 
-    private void AddTablesAndViews(List<CompletionItem> list)
+    private void AddTablesAndViews(List<CompletionItem> list, string? database = null, string? schema = null)
     {
         if (_schema is null) return;
-        var names = _schema.GetTableNames(null, null);
+        var names = _schema.GetTableNames(database, schema);
         if (names is null) return;
         foreach (var (name, kind) in names)
         {
@@ -554,10 +560,10 @@ public class NzCompletionEngine
         }
     }
 
-    private void AddTables(List<CompletionItem> list)
+    private void AddTables(List<CompletionItem> list, string? database = null, string? schema = null)
     {
         if (_schema is null) return;
-        var names = _schema.GetTableNames(null, null);
+        var names = _schema.GetTableNames(database, schema);
         if (names is null) return;
         foreach (var (name, kind) in names)
         {
@@ -566,16 +572,59 @@ public class NzCompletionEngine
         }
     }
 
-    private void AddViews(List<CompletionItem> list)
+    private void AddViews(List<CompletionItem> list, string? database = null, string? schema = null)
     {
         if (_schema is null) return;
-        var names = _schema.GetTableNames(null, null);
+        var names = _schema.GetTableNames(database, schema);
         if (names is null) return;
         foreach (var (name, kind) in names)
         {
             if (kind == TableKind.View)
                 list.Add(new CompletionItem(name, CompletionKind.View, Priority: 3));
         }
+    }
+
+    /// <summary>
+    /// Resolves database/schema prefix for the table name currently being typed in FROM/JOIN.
+    /// Supports <c>db..table</c>, <c>schema.table</c>, and <c>db.schema.table</c> prefixes.
+    /// </summary>
+    private static (string? Database, string? Schema) TryGetFromClauseObjectScope(Token<NzToken>[] tokens)
+    {
+        if (tokens.Length == 0)
+            return (null, null);
+
+        int i = tokens.Length - 1;
+        if (tokens[i].Kind is NzToken.Identifier or NzToken.QuotedIdentifier)
+            i--;
+
+        if (i >= 1 &&
+            tokens[i].Kind == NzToken.Dot &&
+            tokens[i - 1].Kind == NzToken.Dot &&
+            i - 2 >= 0 &&
+            tokens[i - 2].Kind is NzToken.Identifier or NzToken.QuotedIdentifier)
+        {
+            return (tokens[i - 2].ToStringValue(), null);
+        }
+
+        if (i >= 2 &&
+            tokens[i].Kind == NzToken.Dot &&
+            tokens[i - 1].Kind is NzToken.Identifier or NzToken.QuotedIdentifier &&
+            tokens[i - 2].Kind == NzToken.Dot &&
+            i - 3 >= 0 &&
+            tokens[i - 3].Kind is NzToken.Identifier or NzToken.QuotedIdentifier)
+        {
+            return (tokens[i - 3].ToStringValue(), tokens[i - 1].ToStringValue());
+        }
+
+        if (i >= 1 &&
+            tokens[i].Kind == NzToken.Dot &&
+            tokens[i - 1].Kind is NzToken.Identifier or NzToken.QuotedIdentifier &&
+            (i < 2 || tokens[i - 2].Kind != NzToken.Dot))
+        {
+            return (null, tokens[i - 1].ToStringValue());
+        }
+
+        return (null, null);
     }
 
     /// <summary>

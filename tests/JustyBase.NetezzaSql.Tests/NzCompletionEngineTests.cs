@@ -92,7 +92,14 @@ public sealed class NzCompletionEngineTests
     [Fact]
     public void AfterFrom_partial_table_name()
     {
-        _engine.GetCompletions("SELECT * FROM em", 16);
+        var schema = SqlTestHelpers.CreateMultiSchemaDuplicateCatalog();
+        var engine = new NzCompletionEngine(schema);
+        const string sql = "SELECT * FROM DIMDA";
+        var items = engine.GetCompletions(sql, sql.Length);
+
+        Assert.Contains(items, x => x.Label == "DIMDATE" && x.Kind == CompletionKind.Table);
+        CompletionTestAssertions.AssertUniqueTableAndViewLabels(items);
+        CompletionTestAssertions.AssertLabelCount(items, "DIMDATE", 1);
     }
 
     [Fact]
@@ -306,6 +313,23 @@ public sealed class NzCompletionEngineTests
         var (_, _, aliasDbTable) = engine.GetScopeHints();
         Assert.True(aliasDbTable.TryGetValue("JUST_DATA..DIMACCOUNT", out var aliases));
         Assert.Contains(aliases, a => a.Equals("X", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void AfterFrom_double_dot_prefix_scopes_tables_to_database()
+    {
+        var schema = new InMemorySchemaProvider();
+        schema.AddTable(new TableInfo("DIMDATE", "ADMIN", "JUST_DATA"));
+        schema.AddTable(new TableInfo("DIMDATE", "PUBLIC", "JUST_DATA"));
+        schema.AddTable(new TableInfo("OTHER_DB_TABLE", "ADMIN", "OTHER_DB"));
+        var engine = new NzCompletionEngine(schema);
+
+        var sql = "SELECT * FROM JUST_DATA..DIMD";
+        var items = engine.GetCompletions(sql, sql.Length);
+
+        Assert.Contains(items, x => x.Label == "DIMDATE" && x.Kind == CompletionKind.Table);
+        Assert.DoesNotContain(items, x => x.Label == "OTHER_DB_TABLE");
+        Assert.Equal(1, items.Count(x => x.Label.Equals("DIMDATE", StringComparison.OrdinalIgnoreCase)));
     }
 
     // ====== New tests: AS alias resolution ======

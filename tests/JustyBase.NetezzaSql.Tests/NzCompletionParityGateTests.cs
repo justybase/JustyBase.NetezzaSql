@@ -382,4 +382,16 @@ public sealed class NzCompletionParityGateTests
         var items = _engine.GetCompletions("ALTER TABLE TESTDB..EMPLOYEES ", 32);
         Assert.Contains(items, i => i.Label.Contains("ADD", StringComparison.OrdinalIgnoreCase));
     }
+
+    [Fact]
+    public void ParityGate_FromPartialPrefix_NoDuplicateTableLabels()
+    {
+        var schema = SqlTestHelpers.CreateMultiSchemaDuplicateCatalog();
+        var engine = new NzCompletionEngine(schema);
+        const string sql = "SELECT * FROM DIMDA";
+        var items = engine.GetCompletions(sql, sql.Length);
+
+        CompletionTestAssertions.AssertUniqueTableAndViewLabels(items);
+        CompletionTestAssertions.AssertLabelCount(items, "DIMDATE", 1);
+    }
 }
