@@ -1,0 +1,7 @@
+#!/bin/sh
+# Optional pre-push hook. Install from repo root:
+#   git config core.hooksPath eng/githooks
+# On Windows with Git Bash, rename or copy to pre-push (no extension).
+
+repo_root="$(git rev-parse --show-toplevel)"
+exec pwsh -NoProfile -File "$repo_root/eng/Verify-Local.ps1"

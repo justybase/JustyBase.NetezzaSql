@@ -6,10 +6,11 @@ tests and package artifacts.
 1. Run `dotnet restore .\JustyBase.NetezzaSql.sln`, then build and test the
    Release solution locally. The Release build treats compiler and xUnit
    analyzer warnings as errors.
-2. Run `pwsh .\eng\Test-Coverage.ps1`. Parser, DDL, catalog, and the integration
-   library (`JustyBase.Netezza`) require at least 80% line and 65% branch
-   coverage. LSP protocol/handler code has its own 60% line and 50% branch
-   gate; the executable composition root is excluded.
+2. Run `pwsh .\eng\Verify-Local.ps1` before every push to `master`. For a
+   release candidate, use `pwsh .\eng\Verify-Local.ps1 -FullCi`.
+   Per-library gates in `eng\Test-Coverage.ps1`: parser, DDL, catalog, and
+   Netezza integration (80% line / 65% branch); LSP handlers (60% / 50%);
+   **JustyBase.Core** and **JustyBase.ImportExport** (50% / 35%).
 3. Pack the libraries, then run `pwsh .\eng\Test-PackageConsumer.ps1` to
    compile a fresh project that has only the generated `.nupkg` files as its
    JustyBase dependencies. In a workspace containing the unchanged Legacy

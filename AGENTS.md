@@ -24,9 +24,10 @@ dotnet build .\JustyBase.NetezzaDdl\JustyBase.NetezzaDdl.csproj
 dotnet build .\JustyBase.NetezzaCatalogSql\JustyBase.NetezzaCatalogSql.csproj
 dotnet build .\JustyBase.Netezza\JustyBase.Netezza.csproj
 dotnet test
+pwsh .\eng\Verify-Local.ps1
 ```
 
-The first three commands compile each library; `dotnet test` discovers and runs tests when a test project or solution is present. The projects target `net10.0`; use a compatible .NET SDK.
+The first commands compile each library; `dotnet test` discovers and runs tests when a test project or solution is present. **`Verify-Local.ps1`** runs build, tests, coverage gates, and `git diff --check` — use it before pushing to `master` (see [docs/local-ci.md](docs/local-ci.md)).
 
 ## Coding Style & Naming Conventions
 
@@ -34,7 +35,7 @@ Follow the existing C# style: four-space indentation, file-scoped namespaces whe
 
 ## Testing Guidelines
 
-Unit and conformance tests are in `tests/JustyBase.NetezzaSql.Tests`; integration-layer tests are in `tests/JustyBase.Netezza.Tests`; driver-backed live checks are isolated in `tests/JustyBase.NetezzaSql.IntegrationTests`. Shared core production-vs-scaffold status is documented in `docs/shared-core-status.md`. Add focused tests named by behavior, for example `ParseSelect_WithWhereClause_ReturnsFilterNode`. Cover valid SQL, malformed input, and edge cases for parser, formatter, linter, catalog SQL, DDL, import/export, or integration-layer changes. Run `dotnet test` before submitting changes.
+Unit and conformance tests are in `tests/JustyBase.NetezzaSql.Tests`; integration-layer tests are in `tests/JustyBase.Netezza.Tests`; driver-backed live checks are isolated in `tests/JustyBase.NetezzaSql.IntegrationTests`. Shared core production-vs-scaffold status is documented in `docs/shared-core-status.md`. Add focused tests named by behavior, for example `ParseSelect_WithWhereClause_ReturnsFilterNode`. Cover valid SQL, malformed input, and edge cases for parser, formatter, linter, catalog SQL, DDL, import/export, or integration-layer changes. Run `pwsh .\eng\Verify-Local.ps1` before pushing to `master`.
 
 ## Commit & Pull Request Guidelines
 

@@ -4,8 +4,7 @@
 
 ## Validation
 
-- [ ] `dotnet build JustyBase.NetezzaSql.sln -c Release`
-- [ ] `dotnet test JustyBase.NetezzaSql.sln -c Release`
+- [ ] `pwsh .\eng\Verify-Local.ps1` (or `-FullCi` when preparing a release)
 - [ ] `git diff --check`
 
 ## Checklist
