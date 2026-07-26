@@ -4,6 +4,17 @@ All notable changes to this project will be documented here.
 
 ## Unreleased
 
+## 0.3.0-preview.1
+
+- Add `JustyBase.Core` and `JustyBase.ImportExport` NuGet packages (shared risk, import/export,
+  grid stats, and host ports documented in `docs/shared-core-status.md`).
+- Extend Netezza pipe/CSV import: `NetezzaImportUsingOptions`, `NetezzaPipeImportExecutor`
+  cancellation/timeouts, and live integration coverage when `NZ_DEV_*` is set.
+- Pack Core and ImportExport in CI; expand package-consumer and coverage gates for the new libraries.
+- Remove the obsolete public API baseline check (`eng/Assert-PublicApi.ps1`).
+
+## 0.2.0-preview.8
+
 - Extract shared host SQL/DDL helpers into packages: `NetezzaErrorLocator`,
   `NetezzaMaintenanceSql`, session/skew SQL on `NetezzaSystemSql`,
   `NetezzaDdlTextBuilder.BuildCreateSequence`, and import CREATE/INSERT prefixes

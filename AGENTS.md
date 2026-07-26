@@ -2,12 +2,14 @@
 
 ## Project Structure & Module Organization
 
-This repository contains .NET 10 class libraries for Netezza SQL tooling:
+This repository contains .NET 10 class libraries for Netezza SQL tooling and shared JustyBase app core:
 
 - `JustyBase.NetezzaSqlParser.csproj` is the main parser package. Its source is organized by responsibility: `Lexer/`, `Parser/`, `Ast/`, `Visitor/`, `Formatter/`, `Linter/`, `Completion/`, `Authoring/`, and `Caching/`.
 - `JustyBase.NetezzaDdl/` contains the DDL-generation library and its `Models/` input types.
 - `JustyBase.NetezzaCatalogSql/` provides catalog SQL and procedure-type helpers.
 - `JustyBase.Netezza/` is the UI-agnostic integration layer (schema snapshot models, parser schema adapter, DDL input factory, DI).
+- `JustyBase.Core/` is the shared app core (risk, scripting dialect, execution contracts, schema cache ports, history/vars, grid stats, credentials/DB ports).
+- `JustyBase.ImportExport/` is the shared import/export engine (Netezza pipe/CSV import, tabular export).
 - `JustyBase.NetezzaSqlLsp/` contains the standalone NativeAOT LSP executable built on the parser package.
 
 Keep related partial-class files together (for example, `Parser/NzSqlParser.*.cs`). Do not place build output from `bin/` or `obj/` under source control.
@@ -32,7 +34,7 @@ Follow the existing C# style: four-space indentation, file-scoped namespaces whe
 
 ## Testing Guidelines
 
-Unit and conformance tests are in `tests/JustyBase.NetezzaSql.Tests`; integration-layer tests are in `tests/JustyBase.Netezza.Tests`; driver-backed live checks are isolated in `tests/JustyBase.NetezzaSql.IntegrationTests`. Add focused tests named by behavior, for example `ParseSelect_WithWhereClause_ReturnsFilterNode`. Cover valid SQL, malformed input, and edge cases for parser, formatter, linter, catalog SQL, DDL, or integration-layer changes. Run `dotnet test` before submitting changes.
+Unit and conformance tests are in `tests/JustyBase.NetezzaSql.Tests`; integration-layer tests are in `tests/JustyBase.Netezza.Tests`; driver-backed live checks are isolated in `tests/JustyBase.NetezzaSql.IntegrationTests`. Shared core production-vs-scaffold status is documented in `docs/shared-core-status.md`. Add focused tests named by behavior, for example `ParseSelect_WithWhereClause_ReturnsFilterNode`. Cover valid SQL, malformed input, and edge cases for parser, formatter, linter, catalog SQL, DDL, import/export, or integration-layer changes. Run `dotnet test` before submitting changes.
 
 ## Commit & Pull Request Guidelines
 

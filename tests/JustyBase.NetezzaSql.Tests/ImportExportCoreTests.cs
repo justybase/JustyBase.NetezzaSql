@@ -1,0 +1,121 @@
+using JustyBase.ImportExport.Export;
+using JustyBase.ImportExport.Import;
+using JustyBase.NetezzaDdl;
+
+namespace JustyBase.NetezzaSql.Tests;
+
+public sealed class ImportExportCoreTests
+{
+    [Fact]
+    public void UsingBuilder_contains_shared_typed_and_fast_options()
+    {
+        string sql = NetezzaImportSql.BuildUsingClause(new NetezzaImportUsingOptions
+        {
+            Delimiter = "|",
+            EncodingName = "UTF-8",
+            MaxErrors = 4,
+            NullValue = "\\N",
+            TruncString = true,
+            CRinString = true
+        });
+
+        Assert.Contains("DELIMITER '|'", sql, StringComparison.Ordinal);
+        Assert.Contains("REMOTESOURCE 'dotnet'", sql, StringComparison.Ordinal);
+        Assert.Contains("MAXERRORS 4", sql, StringComparison.Ordinal);
+        Assert.Contains(@"NULLVALUE '\N'", sql, StringComparison.Ordinal);
+        Assert.Contains("TRUNCSTRING", sql, StringComparison.Ordinal);
+        Assert.Contains("CRINSTRING", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void UsingBuilder_always_emits_dotnet_remotesource_when_unset_or_blank()
+    {
+        string fromDefault = NetezzaImportSql.BuildUsingClause(new NetezzaImportUsingOptions());
+        string fromBlank = NetezzaImportSql.BuildUsingClause(new NetezzaImportUsingOptions { RemoteSource = "  " });
+        string fromNull = NetezzaImportSql.BuildUsingClause(new NetezzaImportUsingOptions { RemoteSource = null });
+
+        Assert.Contains("REMOTESOURCE 'dotnet'", fromDefault, StringComparison.Ordinal);
+        Assert.Contains("REMOTESOURCE 'dotnet'", fromBlank, StringComparison.Ordinal);
+        Assert.Contains("REMOTESOURCE 'dotnet'", fromNull, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void UsingBuilder_preserves_empty_null_marker_and_omits_non_positive_max_rows()
+    {
+        string sql = NetezzaImportSql.BuildUsingClause(new NetezzaImportUsingOptions
+        {
+            NullValue = string.Empty,
+            MaxRows = 0,
+            MaxErrors = 0
+        });
+
+        Assert.Contains("NULLVALUE ''", sql, StringComparison.Ordinal);
+        Assert.Contains("MAXERRORS 0", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("MAXROWS", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Typed_encoder_escapes_delimiter_and_newline()
+    {
+        string row = DelimitedRowEncoder.Encode(["a|b", "line\nvalue"], '|');
+
+        Assert.Equal("a\\|b|line\\nvalue", row);
+    }
+
+    [Fact]
+    public async Task Fast_reader_supports_buffered_multiline_csv()
+    {
+        using var input = new StringReader("id,name\n1,\"Ada\nLovelace\"\n");
+        var rows = new List<IReadOnlyList<string?>>();
+        await foreach (var row in FastCsvImportEngine.ReadAsync(input, new CsvImportOptions(HasHeader: false)))
+            rows.Add(row);
+
+        Assert.Equal(2, rows.Count);
+        Assert.Equal("Ada\nLovelace", rows[1][1]);
+    }
+
+    [Fact]
+    public async Task Fast_raw_reader_supports_filter_transform_and_header_skip()
+    {
+        using var input = new StringReader("id,name\n1,Ada\n2,Bob\n3,Ada\n");
+        var rows = new List<string>();
+        await foreach (string row in FastCsvImportEngine.ReadRawAsync(input, new FastCsvRawOptions(
+                           FilterPattern: "Ada",
+                           TransformPattern: "Ada",
+                           TransformReplacement: "ADA")))
+            rows.Add(row);
+
+        Assert.Equal(["1,ADA", "3,ADA"], rows);
+    }
+
+    [Fact]
+    public void Sanitize_escapes_tab_newline_and_backslash()
+    {
+        var values = System.Buffers.SearchValues.Create(['\\', '\t', '\n', '\r']);
+        string sanitized = NetezzaPipeImportExecutor.Sanitize(
+            "a\tb\\c\nd",
+            values,
+            "\\\\",
+            '\t',
+            "\\t",
+            "\\n");
+
+        Assert.Equal("a\\tb\\\\c\\nd", sanitized);
+    }
+
+    [Fact]
+    public void BuildInsertSql_includes_using_clause()
+    {
+        string sql = NetezzaImportEngine.BuildInsertSql(
+            "T",
+            "pipe1",
+            ["ID INTEGER"],
+            new NetezzaImportUsingOptions { Delimiter = "\\t", MaxErrors = 0 });
+
+        Assert.Contains("INSERT INTO T", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("\\\\.\\pipe\\pipe1", sql, StringComparison.Ordinal);
+        Assert.Contains("REMOTESOURCE 'dotnet'", sql, StringComparison.Ordinal);
+        Assert.Contains("USING", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.EndsWith(";", sql, StringComparison.Ordinal);
+    }
+}

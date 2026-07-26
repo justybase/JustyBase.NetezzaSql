@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsAotCompatible>true</IsAotCompatible>
+    <PackageId>JustyBase.ImportExport</PackageId>
+    <RootNamespace>JustyBase.ImportExport</RootNamespace>
+    <AssemblyName>JustyBase.ImportExport</AssemblyName>
+    <PackageDescription>Shared Netezza import and tabular export engines for JustyBase hosts.</PackageDescription>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\JustyBase.NetezzaDdl\JustyBase.NetezzaDdl.csproj" />
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

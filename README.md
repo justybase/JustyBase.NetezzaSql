@@ -2,18 +2,20 @@
 
 Open-source .NET libraries for working with Netezza SQL without requiring a live database connection.
 
-The solution contains four libraries:
+The solution contains six libraries:
 
 | Library | Purpose |
 | --- | --- |
 | `JustyBase.NetezzaSqlParser` | Lexer, recursive-descent parser, AST, formatter, linter, completion, and editor-authoring services. |
-| `JustyBase.NetezzaDdl` | Netezza DDL text builders, identifier/literal helpers, and external-table option mapping. |
+| `JustyBase.NetezzaDdl` | Netezza DDL text builders, identifier/literal helpers, import/maintenance SQL, and external-table option mapping. |
 | `JustyBase.NetezzaCatalogSql` | Reusable SQL statements for reading Netezza catalog metadata. |
 | `JustyBase.Netezza` | UI-agnostic metadata models, schema adapter for the parser, and DDL input mapping. |
+| `JustyBase.Core` | Shared host-agnostic app core: risk analysis, scripting dialect, execution contracts, schema cache/catalog ports. |
+| `JustyBase.ImportExport` | Shared Netezza import engines and tabular export writers used by Avalonia and Legacy hosts. |
 
 ## Status
 
-This project is in active development and currently targets `net10.0`. The parser is designed for Netezza SQL and NZPLSQL grammar used by JustyBase tooling. It is not a database driver and does not open connections or execute SQL.
+This project is in active development and currently targets `net10.0`. The parser is designed for Netezza SQL and NZPLSQL grammar used by JustyBase tooling. It is not a database driver and does not open connections or execute SQL by itself. Shared app-core packages (`JustyBase.Core`, `JustyBase.ImportExport`) hold host-agnostic risk/import/export/scripting surfaces; see [docs/shared-core-status.md](docs/shared-core-status.md) for production vs scaffold.
 
 The public API and supported grammar may evolve before the first stable `1.0.0` release. Use tagged GitHub releases when consuming the source.
 

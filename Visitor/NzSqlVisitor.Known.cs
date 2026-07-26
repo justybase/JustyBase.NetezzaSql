@@ -141,7 +141,7 @@ public partial class NzSqlVisitor
 
     private static readonly HashSet<string> ExternalRemoteSourceValues = new(StringComparer.OrdinalIgnoreCase)
     {
-        "ODBC", "JDBC", "OLE-DB", "S3", "AZURE", "NZSQL", "YES"
+        "ODBC", "JDBC", "OLE-DB", "S3", "AZURE", "NZSQL", "YES", "DOTNET"
     };
 
     private static readonly HashSet<string> ExternalTimeStyleValues = new(StringComparer.OrdinalIgnoreCase)

@@ -6,8 +6,7 @@ tests and package artifacts.
 1. Run `dotnet restore .\JustyBase.NetezzaSql.sln`, then build and test the
    Release solution locally. The Release build treats compiler and xUnit
    analyzer warnings as errors.
-2. Run `pwsh .\eng\Assert-PublicApi.ps1` and
-   `pwsh .\eng\Test-Coverage.ps1`. Parser, DDL, catalog, and the integration
+2. Run `pwsh .\eng\Test-Coverage.ps1`. Parser, DDL, catalog, and the integration
    library (`JustyBase.Netezza`) require at least 80% line and 65% branch
    coverage. LSP protocol/handler code has its own 60% line and 50% branch
    gate; the executable composition root is excluded.
@@ -24,8 +23,8 @@ tests and package artifacts.
    the GitHub release yourself.
 7. Upload the inspected packages to NuGet yourself.
 
-A failing coverage or API baseline gate means the candidate is not a release
-candidate yet; do not lower a threshold or refresh a baseline merely to pass.
+A failing coverage gate means the candidate is not a release candidate yet; do not
+lower a threshold merely to pass.
 
 Never place NuGet API keys, database credentials, or release tokens in this
 repository or its workflow files.

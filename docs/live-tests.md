@@ -14,4 +14,6 @@ $env:NZ_DEV_PASSWORD = "secret"
 dotnet test .\tests\JustyBase.NetezzaSql.IntegrationTests\JustyBase.NetezzaSql.IntegrationTests.csproj --filter Category=Live
 ```
 
-The live test executes `SELECT 1` and the catalog queries for schemas and object types. When any required variable is missing, it exits without opening a connection so the offline suite remains green.
+The live suite executes `SELECT 1`, catalog queries, a typed named-pipe CREATE/INSERT round-trip (including delimiter/newline escaping), SAMEAS insert into an existing table, and a Fast raw-line pipe import with filter. All import `USING` clauses emit `REMOTESOURCE 'dotnet'` so the driver opens DATAOBJECT/pipe paths on the client. When any required variable is missing, it exits without opening a connection so the offline suite remains green.
+
+Pipe round-trips still need a working Windows named-pipe server on the client. If the driver/topology rejects the pipe (for example a named-pipe error), the test soft-skips unless `NZ_REQUIRE_PIPE=1` is set.

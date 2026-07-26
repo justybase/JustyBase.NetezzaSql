@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsAotCompatible>true</IsAotCompatible>
+    <PackageId>JustyBase.Core</PackageId>
+    <RootNamespace>JustyBase.Core</RootNamespace>
+    <AssemblyName>JustyBase.Core</AssemblyName>
+    <PackageDescription>UI-agnostic execution, scripting, risk, metadata, history, and database port contracts for JustyBase hosts.</PackageDescription>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

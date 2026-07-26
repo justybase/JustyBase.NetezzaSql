@@ -22,14 +22,10 @@ public static class NetezzaDdlTemplates
         => $"ALTER TABLE {qualifiedTable} ORGANIZE ON (<COL1>, <COL2>);\r\n--https://www.ibm.com/docs/en/netezza?topic=tables-select-organizing-keys";
 
     public static string GetGroomSql(string qualifiedTable)
-        => $"""
-            GROOM TABLE {qualifiedTable} RECORDS ALL RECLAIM BACKUPSET NONE;
-            --GROOM TABLE {qualifiedTable} VERSIONS;
-            --https://www.ibm.com/docs/en/netezza?topic=databases-groom-tables
-            """;
+        => NetezzaMaintenanceSql.BuildGroom(qualifiedTable, "RECORDS ALL", "NONE");
 
     public static string GetGenerateStatsSql(string qualifiedTable)
-        => $"GENERATE EXPRESS STATISTICS ON {qualifiedTable};\r\n--https://www.ibm.com/docs/en/netezza?topic=reference-generate-express-statistics";
+        => NetezzaMaintenanceSql.BuildGenerateStats(qualifiedTable, express: true);
 
     public static string GetAddTableCommentTemplateSql(string qualifiedTable)
         => $"COMMENT ON TABLE {qualifiedTable} IS 'some comment';";

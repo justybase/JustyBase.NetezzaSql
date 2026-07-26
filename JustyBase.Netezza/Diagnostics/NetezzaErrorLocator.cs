@@ -162,9 +162,9 @@ public static class NetezzaErrorLocator
         {
             const string prefix = "ERROR [HY000] ERROR:  Attribute ";
             int i1 = message.IndexOf(" is repeated", StringComparison.Ordinal);
-            if (i1 > prefix.Length + 1)
+            if (i1 > prefix.Length)
             {
-                location = new Location(message[(prefix.Length + 1)..(i1 - 1)]);
+                location = new Location(message[prefix.Length..i1]);
                 return true;
             }
         }
@@ -186,9 +186,9 @@ public static class NetezzaErrorLocator
         {
             const string prefix = "ERROR [HY000] ERROR:  ";
             int i1 = message.IndexOf(" is not a valid option name", StringComparison.Ordinal);
-            if (i1 > prefix.Length + 1)
+            if (i1 > prefix.Length)
             {
-                location = new Location(message[(prefix.Length + 1)..(i1 - 1)]);
+                location = new Location(message[prefix.Length..i1]);
                 return true;
             }
         }

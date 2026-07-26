@@ -17,6 +17,8 @@ $targets = @(
     @{ Name = 'catalog'; Line = 80; Branch = 65; TestProject = $sqlTestProject },
     # The executable entry point is excluded; this gate measures protocol and handlers only.
     @{ Name = 'lsp'; Line = 60; Branch = 50; TestProject = $sqlTestProject },
+    @{ Name = 'core'; Line = 50; Branch = 35; TestProject = $sqlTestProject },
+    @{ Name = 'importexport'; Line = 50; Branch = 35; TestProject = $sqlTestProject },
     @{ Name = 'netezza'; Line = 80; Branch = 65; TestProject = $netezzaTestProject }
 )
 

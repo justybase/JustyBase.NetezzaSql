@@ -8,7 +8,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $packages = Get-ChildItem -Path $PackageDirectory -Filter '*.nupkg' | Where-Object { $_.Name -notlike '*.symbols.nupkg' }
-$required = 'JustyBase.NetezzaSqlParser', 'JustyBase.NetezzaDdl', 'JustyBase.NetezzaCatalogSql', 'JustyBase.Netezza'
+$required = 'JustyBase.NetezzaSqlParser', 'JustyBase.NetezzaDdl', 'JustyBase.NetezzaCatalogSql', 'JustyBase.Netezza', 'JustyBase.Core', 'JustyBase.ImportExport'
 $versions = @{}
 foreach ($id in $required) {
     $package = $packages | Where-Object { $_.Name -match "^$([regex]::Escape($id))\.(.+)\.nupkg$" } | Select-Object -First 1
@@ -28,10 +28,14 @@ $escapedSource = [Security.SecurityElement]::Escape((Resolve-Path $PackageDirect
     <PackageReference Include="JustyBase.NetezzaDdl" Version="$($versions['JustyBase.NetezzaDdl'])" />
     <PackageReference Include="JustyBase.NetezzaCatalogSql" Version="$($versions['JustyBase.NetezzaCatalogSql'])" />
     <PackageReference Include="JustyBase.Netezza" Version="$($versions['JustyBase.Netezza'])" />
+    <PackageReference Include="JustyBase.Core" Version="$($versions['JustyBase.Core'])" />
+    <PackageReference Include="JustyBase.ImportExport" Version="$($versions['JustyBase.ImportExport'])" />
   </ItemGroup>
 </Project>
 "@ | Set-Content -NoNewline (Join-Path $consumerRoot 'PackageConsumer.csproj')
 @"
+using JustyBase.Core.Risk;
+using JustyBase.ImportExport.Export;
 using JustyBase.Netezza;
 using JustyBase.NetezzaCatalogSql;
 using JustyBase.NetezzaDdl;
@@ -41,6 +45,8 @@ Console.WriteLine(NzLexer.Tokenize("SELECT 1").Count());
 Console.WriteLine(NetezzaNameHelper.QuoteNameIfNeeded("sample"));
 Console.WriteLine(NetezzaCatalogSql.GetSchemasSql("SAMPLE"));
 Console.WriteLine(NetezzaResult<int>.Ok(42).Value);
+Console.WriteLine(new SqlRiskAnalysisService().Analyze("UPDATE t SET a=1").Count);
+Console.WriteLine(typeof(CsvExportWriter).FullName);
 "@ | Set-Content -NoNewline (Join-Path $consumerRoot 'Program.cs')
 
 dotnet build (Join-Path $consumerRoot 'PackageConsumer.csproj') --configuration $Configuration

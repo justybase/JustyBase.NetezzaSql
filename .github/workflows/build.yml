@@ -2,13 +2,13 @@ name: Build & Publish
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
     paths-ignore:
       - '**.md'
       - '.gitignore'
       - '.github/**'
   pull_request:
-    branches: [main]
+    branches: [main, master]
   release:
     types: [published]
 
