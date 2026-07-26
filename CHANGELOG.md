@@ -4,6 +4,14 @@ All notable changes to this project will be documented here.
 
 ## Unreleased
 
+## 0.3.0-preview.2
+
+- `DatabaseTypeChooser.Infer`: prefer `NVARCHAR` over `VARCHAR` for text columns.
+- Size text length as ceil(maxSampleLen × 1.2), then round up to the next 10 (e.g. 12 → 20);
+  empty columns apply the same sizing to the `varcharLength` hint.
+- Keep codes with significant leading zeros as text (not `INTEGER`/`NUMERIC`).
+- Extend unit coverage and live CSV→infer→CREATE→pipe→SELECT round-trips for the new sizing.
+
 ## 0.3.0-preview.1
 
 - Add `JustyBase.Core` and `JustyBase.ImportExport` NuGet packages (shared risk, import/export,

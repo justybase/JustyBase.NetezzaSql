@@ -86,15 +86,17 @@ public sealed class ImportExportExtendedTests
         Assert.Equal("INTEGER", columns[1].NetezzaType);
         Assert.Equal("NUMERIC(38,10)", columns[2].NetezzaType);
         Assert.Equal("DATETIME", columns[3].NetezzaType);
-        Assert.StartsWith("VARCHAR(", columns[4].NetezzaType, StringComparison.Ordinal);
+        // max("hello","world")=5 → ceil(6) → 10
+        Assert.Equal("NVARCHAR(10)", columns[4].NetezzaType);
         Assert.False(columns[0].IsNullable);
     }
 
     [Fact]
-    public void DatabaseTypeChooser_Infer_empty_column_uses_default_varchar()
+    public void DatabaseTypeChooser_Infer_empty_column_uses_sized_nvarchar_from_hint()
     {
+        // varcharLength hint 100 → ceil(120) → 120
         var columns = DatabaseTypeChooser.Infer(["x"], [[]], varcharLength: 100);
-        Assert.Equal("VARCHAR(100)", columns[0].NetezzaType);
+        Assert.Equal("NVARCHAR(120)", columns[0].NetezzaType);
         Assert.True(columns[0].IsNullable);
     }
 
@@ -102,6 +104,89 @@ public sealed class ImportExportExtendedTests
     public void DatabaseTypeChooser_Infer_rejects_invalid_varchar_length()
         => Assert.Throws<ArgumentOutOfRangeException>(() =>
             DatabaseTypeChooser.Infer(["a"], [["x"]], varcharLength: 0));
+
+    [Fact]
+    public void DatabaseTypeChooser_Infer_Column1_alpha_tokens_prefer_nvarchar_with_sized_length()
+    {
+        // ADASD(5), FDSFDSF(7), FSDGDGFD(8) → max 8 → ceil(9.6)=10 → NVARCHAR(10)
+        var columns = DatabaseTypeChooser.Infer(
+            ["COLUMN_1"],
+            [
+                ["ADASD"],
+                ["FDSFDSF"],
+                ["FSDGDGFD"]
+            ]);
+
+        Assert.Equal("COLUMN_1", columns[0].Name);
+        Assert.Equal("NVARCHAR(10)", columns[0].NetezzaType);
+        Assert.False(columns[0].IsNullable);
+    }
+
+    [Fact]
+    public void DatabaseTypeChooser_Infer_Column1_with_leading_zeros_and_negative_is_nvarchar()
+    {
+        // 001/002/-5 → max 3 → NVARCHAR(10); must not become INTEGER
+        var columns = DatabaseTypeChooser.Infer(
+            ["COLUMN_1"],
+            [
+                ["001"],
+                ["002"],
+                ["-5"]
+            ]);
+
+        Assert.Equal("COLUMN_1", columns[0].Name);
+        Assert.Equal("NVARCHAR(10)", columns[0].NetezzaType);
+        Assert.False(columns[0].IsNullable);
+    }
+
+    [Theory]
+    [InlineData(1, 10)]
+    [InlineData(8, 10)]
+    [InlineData(12, 20)]
+    [InlineData(100, 120)]
+    public void DatabaseTypeChooser_SizeTextLength_adds_20_percent_and_rounds_up_to_10(int maxLength, int expected)
+        => Assert.Equal(expected, DatabaseTypeChooser.SizeTextLength(maxLength));
+
+    [Theory]
+    [InlineData(new[] { "001" }, "NVARCHAR(10)")]
+    [InlineData(new[] { "00" }, "NVARCHAR(10)")]
+    [InlineData(new[] { "-05" }, "NVARCHAR(10)")]
+    [InlineData(new[] { "+012" }, "NVARCHAR(10)")]
+    [InlineData(new[] { "0", "-5", "42" }, "INTEGER")]
+    [InlineData(new[] { "0.5", "1.0" }, "NUMERIC(38,10)")]
+    public void DatabaseTypeChooser_Infer_leading_zero_rules(string[] values, string expectedType)
+    {
+        var rows = values.Select(v => (IReadOnlyList<string?>)[v]).ToArray();
+        var columns = DatabaseTypeChooser.Infer(["c"], rows);
+        Assert.Equal(expectedType, columns[0].NetezzaType);
+    }
+
+    [Fact]
+    public void DatabaseTypeChooser_Infer_plain_zero_and_negative_remain_integer()
+    {
+        var columns = DatabaseTypeChooser.Infer(
+            ["n"],
+            [
+                ["0"],
+                ["-5"],
+                ["42"]
+            ]);
+
+        Assert.Equal("INTEGER", columns[0].NetezzaType);
+    }
+
+    [Fact]
+    public void DatabaseTypeChooser_Infer_decimal_with_zero_point_stays_numeric()
+    {
+        var columns = DatabaseTypeChooser.Infer(
+            ["amount"],
+            [
+                ["0.5"],
+                ["1.0"]
+            ]);
+
+        Assert.Equal("NUMERIC(38,10)", columns[0].NetezzaType);
+    }
 
     [Fact]
     public void DelimitedRowEncoder_Encode_null_uses_null_marker()

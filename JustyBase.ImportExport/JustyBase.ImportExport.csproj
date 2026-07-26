@@ -13,4 +13,7 @@
     <ProjectReference Include="..\JustyBase.NetezzaDdl\JustyBase.NetezzaDdl.csproj" />
     <None Include="..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="JustyBase.NetezzaSql.Tests" />
+  </ItemGroup>
 </Project>

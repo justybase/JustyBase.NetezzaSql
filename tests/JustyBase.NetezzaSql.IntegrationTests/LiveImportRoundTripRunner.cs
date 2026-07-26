@@ -128,7 +128,8 @@ internal static class LiveImportRoundTripRunner
     }
 
     /// <summary>
-    /// Live DDL mapping only: VARCHAR → NVARCHAR for Unicode-safe round-trips without changing production Infer.
+    /// Live DDL mapping: legacy VARCHAR → NVARCHAR when Infer still emits VARCHAR.
+    /// Production Infer now prefers NVARCHAR; this remains a safe no-op for NVARCHAR.
     /// </summary>
     internal static string MapTypeForLiveDdl(string inferredType, bool mapVarcharToNvarchar)
     {

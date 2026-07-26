@@ -40,6 +40,7 @@ This is **not** part of `eng\Verify-Local.ps1` (offline CI parity). Use Verify-L
 | `hard_quoted_csv` | Quoted commas, `""`, multiline CSV fields |
 | `adversarial` | SQL-like / HTML / Unicode payloads stored as data only |
 | `mixed_falls_back_varchar` | Mixed int+text column → VARCHAR (not INTEGER) |
+| `leading_zeros_varchar` | Values like `001`/`002` stay VARCHAR (preserve leading zeros) |
 
 ## Adding a case
 
@@ -59,6 +60,8 @@ This is **not** part of `eng\Verify-Local.ps1` (offline CI parity). Use Verify-L
 
 ## Live DDL note
 
-Production `DatabaseTypeChooser` emits `VARCHAR(...)`. The round-trip runner maps `VARCHAR` → `NVARCHAR` for CREATE/EXTERNAL only so Unicode payloads round-trip safely without changing the Infer API. BOOLEAN imports use `BoolStyle = TRUE_FALSE`.
+Production `DatabaseTypeChooser` emits **`NVARCHAR(n)`** for text (not `VARCHAR`), with
+`n = ceil(maxLen × 1.2)` rounded up to a multiple of 10 (e.g. length 12 → 20; length 8 → 10).
+BOOLEAN imports use `BoolStyle = TRUE_FALSE`. Leading-zero digit codes (`001`) stay textual.
 
 Pipe lines are encoded with `NetezzaPipeImportExecutor.Sanitize` (escape + real tab/newline bytes), matching the typed-pipe SoT — not `DelimitedRowEncoder`'s `\\n` text form.
