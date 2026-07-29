@@ -191,6 +191,19 @@ public static class StatementIndexBuilder
     }
 
     /// <summary>
+    /// Incremental validation is useful only when a minority of statements changed.
+    /// Mirrors shouldUseIncrementalValidation from the TypeScript reference.
+    /// </summary>
+    public static bool ShouldUseIncrementalValidation(StatementIndex? previous, StatementIndex next, IReadOnlyList<int> dirtyIndices)
+    {
+        if (previous is null || dirtyIndices.Count == 0 || next.Statements.Count == 0)
+            return false;
+
+        int maxDirty = Math.Max(1, next.Statements.Count / 2);
+        return dirtyIndices.Count <= maxDirty;
+    }
+
+    /// <summary>
     /// Fast non-cryptographic hash for content comparison.
     /// Uses FNV-1a 64-bit hash.
     /// </summary>

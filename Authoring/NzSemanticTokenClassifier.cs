@@ -40,7 +40,11 @@ public sealed class NzSemanticTokenClassifier
 
     public IReadOnlyList<SemanticTokenSpan> Classify(string sql, string? documentUri = null)
     {
-        if (string.IsNullOrEmpty(sql) || sql.Length > NzSemanticTokenKnown.LargeDocumentCharLimit)
+        if (string.IsNullOrEmpty(sql))
+            return Array.Empty<SemanticTokenSpan>();
+
+        int lineCount = SqlPerformancePolicy.CountLines(sql);
+        if (SqlPerformancePolicy.ShouldSkipSemanticClassification(lineCount, sql.Length))
             return Array.Empty<SemanticTokenSpan>();
 
         var cacheKey = BuildCacheKey(documentUri, sql);
@@ -91,7 +95,8 @@ public sealed class NzSemanticTokenClassifier
             return items.ToArray();
         }
 
-        var useScope = sql.Length <= NzSemanticTokenKnown.LargeDocumentCharLimit;
+        var useScope = !SqlPerformancePolicy.ShouldSkipFullParse(
+            SqlPerformancePolicy.CountLines(sql), sql.Length);
         TokenScopeCollector? scopeCollector = null;
         HashSet<string>? aliasNames = null;
         HashSet<string>? tableNames = null;

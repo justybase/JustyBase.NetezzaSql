@@ -184,6 +184,114 @@ public static partial class NetezzaCatalogSql
     }
 
     /// <summary>
+    /// Distribution key columns for a single table.
+    /// Mirrors JustyBaseLite NZ_QUERIES.getDistributionKeys.
+    /// </summary>
+    public static string GetDistributionKeysSql(string database, string schema, string tableName)
+    {
+        database = NormalizeDatabaseIdentifier(database, nameof(database));
+        ArgumentException.ThrowIfNullOrWhiteSpace(schema, nameof(schema));
+        ArgumentException.ThrowIfNullOrWhiteSpace(tableName, nameof(tableName));
+
+        string schemaLiteral = EscapeSqlLiteral(schema.ToUpperInvariant());
+        string tableLiteral = EscapeSqlLiteral(tableName.ToUpperInvariant());
+
+        return
+            $"""
+            SELECT ATTNAME
+            FROM {database}.._V_TABLE_DIST_MAP
+            WHERE UPPER(SCHEMA) = '{schemaLiteral}'
+                AND UPPER(TABLENAME) = '{tableLiteral}'
+            ORDER BY DISTSEQNO
+            """;
+    }
+
+    /// <summary>
+    /// Organize/clustering columns for a single table.
+    /// Mirrors JustyBaseLite NZ_QUERIES.getOrganizeColumns.
+    /// </summary>
+    public static string GetOrganizeColumnsSql(string database, string schema, string tableName)
+    {
+        database = NormalizeDatabaseIdentifier(database, nameof(database));
+        ArgumentException.ThrowIfNullOrWhiteSpace(schema, nameof(schema));
+        ArgumentException.ThrowIfNullOrWhiteSpace(tableName, nameof(tableName));
+
+        string schemaLiteral = EscapeSqlLiteral(schema.ToUpperInvariant());
+        string tableLiteral = EscapeSqlLiteral(tableName.ToUpperInvariant());
+
+        return
+            $"""
+            SELECT ATTNAME
+            FROM {database}.._V_TABLE_ORGANIZE_COLUMN
+            WHERE UPPER(SCHEMA) = '{schemaLiteral}'
+                AND UPPER(TABLENAME) = '{tableLiteral}'
+            ORDER BY ORGSEQNO
+            """;
+    }
+
+    /// <summary>
+    /// Key constraints (PK/FK/UNIQUE) for a single table.
+    /// Mirrors JustyBaseLite NZ_QUERIES.getTableKeys.
+    /// </summary>
+    public static string GetTableKeysSql(string database, string schema, string tableName)
+    {
+        database = NormalizeDatabaseIdentifier(database, nameof(database));
+        ArgumentException.ThrowIfNullOrWhiteSpace(schema, nameof(schema));
+        ArgumentException.ThrowIfNullOrWhiteSpace(tableName, nameof(tableName));
+
+        string schemaLiteral = EscapeSqlLiteral(schema.ToUpperInvariant());
+        string tableLiteral = EscapeSqlLiteral(tableName.ToUpperInvariant());
+
+        return
+            $"""
+            SELECT 
+                X.SCHEMA
+                , X.RELATION
+                , X.CONSTRAINTNAME
+                , X.CONTYPE
+                , X.ATTNAME
+                , X.PKDATABASE
+                , X.PKSCHEMA
+                , X.PKRELATION
+                , X.PKATTNAME
+                , X.UPDT_TYPE
+                , X.DEL_TYPE
+            FROM {database}.._V_RELATION_KEYDATA X
+            WHERE X.OBJID NOT IN (4,5)
+                AND UPPER(X.SCHEMA) = '{schemaLiteral}'
+                AND UPPER(X.RELATION) = '{tableLiteral}'
+            ORDER BY X.SCHEMA, X.RELATION, X.CONSEQ
+            """;
+    }
+
+    /// <summary>
+    /// Object DESCRIPTION (table comment) for a single object.
+    /// Mirrors JustyBaseLite NZ_QUERIES.getObjectComment.
+    /// </summary>
+    public static string GetObjectCommentSql(string database, string schema, string objectName, string? objectType = null)
+    {
+        database = NormalizeDatabaseIdentifier(database, nameof(database));
+        ArgumentException.ThrowIfNullOrWhiteSpace(schema, nameof(schema));
+        ArgumentException.ThrowIfNullOrWhiteSpace(objectName, nameof(objectName));
+
+        string dbLiteral = EscapeSqlLiteral(database);
+        string schemaLiteral = EscapeSqlLiteral(schema.ToUpperInvariant());
+        string objectLiteral = EscapeSqlLiteral(objectName.ToUpperInvariant());
+        string typeFilter = string.IsNullOrWhiteSpace(objectType)
+            ? string.Empty
+            : $" AND OBJTYPE = '{EscapeSqlLiteral(objectType)}'";
+
+        return
+            $"""
+            SELECT DESCRIPTION
+            FROM {database}.._V_OBJECT_DATA
+            WHERE DBNAME = '{dbLiteral}'
+                AND UPPER(SCHEMA) = '{schemaLiteral}'
+                AND UPPER(OBJNAME) = '{objectLiteral}'{typeFilter}
+            """;
+    }
+
+    /// <summary>
     /// Full column metadata including PK/FK/distribution flags for a single table.
     /// Mirrors JustyBaseLite netezzaMetadataProvider.buildColumnMetadataQuery.
     /// </summary>

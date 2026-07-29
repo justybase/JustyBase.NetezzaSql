@@ -148,6 +148,33 @@ public sealed class DocumentValidationSession : IDisposable
     }
 
     /// <summary>
+    /// Collect cached diagnostics for statements that are not dirty.
+    /// </summary>
+    public IReadOnlyDictionary<int, IReadOnlyList<LintIssue>> CollectCachedStatementDiagnostics(
+        string documentUri,
+        StatementIndex statementIndex,
+        IReadOnlyList<int> dirtyIndices,
+        int? metadataEpoch = null)
+    {
+        var dirty = dirtyIndices.Count == 0
+            ? null
+            : new HashSet<int>(dirtyIndices);
+        var cached = new Dictionary<int, IReadOnlyList<LintIssue>>();
+
+        foreach (var statement in statementIndex.Statements)
+        {
+            if (dirty is not null && dirty.Contains(statement.Index))
+                continue;
+
+            var diagnostics = GetCachedDiagnostics(documentUri, statement, metadataEpoch);
+            if (diagnostics is not null)
+                cached[statement.Index] = diagnostics;
+        }
+
+        return cached;
+    }
+
+    /// <summary>
     /// Invalidate all cached diagnostics for a document.
     /// </summary>
     public void InvalidateDocument(string documentUri)

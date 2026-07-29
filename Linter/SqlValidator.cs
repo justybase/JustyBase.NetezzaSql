@@ -50,7 +50,9 @@ public sealed class SqlValidator : IDisposable
     public LintResult ValidateIncremental(string sql, string documentUri,
         int? metadataEpoch = null, CancellationToken cancellationToken = default)
     {
-        return Validate(sql, documentUri, metadataEpoch, cancellationToken);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        return _engine.RunIncrementalLint(new LintConfig(
+            sql, SchemaProvider, documentUri, metadataEpoch, cancellationToken));
     }
 
     /// <summary>Gets the rule registry used by this validator.</summary>

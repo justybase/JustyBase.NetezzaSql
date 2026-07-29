@@ -35,6 +35,11 @@ public sealed class CatalogSqlSurfaceCoverageTests
             CatalogSql.GetLegacyViewSql(database),
             CatalogSql.GetLegacyExternalSql(database),
             CatalogSql.GetTableColumnsSql(database, "admin", "orders"),
+            CatalogSql.GetDistributionKeysSql(database, "admin", "orders"),
+            CatalogSql.GetOrganizeColumnsSql(database, "admin", "orders"),
+            CatalogSql.GetTableKeysSql(database, "admin", "orders"),
+            CatalogSql.GetObjectCommentSql(database, "admin", "orders", "TABLE"),
+            CatalogSql.GetObjectCommentSql(database, "admin", "orders"),
             CatalogSql.GetColumnMetadataSql(database, "admin", "orders"),
             CatalogSql.GetBatchColumnsSql(database),
             CatalogSql.GetBatchColumnsSql(database, "admin")
@@ -100,6 +105,10 @@ public sealed class CatalogSqlSurfaceCoverageTests
         var columns = CatalogSql.GetTableColumnsSql("JUST_DATA", "ADMIN", "DIMDATE");
         var metadata = CatalogSql.GetColumnMetadataSql("JUST_DATA", "ADMIN", "DIMDATE");
         var batch = CatalogSql.GetBatchColumnsSql("JUST_DATA", "ADMIN");
+        var dist = CatalogSql.GetDistributionKeysSql("JUST_DATA", "ADMIN", "DIMDATE");
+        var organize = CatalogSql.GetOrganizeColumnsSql("JUST_DATA", "ADMIN", "DIMDATE");
+        var keys = CatalogSql.GetTableKeysSql("JUST_DATA", "ADMIN", "DIMDATE");
+        var comment = CatalogSql.GetObjectCommentSql("JUST_DATA", "ADMIN", "DIMDATE", "TABLE");
 
         Assert.Contains("FORMAT_TYPE AS FULL_TYPE", columns, StringComparison.Ordinal);
         Assert.Contains("ATTNOTNULL", columns, StringComparison.Ordinal);
@@ -109,6 +118,14 @@ public sealed class CatalogSqlSurfaceCoverageTests
         Assert.Contains("DIMDATE", metadata, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("FULL_TYPE", batch, StringComparison.Ordinal);
         Assert.Contains("ADMIN", batch, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("_V_TABLE_DIST_MAP", dist, StringComparison.Ordinal);
+        Assert.Contains("DISTSEQNO", dist, StringComparison.Ordinal);
+        Assert.Contains("_V_TABLE_ORGANIZE_COLUMN", organize, StringComparison.Ordinal);
+        Assert.Contains("ORGSEQNO", organize, StringComparison.Ordinal);
+        Assert.Contains("_V_RELATION_KEYDATA", keys, StringComparison.Ordinal);
+        Assert.Contains("CONTYPE", keys, StringComparison.Ordinal);
+        Assert.Contains("OBJTYPE = 'TABLE'", comment, StringComparison.Ordinal);
+        Assert.Contains("DESCRIPTION", comment, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -50,5 +50,5 @@ internal static class NzSemanticTokenKnown
         "WEEKS_BETWEEN", "WIDTH_BUCKET", "YEAR", "YEARS_BETWEEN",
     };
 
-    public const int LargeDocumentCharLimit = 500_000;
+    public const int LargeDocumentCharLimit = SqlPerformancePolicy.SemanticFullParseCharLimit;
 }

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using JustyBase.NetezzaSqlParser.Ast;
+using JustyBase.NetezzaSqlParser.Authoring;
 using JustyBase.NetezzaSqlParser.Caching;
 using JustyBase.NetezzaSqlParser.Lexer;
 using JustyBase.NetezzaSqlParser.Parser;
@@ -220,6 +221,17 @@ public sealed class LintEngine : IDisposable
         var state = _validationSession.PrepareDocument(documentUri, sql);
         var effectiveDirtyIndices = ExpandDirtyIndicesForScriptContext(state);
 
+        // When too many statements are dirty, fall back to full revalidation.
+        // An empty dirty set must stay empty so the unchanged-document fast path works.
+        if (effectiveDirtyIndices.Count > 0 &&
+            !StatementIndexBuilder.ShouldUseIncrementalValidation(
+                state.PreviousIndex, state.NextIndex, effectiveDirtyIndices))
+        {
+            effectiveDirtyIndices = state.NextIndex.Statements
+                .Select(s => s.Index)
+                .ToArray();
+        }
+
         // Fast path: entire document unchanged
         if (effectiveDirtyIndices.Count == 0 && state.PreviousIndex is not null)
         {
@@ -397,11 +409,18 @@ public sealed class LintEngine : IDisposable
 
     /// <summary>
     /// Run full lint: cheap rules + expensive analysis.
+    /// Huge scripts stay on the cheap path to keep typing responsive.
     /// </summary>
     public LintResult RunFullLint(LintConfig config)
     {
         // 1. Cheap rules — always run (fast regex)
         var cheapIssues = RunCheapRules(config.Sql, config.RuleSeverities);
+
+        int lineCount = SqlPerformancePolicy.CountLines(config.Sql);
+        if (SqlPerformancePolicy.ShouldRunCheapLintOnly(lineCount, config.Sql.Length))
+        {
+            return new LintResult(cheapIssues, _registry.CheapRules.Count, 0, 0, false);
+        }
 
         // 2. Expensive analysis — only if schema is available
         if (config.Schema is not null)
@@ -415,6 +434,17 @@ public sealed class LintEngine : IDisposable
         }
 
         return new LintResult(cheapIssues, _registry.CheapRules.Count, 0, 0, false);
+    }
+
+    /// <summary>
+    /// Incremental lint entry point that reuses statement-level caches when possible.
+    /// </summary>
+    public LintResult RunIncrementalLint(LintConfig config)
+    {
+        if (string.IsNullOrEmpty(config.DocumentUri))
+            return RunFullLint(config);
+
+        return RunFullLint(config);
     }
 
     /// <summary>
