@@ -18,6 +18,6 @@
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-    <PackageVersion Condition="'$(PackageVersion)' == ''">0.3.0-preview.4</PackageVersion>
+    <PackageVersion Condition="'$(PackageVersion)' == ''">0.3.0-preview.5</PackageVersion>
   </PropertyGroup>
 </Project>

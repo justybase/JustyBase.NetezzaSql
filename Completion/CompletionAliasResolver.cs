@@ -44,6 +44,9 @@ public static class CompletionAliasResolver
             {
                 inFromOrJoin = false;
                 afterUpdate = false;
+                // Clear stale table name so a WHERE/ON identifier is never
+                // mistaken for an alias of the last FROM/JOIN table.
+                previousIdentifier = null;
                 continue;
             }
             if (k == NzToken.As)
@@ -59,7 +62,11 @@ public static class CompletionAliasResolver
             if (k is NzToken.Identifier or NzToken.QuotedIdentifier)
             {
                 var name = tokens[i].ToStringValue();
-                if (previousIdentifier is not null &&
+                // Only match alias while still in FROM/JOIN/UPDATE table context.
+                // Otherwise identifiers after WHERE (e.g. NO_SUCH_ALIAS) would
+                // falsely resolve against a leaked previousIdentifier.
+                if ((inFromOrJoin || afterUpdate) &&
+                    previousIdentifier is not null &&
                     string.Equals(name, alias, StringComparison.OrdinalIgnoreCase))
                 {
                     return previousIdentifier;

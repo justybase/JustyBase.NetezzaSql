@@ -20,6 +20,8 @@ public sealed class NzSemanticTokenClassifier
     private readonly object _cacheLock = new();
     private string? _cachedKey;
     private SemanticTokenSpan[] _cachedSpans = [];
+    private readonly Dictionary<string, SemanticRoleNameCache> _roleNameCache = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, LexCacheEntry> _lexCache = new(StringComparer.Ordinal);
 
     public static readonly string[] TokenTypesLegend =
     [
@@ -38,23 +40,29 @@ public sealed class NzSemanticTokenClassifier
         _coordinator = coordinator;
     }
 
-    public IReadOnlyList<SemanticTokenSpan> Classify(string sql, string? documentUri = null)
+    public IReadOnlyList<SemanticTokenSpan> Classify(string sql, string? documentUri = null, int knownLineCount = -1)
     {
         if (string.IsNullOrEmpty(sql))
             return Array.Empty<SemanticTokenSpan>();
 
-        int lineCount = SqlPerformancePolicy.CountLines(sql);
+        int lineCount = knownLineCount >= 0 ? knownLineCount : SqlPerformancePolicy.CountLines(sql);
         if (SqlPerformancePolicy.ShouldSkipSemanticClassification(lineCount, sql.Length))
             return Array.Empty<SemanticTokenSpan>();
 
-        var cacheKey = BuildCacheKey(documentUri, sql);
+        var mode = SqlPerformancePolicy.GetSemanticClassificationMode(lineCount, sql.Length);
+        var cacheKey = BuildCacheKey(documentUri, sql, mode);
         lock (_cacheLock)
         {
             if (_cachedKey == cacheKey)
                 return _cachedSpans;
         }
 
-        var spans = BuildSpans(sql, documentUri);
+        var spans = mode switch
+        {
+            SemanticClassificationMode.FullImmediate => ClassifyFull(sql, documentUri, lineCount),
+            SemanticClassificationMode.ProgressiveFull => ClassifyLex(sql, documentUri, lineCount),
+            _ => ClassifyLex(sql, documentUri, lineCount)
+        };
         lock (_cacheLock)
         {
             _cachedKey = cacheKey;
@@ -64,66 +72,159 @@ public sealed class NzSemanticTokenClassifier
         return spans;
     }
 
-    private static string BuildCacheKey(string? documentUri, string sql) =>
-        $"{documentUri ?? "default"}:{StatementIndexBuilder.SimpleHash(sql)}:{sql.Length}";
+    public SemanticTokenSpan[] ClassifyLex(string sql, string? documentUri = null, int knownLineCount = -1)
+    {
+        int lineCount = knownLineCount >= 0 ? knownLineCount : SqlPerformancePolicy.CountLines(sql);
+        string cacheId = documentUri ?? "semantic-default";
+        lock (_cacheLock)
+        {
+            if (_lexCache.TryGetValue(cacheId, out var cached))
+            {
+                if (string.Equals(cached.Text, sql, StringComparison.Ordinal))
+                    return cached.Spans;
 
-    private SemanticTokenSpan[] BuildSpans(string sql, string? documentUri)
+                if (sql.Length >= cached.Text.Length
+                    && sql.StartsWith(cached.Text, StringComparison.Ordinal))
+                {
+                    const int ReclassifyWindow = 256;
+                    int windowStart = Math.Max(0, cached.Text.Length - ReclassifyWindow);
+                    var merged = cached.Spans
+                        .Where(span => span.Start + span.Length <= windowStart)
+                        .ToList();
+                    merged.AddRange(BuildSpans(
+                        sql[windowStart..],
+                        documentUri,
+                        lineCount,
+                        useScope: false,
+                        sourceOffset: windowStart));
+                    merged.Sort((a, b) => a.Start.CompareTo(b.Start));
+                    var incremental = merged.ToArray();
+                    _lexCache[cacheId] = new LexCacheEntry(sql, incremental);
+                    return incremental;
+                }
+            }
+        }
+
+        var spans = BuildSpans(sql, documentUri, lineCount, useScope: false);
+        lock (_cacheLock)
+        {
+            _lexCache[cacheId] = new LexCacheEntry(sql, spans);
+        }
+        return spans;
+    }
+
+    public SemanticTokenSpan[] ClassifyFull(string sql, string? documentUri = null, int knownLineCount = -1)
+    {
+        int lineCount = knownLineCount >= 0 ? knownLineCount : SqlPerformancePolicy.CountLines(sql);
+        if (SqlPerformancePolicy.ShouldSkipFullParse(lineCount, sql.Length))
+            return BuildSpans(sql, documentUri, lineCount, useScope: false);
+
+        return BuildSpans(sql, documentUri, lineCount, useScope: true);
+    }
+
+    private static string BuildCacheKey(string? documentUri, string sql, SemanticClassificationMode mode) =>
+        $"{documentUri ?? "default"}:{mode}:{StatementIndexBuilder.SimpleHash(sql)}:{sql.Length}";
+
+    private SemanticTokenSpan[] BuildSpans(
+        string sql,
+        string? documentUri,
+        int lineCount,
+        bool useScope,
+        int sourceOffset = 0)
     {
         var items = new List<SemanticTokenSpan>();
 
         foreach (Match m in LineComment.Matches(sql))
         {
             var modifier = ContainsTodoMarker(m.Value) ? SemanticTokenModifiers.Deprecated : SemanticTokenModifiers.None;
-            items.Add(new SemanticTokenSpan(m.Index, m.Length, SemanticTokenKind.Comment, modifier));
+            items.Add(new SemanticTokenSpan(sourceOffset + m.Index, m.Length, SemanticTokenKind.Comment, modifier));
         }
 
         foreach (Match m in BlockComment.Matches(sql))
         {
             var modifier = ContainsTodoMarker(m.Value) ? SemanticTokenModifiers.Deprecated : SemanticTokenModifiers.None;
-            items.Add(new SemanticTokenSpan(m.Index, m.Length, SemanticTokenKind.Comment, modifier));
+            items.Add(new SemanticTokenSpan(sourceOffset + m.Index, m.Length, SemanticTokenKind.Comment, modifier));
         }
 
         Token<NzToken>[] tokens;
         try
         {
             tokens = NzLexer.Tokenize(sql).ToArray();
-            if (_coordinator is not null)
-                _ = _coordinator.GetOrCreate(documentUri ?? "semantic-default").Parse(sql);
         }
         catch
         {
             return items.ToArray();
         }
 
-        var useScope = !SqlPerformancePolicy.ShouldSkipFullParse(
-            SqlPerformancePolicy.CountLines(sql), sql.Length);
         TokenScopeCollector? scopeCollector = null;
         HashSet<string>? aliasNames = null;
         HashSet<string>? tableNames = null;
+        SemanticRoleNameCache? cachedRoleNames = null;
+        var classifiedAliasNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var classifiedCteNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var classifiedColumnNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         if (useScope)
         {
+            if (_coordinator is not null)
+                _ = _coordinator.GetOrCreate(documentUri ?? "semantic-default").Parse(sql);
             scopeCollector = new TokenScopeCollector(_schema);
             scopeCollector.Collect(tokens, sql.Length);
             aliasNames = BuildAliasNames(tokens);
             tableNames = BuildTableNames(tokens);
         }
+        else if (!string.IsNullOrWhiteSpace(documentUri))
+        {
+            lock (_cacheLock)
+            {
+                _roleNameCache.TryGetValue(documentUri, out cachedRoleNames);
+            }
+        }
 
         for (int i = 0; i < tokens.Length; i++)
         {
             var token = tokens[i];
-            var (kind, modifiers) = MapToken(token, tokens, i, scopeCollector, aliasNames, tableNames, _schema);
+            var (kind, modifiers) = MapToken(token, tokens, i, scopeCollector, aliasNames, tableNames, cachedRoleNames, _schema);
             if (kind == SemanticTokenKind.Operator)
                 continue;
 
+            if (token.Kind is NzToken.Identifier or NzToken.QuotedIdentifier)
+            {
+                var normalizedName = token.ToStringValue();
+                switch (kind)
+                {
+                    case SemanticTokenKind.Alias:
+                        classifiedAliasNames.Add(normalizedName);
+                        break;
+                    case SemanticTokenKind.Cte:
+                        classifiedCteNames.Add(normalizedName);
+                        break;
+                    case SemanticTokenKind.Column:
+                        classifiedColumnNames.Add(normalizedName);
+                        break;
+                }
+            }
+
             items.Add(new SemanticTokenSpan(
-                token.Span.Position.Absolute,
+                sourceOffset + token.Span.Position.Absolute,
                 token.Span.Length,
                 kind,
                 modifiers));
         }
 
         items.Sort((a, b) => a.Start.CompareTo(b.Start));
+
+        if (useScope && !string.IsNullOrWhiteSpace(documentUri))
+        {
+            lock (_cacheLock)
+            {
+                _roleNameCache[documentUri] = new SemanticRoleNameCache(
+                    classifiedAliasNames,
+                    classifiedCteNames,
+                    classifiedColumnNames);
+            }
+        }
+
         return items.ToArray();
     }
 
@@ -134,6 +235,7 @@ public sealed class NzSemanticTokenClassifier
         TokenScopeCollector? scopeCollector,
         HashSet<string>? aliasNames,
         HashSet<string>? tableNames,
+        SemanticRoleNameCache? cachedRoleNames,
         ISchemaProvider? schema)
     {
         switch (token.Kind)
@@ -152,7 +254,7 @@ public sealed class NzSemanticTokenClassifier
             case NzToken.QuotedIdentifier:
                 return (SemanticTokenKind.String, SemanticTokenModifiers.None);
             case NzToken.Identifier:
-                return ClassifyIdentifier(token, allTokens, index, scopeCollector, aliasNames, tableNames, schema);
+                return ClassifyIdentifier(token, allTokens, index, scopeCollector, aliasNames, tableNames, cachedRoleNames, schema);
             default:
                 if (IsKeyword(token.Kind))
                     return (SemanticTokenKind.Keyword, SemanticTokenModifiers.None);
@@ -169,6 +271,7 @@ public sealed class NzSemanticTokenClassifier
         TokenScopeCollector? scopeCollector,
         HashSet<string>? aliasNames,
         HashSet<string>? tableNames,
+        SemanticRoleNameCache? cachedRoleNames,
         ISchemaProvider? schema)
     {
         var name = token.ToStringValue();
@@ -229,8 +332,30 @@ public sealed class NzSemanticTokenClassifier
                 return (SemanticTokenKind.Table, SemanticTokenModifiers.None);
         }
 
+        if (cachedRoleNames is not null)
+        {
+            if (cachedRoleNames.AliasNames.Contains(name))
+                return (SemanticTokenKind.Alias, SemanticTokenModifiers.None);
+            if (cachedRoleNames.CteNames.Contains(name))
+                return (SemanticTokenKind.Cte, SemanticTokenModifiers.None);
+            if (cachedRoleNames.ColumnNames.Contains(name))
+                return (SemanticTokenKind.Column, SemanticTokenModifiers.None);
+        }
+
         return (SemanticTokenKind.Identifier, SemanticTokenModifiers.None);
     }
+
+    private sealed class SemanticRoleNameCache(
+        HashSet<string> aliasNames,
+        HashSet<string> cteNames,
+        HashSet<string> columnNames)
+    {
+        public HashSet<string> AliasNames { get; } = aliasNames;
+        public HashSet<string> CteNames { get; } = cteNames;
+        public HashSet<string> ColumnNames { get; } = columnNames;
+    }
+
+    private sealed record LexCacheEntry(string Text, SemanticTokenSpan[] Spans);
 
     private static bool IsSpecialValue(string name) =>
         string.Equals(name, "CURRENT_DATE", StringComparison.OrdinalIgnoreCase) ||

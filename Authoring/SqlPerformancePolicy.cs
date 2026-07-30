@@ -1,5 +1,12 @@
 namespace JustyBase.NetezzaSqlParser.Authoring;
 
+public enum SemanticClassificationMode
+{
+    FullImmediate,
+    ProgressiveFull,
+    LexOnly
+}
+
 /// <summary>
 /// Shared size/debounce policy for SQL editor intelligence.
 /// Port of validationConfig.ts from justybase-vscode-private.
@@ -34,6 +41,12 @@ public static class SqlPerformancePolicy
     /// </summary>
     public const int AutocompleteLookbackCharLimit = 48_000;
 
+    /// <summary>
+    /// On huge scripts, passive (timer) autocomplete may run the engine only when the
+    /// current statement after the last top-level semicolon is within this size.
+    /// </summary>
+    public const int PassiveAutocompleteStatementCharLimit = 8_192;
+
     /// <summary>Idle delay before a full comment/string clean-SQL rebuild on large scripts.</summary>
     public const int LargeScriptFullCommentScanDebounceMs = 2_000;
 
@@ -56,7 +69,20 @@ public static class SqlPerformancePolicy
         IsLargeScriptDocument(lineCount, textLength);
 
     public static bool ShouldSkipSemanticClassification(int lineCount, int textLength) =>
-        textLength > SemanticFullParseCharLimit || lineCount > HugeScriptLineThreshold;
+        textLength > CheapLintOnlyCharLimit;
+
+    public static bool ShouldUseLexOnlySemanticClassification(int textLength) =>
+        textLength > SemanticFullParseCharLimit;
+
+    public static SemanticClassificationMode GetSemanticClassificationMode(int lineCount, int textLength)
+    {
+        if (ShouldUseLexOnlySemanticClassification(textLength))
+            return SemanticClassificationMode.LexOnly;
+
+        return IsLargeScriptDocument(lineCount, textLength)
+            ? SemanticClassificationMode.ProgressiveFull
+            : SemanticClassificationMode.FullImmediate;
+    }
 
     public static bool ShouldRunCheapLintOnly(int lineCount, int textLength) =>
         IsHugeScript(lineCount, textLength) || textLength > CheapLintOnlyCharLimit;

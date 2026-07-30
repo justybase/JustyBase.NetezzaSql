@@ -89,12 +89,15 @@ public sealed class NetezzaAuthoringCatalogTests
     }
 
     [Fact]
-    public void SemanticClassification_SkipsLargeDocuments()
+    public void SemanticClassification_UsesLexOnlyForLargeDocuments()
     {
         var classifier = new NzSemanticTokenClassifier();
-        var sql = new string('x', 500_001);
+        var sql = "SELECT 'x' AS txt FROM orders;\n" + new string('x', SqlPerformancePolicy.SemanticFullParseCharLimit + 8);
 
-        Assert.Empty(classifier.Classify(sql, "large-document"));
+        var spans = classifier.Classify(sql, "large-document");
+        Assert.NotEmpty(spans);
+        Assert.Contains(spans, span => span.Kind == SemanticTokenKind.Keyword);
+        Assert.Contains(spans, span => span.Kind == SemanticTokenKind.String);
     }
 
     [Fact]

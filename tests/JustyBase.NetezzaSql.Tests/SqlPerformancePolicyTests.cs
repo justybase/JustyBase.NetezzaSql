@@ -126,6 +126,38 @@ public sealed class SqlPerformancePolicyTests
     }
 
     [Fact]
+    public void ShouldUseLexOnlySemanticClassification_UsesCharThresholdOnly()
+    {
+        Assert.False(SqlPerformancePolicy.ShouldUseLexOnlySemanticClassification(SqlPerformancePolicy.SemanticFullParseCharLimit));
+        Assert.True(SqlPerformancePolicy.ShouldUseLexOnlySemanticClassification(SqlPerformancePolicy.SemanticFullParseCharLimit + 1));
+    }
+
+    [Fact]
+    public void ShouldSkipSemanticClassification_OnlyForExtremeSize()
+    {
+        Assert.False(SqlPerformancePolicy.ShouldSkipSemanticClassification(
+            SqlPerformancePolicy.HugeScriptLineThreshold + 10_000,
+            SqlPerformancePolicy.SemanticFullParseCharLimit + 10));
+        Assert.True(SqlPerformancePolicy.ShouldSkipSemanticClassification(
+            10,
+            SqlPerformancePolicy.CheapLintOnlyCharLimit + 1));
+    }
+
+    [Fact]
+    public void GetSemanticClassificationMode_ReturnsExpectedMode()
+    {
+        Assert.Equal(
+            SemanticClassificationMode.FullImmediate,
+            SqlPerformancePolicy.GetSemanticClassificationMode(100, 10_000));
+        Assert.Equal(
+            SemanticClassificationMode.ProgressiveFull,
+            SqlPerformancePolicy.GetSemanticClassificationMode(SqlPerformancePolicy.LargeScriptLineThreshold + 1, 10_000));
+        Assert.Equal(
+            SemanticClassificationMode.LexOnly,
+            SqlPerformancePolicy.GetSemanticClassificationMode(100, SqlPerformancePolicy.SemanticFullParseCharLimit + 1));
+    }
+
+    [Fact]
     public void IsSlow_UsesUxPerfBudgets()
     {
         Assert.False(SqlTypingPerfProbe.IsSlow("editor.highlight", 49));

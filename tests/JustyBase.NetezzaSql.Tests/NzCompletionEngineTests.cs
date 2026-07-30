@@ -1,5 +1,6 @@
 using JustyBase.NetezzaSqlParser.Ast;
 using JustyBase.NetezzaSqlParser.Completion;
+using JustyBase.NetezzaSqlParser.Lexer;
 using JustyBase.NetezzaSqlParser.Visitor;
 
 namespace JustyBase.Tests.NetezzaSqlParser;
@@ -261,6 +262,37 @@ public sealed class NzCompletionEngineTests
         var i = engine.GetCompletions(sql, sql.Length);
         Assert.Contains(i, x => x.Label == "ACCOUNTKEY" && x.Detail == "X.ACCOUNTKEY");
         Assert.Contains(i, x => x.Label == "ACCOUNTNAME" && x.Detail == "X.ACCOUNTNAME");
+    }
+
+    [Fact]
+    public void Unknown_alias_after_where_dot_does_not_suggest_from_table_columns()
+    {
+        var schema = new InMemorySchemaProvider();
+        schema.AddTable(new TableInfo("DIMDATE", Schema: "ADMIN", Database: "JUST_DATA", Columns: new[]
+        {
+            new ColumnInfo("DATEKEY"), new ColumnInfo("CALENDARYEAR")
+        }));
+        var engine = new NzCompletionEngine(schema);
+        var sql = "SELECT * FROM JUST_DATA..DIMDATE D WHERE NO_SUCH_ALIAS.";
+        var i = engine.GetCompletions(sql, sql.Length);
+
+        Assert.DoesNotContain(i, x => x.Kind == CompletionKind.Column &&
+                                      x.Detail is not null &&
+                                      x.Detail.StartsWith("NO_SUCH_ALIAS.", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(i, x => x.Label == "DATEKEY");
+        Assert.DoesNotContain(i, x => x.Label == "CALENDARYEAR");
+    }
+
+    [Fact]
+    public void ResolveAlias_ignores_identifier_outside_from_join_context()
+    {
+        var sql = "SELECT * FROM JUST_DATA..DIMDATE D WHERE NO_SUCH_ALIAS.";
+        var tokens = NzLexer.Tokenize(sql).ToArray();
+
+        Assert.Equal("DIMDATE", CompletionAliasResolver.ResolveAlias(tokens, "D"));
+        Assert.Null(CompletionAliasResolver.ResolveAlias(tokens, "NO_SUCH_ALIAS"));
+        Assert.Null(CompletionAliasResolver.ResolveTablePath(tokens, "NO_SUCH_ALIAS"));
+        Assert.NotNull(CompletionAliasResolver.ResolveTablePath(tokens, "D"));
     }
 
     [Fact]

@@ -4,6 +4,13 @@ All notable changes to this project will be documented here.
 
 ## Unreleased
 
+## 0.3.0-preview.5
+
+- Large-document SQL authoring: progressive lex→full semantic coloring; lex-only above 150k chars (no empty spans for huge line counts alone).
+- Add `SqlTypingPerfProbe` budgets and typing responsiveness tests with `Fixtures/BIG.SQL`.
+- Add `SqlStatementBounds` / `SqlAutocompleteWindow` to slice completion to the statement after the last top-level `;` (Legacy parity) so `D.|` works at the end of huge scripts.
+- Expand `SqlPerformancePolicy` semantic classification modes and autocomplete passive/forced statement limits.
+
 ## 0.3.0-preview.2
 
 - `DatabaseTypeChooser.Infer`: prefer `NVARCHAR` over `VARCHAR` for text columns.
