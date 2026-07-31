@@ -1,4 +1,5 @@
 using JustyBase.NetezzaSqlParser.Caching;
+using JustyBase.NetezzaSqlParser.Dialects;
 using JustyBase.NetezzaSqlParser.Lexer;
 using JustyBase.NetezzaSqlParser.Visitor;
 using Superpower.Model;
@@ -93,12 +94,15 @@ public static class NzHoverService
         int offset,
         ISchemaProvider? schema,
         DocumentParsingCoordinator? parsingCoordinator = null,
-        string? documentUri = null)
+        string? documentUri = null,
+        ISqlAuthoringCatalog? catalog = null,
+        SqlDialect dialect = SqlDialect.Netezza)
     {
         if (string.IsNullOrEmpty(text))
             return null;
 
-        parsingCoordinator?.GetOrCreate(documentUri ?? "default").Parse(text);
+        parsingCoordinator?.GetOrCreate(documentUri ?? "default", dialect).Parse(text);
+        catalog ??= NetezzaSqlAuthoringCatalog.Instance;
 
         offset = Math.Clamp(offset, 0, Math.Max(0, text.Length - 1));
 
@@ -110,14 +114,9 @@ public static class NzHoverService
         while (wordEnd < text.Length && IsWordChar(text[wordEnd]))
             wordEnd++;
 
-        if (wordStart >= wordEnd)
-            return null;
-
-        var word = text[wordStart..wordEnd];
-
         try
         {
-            var tokens = NzLexer.Tokenize(text).ToArray();
+            var tokens = (dialect == SqlDialect.Oracle ? OracleLexer.Tokenize(text) : NzLexer.Tokenize(text)).ToArray();
             if (tokens.Length == 0)
                 return null;
 
@@ -136,7 +135,15 @@ public static class NzHoverService
             if (cursorToken is null)
                 return null;
 
-            var content = ResolveHover(cursorToken.Value, tokens, word, schema);
+            // Bind variables / qualified functions may start with non-word chars (: @.).
+            if (wordStart >= wordEnd)
+            {
+                wordStart = cursorToken.Value.Span.Position.Absolute;
+                wordEnd = wordStart + cursorToken.Value.Span.Length;
+            }
+
+            var word = text[wordStart..wordEnd];
+            var content = ResolveHover(cursorToken.Value, tokens, word, schema, catalog);
             return content is null ? null : new SqlHoverInfo(content, wordStart, wordEnd);
         }
         catch
@@ -145,16 +152,32 @@ public static class NzHoverService
         }
     }
 
-    private static string? ResolveHover(Token<NzToken> token, Token<NzToken>[] allTokens, string word, ISchemaProvider? schema)
+    private static string? ResolveHover(Token<NzToken> token, Token<NzToken>[] allTokens, string word, ISchemaProvider? schema, ISqlAuthoringCatalog catalog)
     {
+        if (token.Kind == NzToken.OracleBindVariable)
+        {
+            var bind = token.ToStringValue();
+            return $"**{bind}** — Oracle bind variable";
+        }
+
+        if (token.Kind == NzToken.OracleQualifiedFunction)
+        {
+            var full = token.ToStringValue();
+            var shortName = full.Contains('.') ? full[(full.LastIndexOf('.') + 1)..] : full;
+            if (NzSignatureHelpService.TryGetSignature(shortName, catalog, out var qSig))
+                return FormatFunctionDetail(shortName, qSig);
+            return $"**{full}()**";
+        }
+
         if (token.Kind != NzToken.Identifier && token.Kind != NzToken.QuotedIdentifier)
         {
             string? keywordDoc = token.Kind switch
             {
-                NzToken.GroupBy => GetKeywordDoc("GROUP BY"),
-                NzToken.OrderBy => GetKeywordDoc("ORDER BY"),
-                NzToken.PartitionBy => GetKeywordDoc("PARTITION BY"),
-                _ => GetKeywordDoc(word),
+                NzToken.GroupBy => GetKeywordDoc("GROUP BY", catalog),
+                NzToken.OrderBy => GetKeywordDoc("ORDER BY", catalog),
+                NzToken.PartitionBy => GetKeywordDoc("PARTITION BY", catalog),
+                NzToken.OracleOrderSiblingsBy => GetKeywordDoc("ORDER SIBLINGS BY", catalog),
+                _ => GetKeywordDoc(word, catalog),
             };
 
             return keywordDoc is null
@@ -163,7 +186,7 @@ public static class NzHoverService
         }
 
         var name = token.ToStringValue();
-        if (IsDataType(name))
+        if (IsDataType(name, catalog))
             return GetDataTypeDetail(name);
 
         if (string.Equals(name, "TRUE", StringComparison.OrdinalIgnoreCase) ||
@@ -196,7 +219,7 @@ public static class NzHoverService
         }
 
         bool isFunction = index + 1 < allTokens.Length && allTokens[index + 1].Kind == NzToken.LParen;
-        if (NzSignatureHelpService.TryGetSignature(name, out var signature))
+        if (NzSignatureHelpService.TryGetSignature(name, catalog, out var signature))
         {
             return FormatFunctionDetail(name, signature);
         }
@@ -229,7 +252,7 @@ public static class NzHoverService
             }
         }
 
-        var keywordFallback = GetKeywordDoc(name);
+        var keywordFallback = GetKeywordDoc(name, catalog);
         return keywordFallback is null
             ? null
             : $"**{name.ToUpperInvariant()}**  \n{keywordFallback}";
@@ -268,18 +291,18 @@ public static class NzHoverService
         return $"`{tableName}.{columnName}`";
     }
 
-    private static string? GetKeywordDoc(string word)
+    private static string? GetKeywordDoc(string word, ISqlAuthoringCatalog catalog)
     {
         if (KeywordDocs.TryGetValue(word, out var doc))
             return doc;
 
-        return NetezzaSqlCatalog.NetezzaKeywords.Contains(word, StringComparer.OrdinalIgnoreCase)
-            ? "Netezza-specific SQL keyword or system catalog object."
+        return catalog.Keywords.Contains(word, StringComparer.OrdinalIgnoreCase)
+            ? "Dialect-specific SQL keyword."
             : null;
     }
 
-    private static bool IsDataType(string name)
-        => name.Length > 1 && NetezzaSqlCatalog.TryGetDataType(name, out _);
+    private static bool IsDataType(string name, ISqlAuthoringCatalog catalog)
+        => name.Length > 1 && catalog.TryGetDataType(name, out _);
 
     private static string GetDataTypeDetail(string name)
     {

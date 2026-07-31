@@ -26,8 +26,8 @@ internal sealed class DefaultSqlCompletionMergePolicy : ISqlCompletionMergePolic
         if (sql.Length >= SqlCompletionMergePolicy.MaxSqlLengthForLegacyPath)
             return false;
 
-        if (engineItems.Any(i => i.Kind is CompletionKind.Table or CompletionKind.View or CompletionKind.Column
-                or CompletionKind.Schema or CompletionKind.Database or CompletionKind.Cte))
+        if (engineItems.Any(i => i.Kind is CompletionKind.Table or CompletionKind.View or CompletionKind.ExternalTable
+                or CompletionKind.Column or CompletionKind.Schema or CompletionKind.Database or CompletionKind.Cte))
             return false;
 
         return true;

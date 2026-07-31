@@ -10,12 +10,21 @@ public static class NzLexer
 {
     // Matches a keyword using word-boundary-anchored regex, case-insensitive.
     // The \b anchor prevents matching inside longer identifiers (e.g. "IN" won't match in "INT").
-    private static TextParser<TextSpan> Kw(string keyword) =>
+    internal static TextParser<TextSpan> Kw(string keyword) =>
         Span.Regex(@"(?i)\b" + keyword + @"\b");
 
-    private static readonly TokenizerBuilder<NzToken> Builder = new TokenizerBuilder<NzToken>()
-        // Comments (ignored)
-        .Ignore(Span.Regex(@"^--[^\n]*"))
+    private static readonly TokenizerBuilder<NzToken> Builder = AppendSharedTokens(new TokenizerBuilder<NzToken>());
+
+    // Appends the dialect-neutral lexing chain (comments, shared keywords,
+    // operators, literals, identifiers, whitespace) to the given builder.
+    // Dialect lexers (e.g. OracleLexer) register their own tokens first and
+    // then append this shared chain, mirroring the token order of the
+    // reference netezza/sql/lexer.ts.
+    internal static TokenizerBuilder<NzToken> AppendSharedTokens(TokenizerBuilder<NzToken> builder)
+    {
+        return builder
+            // Comments (ignored)
+            .Ignore(Span.Regex(@"^--[^\n]*"))
         .Ignore(Span.Regex(@"^/\*[\s\S]*?\*/"))
         // Optional NZPLSQL loop labels (<<label>>) are structural markers.
         .Ignore(Span.Regex(@"^<<\s*[A-Za-z_][A-Za-z0-9_]*\s*>>"))
@@ -307,6 +316,7 @@ public static class NzLexer
 
         // Whitespace (ignored, must be last)
         .Ignore(Span.Regex(@"^\s+"));
+    }
 
     public static Tokenizer<NzToken> Instance { get; } = Builder.Build();
 

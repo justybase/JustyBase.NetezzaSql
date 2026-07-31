@@ -1,4 +1,5 @@
 using JustyBase.NetezzaSqlParser.Caching;
+using JustyBase.NetezzaSqlParser.Dialects;
 using JustyBase.NetezzaSqlParser.Lexer;
 
 namespace JustyBase.NetezzaSqlParser.Authoring;
@@ -9,17 +10,20 @@ public static class NzSignatureHelpService
         string text,
         int offset,
         DocumentParsingCoordinator? parsingCoordinator = null,
-        string? documentUri = null)
+        string? documentUri = null,
+        ISqlAuthoringCatalog? catalog = null,
+        SqlDialect dialect = SqlDialect.Netezza)
     {
         if (string.IsNullOrEmpty(text))
             return null;
 
-        parsingCoordinator?.GetOrCreate(documentUri ?? "default").Parse(text);
+        parsingCoordinator?.GetOrCreate(documentUri ?? "default", dialect).Parse(text);
         offset = Math.Clamp(offset, 0, text.Length);
+        catalog ??= NetezzaSqlAuthoringCatalog.Instance;
 
         try
         {
-            var tokens = NzLexer.Tokenize(text).ToArray();
+            var tokens = (dialect == SqlDialect.Oracle ? OracleLexer.Tokenize(text) : NzLexer.Tokenize(text)).ToArray();
             if (tokens.Length == 0)
                 return null;
 
@@ -34,8 +38,8 @@ public static class NzSignatureHelpService
                 if (token.Kind == NzToken.LParen)
                 {
                     parenDepth++;
-                    if (i > 0 && tokens[i - 1].Kind is NzToken.Identifier or NzToken.QuotedIdentifier && parenDepth == 1)
-                        functionName = tokens[i - 1].ToStringValue();
+                    if (i > 0 && IsFunctionNameToken(tokens[i - 1].Kind) && parenDepth == 1)
+                        functionName = ShortFunctionName(tokens[i - 1].ToStringValue());
                 }
                 else if (token.Kind == NzToken.RParen)
                 {
@@ -43,7 +47,7 @@ public static class NzSignatureHelpService
                 }
             }
 
-            if (functionName is null || !TryGetSignatures(functionName, out var signatures))
+            if (functionName is null || !TryGetSignatures(functionName, catalog, out var signatures))
                 return null;
 
             int activeParameter = 0;
@@ -57,8 +61,8 @@ public static class NzSignatureHelpService
 
                 if (token.Kind == NzToken.LParen)
                 {
-                    if (depth == 0 && i > 0 && tokens[i - 1].Kind is NzToken.Identifier or NzToken.QuotedIdentifier &&
-                        string.Equals(tokens[i - 1].ToStringValue(), functionName, StringComparison.OrdinalIgnoreCase))
+                    if (depth == 0 && i > 0 && IsFunctionNameToken(tokens[i - 1].Kind) &&
+                        string.Equals(ShortFunctionName(tokens[i - 1].ToStringValue()), functionName, StringComparison.OrdinalIgnoreCase))
                     {
                         inFunction = true;
                         activeParameter = 0;
@@ -92,7 +96,12 @@ public static class NzSignatureHelpService
 
     public static bool TryGetSignature(string functionName, out SqlSignatureInfo signature)
     {
-        if (TryGetSignatures(functionName, out var signatures))
+        return TryGetSignature(functionName, NetezzaSqlAuthoringCatalog.Instance, out signature);
+    }
+
+    public static bool TryGetSignature(string functionName, ISqlAuthoringCatalog catalog, out SqlSignatureInfo signature)
+    {
+        if (TryGetSignatures(functionName, catalog, out var signatures))
         {
             signature = signatures[0];
             return true;
@@ -104,7 +113,12 @@ public static class NzSignatureHelpService
 
     public static bool TryGetSignatures(string functionName, out SqlSignatureInfo[] signatures)
     {
-        if (!NetezzaSqlCatalog.TryGetFunction(functionName, out var function))
+        return TryGetSignatures(functionName, NetezzaSqlAuthoringCatalog.Instance, out signatures);
+    }
+
+    public static bool TryGetSignatures(string functionName, ISqlAuthoringCatalog catalog, out SqlSignatureInfo[] signatures)
+    {
+        if (!catalog.TryGetFunction(functionName, out var function))
         {
             signatures = Array.Empty<SqlSignatureInfo>();
             return false;
@@ -126,5 +140,14 @@ public static class NzSignatureHelpService
         }
 
         return signatures.Length - 1;
+    }
+
+    private static bool IsFunctionNameToken(NzToken kind) =>
+        kind is NzToken.Identifier or NzToken.QuotedIdentifier or NzToken.OracleQualifiedFunction;
+
+    private static string ShortFunctionName(string name)
+    {
+        var lastDot = name.LastIndexOf('.');
+        return lastDot >= 0 ? name[(lastDot + 1)..] : name;
     }
 }

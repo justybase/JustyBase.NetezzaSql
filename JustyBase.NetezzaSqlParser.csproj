@@ -24,6 +24,8 @@
     <Compile Remove="tests\**\*.cs" />
     <Compile Remove="samples\**\*.cs" />
     <Compile Remove="artifacts\**\*.cs" />
+    <Compile Remove="tmp_diag\**\*.cs" />
+    <Compile Remove="eng\**\*.cs" />
   </ItemGroup>
 
 </Project>

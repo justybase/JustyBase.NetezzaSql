@@ -86,7 +86,7 @@ public partial class NzSqlParser
 
     // ====== CTE (WITH clause) ======
 
-    private WithClause ParseWithClause()
+    protected WithClause ParseWithClause()
     {
         var withTok = Expect(NzToken.With);
         bool recursive = false;
@@ -105,7 +105,7 @@ public partial class NzSqlParser
 
     private CteDefinition ParseCteDefinition()
     {
-        var name = Expect(NzToken.Identifier).ToStringValue();
+        var name = ExpectNameToken().ToStringValue();
         IReadOnlyList<string>? columns = null;
 
         // Optional column list: (col1, col2, ...)
@@ -171,7 +171,7 @@ public partial class NzSqlParser
 
     // ====== SELECT Statement ======
 
-    private SelectStatement ParseSelectStatement(WithClause? with = null)
+    protected virtual SelectStatement ParseSelectStatement(WithClause? with = null)
     {
         var sel = Expect(NzToken.Select);
 
@@ -324,7 +324,7 @@ public partial class NzSqlParser
 
     // ====== Select List ======
 
-    private IReadOnlyList<SelectItem> ParseSelectList()
+    protected IReadOnlyList<SelectItem> ParseSelectList()
     {
         var items = new List<SelectItem>();
 
@@ -385,7 +385,7 @@ public partial class NzSqlParser
         return new SubqueryExpression(FromToken(lp), query);
     }
 
-    private string? ParseAliasName()
+    protected string? ParseAliasName()
     {
         if (Peek().Kind == NzToken.As)
         {
@@ -405,7 +405,7 @@ public partial class NzSqlParser
         return null;
     }
 
-    private static string StripQuotes(string value)
+    protected static string StripQuotes(string value)
     {
         if (value.Length >= 2 && value[0] == '"' && value[^1] == '"')
             return value[1..^1];
@@ -414,7 +414,7 @@ public partial class NzSqlParser
 
     // ====== Table References ======
 
-    private IReadOnlyList<TableReference> ParseTableReferences()
+    protected IReadOnlyList<TableReference> ParseTableReferences()
     {
         var refs = new List<TableReference>();
 
@@ -444,7 +444,7 @@ public partial class NzSqlParser
         return refs;
     }
 
-    private TableReference ParseTableReference()
+    protected TableReference ParseTableReference()
     {
         var source = ParseTableSource();
         List<JoinClause>? joins = null;
@@ -460,7 +460,7 @@ public partial class NzSqlParser
         return new TableReference(source.Position, source, joins);
     }
 
-    private TableSource ParseTableSource()
+    protected virtual TableSource ParseTableSource()
     {
         if (Peek().Kind == NzToken.Table)
         {
@@ -502,6 +502,8 @@ public partial class NzSqlParser
                     }
                 }
 
+                ParseTableSourceSuffix(ref funcAlias, ref funcAliasPosition);
+
                 return new TableSource(FromToken(tableTok), null, null, funcAlias,
                     FunctionSource: true, AliasPosition: funcAliasPosition);
             }
@@ -515,7 +517,7 @@ public partial class NzSqlParser
             Expect(NzToken.RParen);
             string? alias = null;
             SourcePosition? aliasPosition = null;
-            if (IsContextualIdentifier(Peek().Kind))
+            if (IsContextualIdentifier(Peek().Kind) && !IsStartWith())
             {
                 var aliasToken = Advance();
                 alias = aliasToken.ToStringValue();
@@ -528,6 +530,7 @@ public partial class NzSqlParser
                 alias = aliasToken.ToStringValue();
                 aliasPosition = FromToken(aliasToken);
             }
+            ParseTableSourceSuffix(ref alias, ref aliasPosition);
             return new TableSource(FromToken(lp), null, query, alias, AliasPosition: aliasPosition);
         }
 
@@ -543,7 +546,7 @@ public partial class NzSqlParser
             tableAlias = aliasToken.ToStringValue();
             tableAliasPosition = FromToken(aliasToken);
         }
-        else if (IsContextualIdentifier(Peek().Kind))
+        else if (IsContextualIdentifier(Peek().Kind) && !IsStartWith())
         {
             // Check this is truly a table alias, not a keyword
             var nxt = Peek(1).Kind;
@@ -555,8 +558,26 @@ public partial class NzSqlParser
             }
         }
 
+        ParseTableSourceSuffix(ref tableAlias, ref tableAliasPosition);
+
         return new TableSource(tablePos, table, null, tableAlias, AliasPosition: tableAliasPosition);
     }
+
+    /// <summary>
+    /// Dialect hook: consumes dialect-specific table source suffixes such as
+    /// Oracle database links (@dblink) and PIVOT/UNPIVOT clauses. May also
+    /// capture a trailing alias that appears after a database link.
+    /// </summary>
+    protected virtual void ParseTableSourceSuffix(ref string? alias, ref SourcePosition? aliasPosition)
+    {
+    }
+
+    /// <summary>
+    /// Guards against consuming START as a table alias when it opens a
+    /// hierarchical START WITH clause (Oracle dialect).
+    /// </summary>
+    private bool IsStartWith() =>
+        Peek().Kind == NzToken.Start && Peek(1).Kind == NzToken.With;
 
     private JoinClause? TryParseJoinClause()
     {
@@ -621,7 +642,7 @@ public partial class NzSqlParser
 
     // ====== Table Name ======
 
-    private (TableName Table, Token<NzToken> FirstToken) ParseTableName()
+    protected (TableName Table, Token<NzToken> FirstToken) ParseTableName()
     {
         var parts = new List<string?>();
         var first = ExpectNameToken();
@@ -632,7 +653,13 @@ public partial class NzSqlParser
             Advance(); // consume dot
             if (Peek().Kind == NzToken.Dot)
             {
-                // Double dot: database..table → empty schema
+                // Double dot: database..table → empty schema.
+                // Oracle does not support the empty segment form.
+                if (!SupportsEmptyQualifiedNameSegment)
+                {
+                    AddParserError("Empty qualified-name segment (..) is not supported in Oracle",
+                        Peek(), "PAR001");
+                }
                 parts.Add(null); // null = empty schema
                 Advance(); // consume second dot
                 parts.Add(ExpectNameToken().ToStringValue());
@@ -653,7 +680,12 @@ public partial class NzSqlParser
         return (table, first);
     }
 
-    private Token<NzToken> ExpectNameToken()
+    /// <summary>
+    /// Dialect hook: true for Netezza (database..table form), false for Oracle.
+    /// </summary>
+    protected virtual bool SupportsEmptyQualifiedNameSegment => true;
+
+    protected Token<NzToken> ExpectNameToken()
     {
         var t = Peek();
         if (t.Kind is NzToken.Identifier or NzToken.QuotedIdentifier or NzToken.Public

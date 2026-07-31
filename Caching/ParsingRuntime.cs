@@ -1,4 +1,5 @@
 using JustyBase.NetezzaSqlParser.Ast;
+using JustyBase.NetezzaSqlParser.Dialects;
 
 namespace JustyBase.NetezzaSqlParser.Caching;
 
@@ -14,9 +15,9 @@ public sealed class ParsingRuntime : IDisposable
     private int _activeSessions;
     private bool _disposed;
 
-    public ParsingRuntime()
+    public ParsingRuntime(SqlDialect dialect = SqlDialect.Netezza)
     {
-        _parseSession = new DocumentParseSession();
+        _parseSession = new DocumentParseSession(dialect);
     }
 
     public DocumentParseSession ParseSession => _parseSession;

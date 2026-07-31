@@ -248,6 +248,22 @@ public enum NzToken
     // AtSet
     AtSet,
 
+    // Oracle-specific tokens (produced only by OracleLexer; registered before
+    // the shared chain so exact Oracle keywords win over shared ones).
+    // Order mirrors oracleOnlyTokens in the reference lexer.ts.
+    OracleQualifiedFunction, // dbms_metadata.get_ddl(
+    OracleOrderSiblingsBy,   // ORDER SIBLINGS BY
+    OracleConnect,           // CONNECT
+    OracleBy,                // BY
+    OraclePrior,             // PRIOR
+    OracleNocycle,           // NOCYCLE
+    OraclePivot,             // PIVOT
+    OracleUnpivot,           // UNPIVOT
+    OracleReturning,         // RETURNING
+    OraclePragma,            // PRAGMA
+    OracleBindVariable,      // :name or :name.subname
+    OracleAtSign,            // @
+
     // Operators (sorted by length descending for tokenizer)
     NotEquals,        // <> or !=
     LessThanEquals,   // <=

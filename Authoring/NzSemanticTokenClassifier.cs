@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using JustyBase.NetezzaSqlParser.Caching;
 using JustyBase.NetezzaSqlParser.Completion;
+using JustyBase.NetezzaSqlParser.Dialects;
 using JustyBase.NetezzaSqlParser.Lexer;
 using JustyBase.NetezzaSqlParser.Visitor;
 using Superpower.Model;
@@ -17,6 +18,7 @@ public sealed class NzSemanticTokenClassifier
 
     private readonly ISchemaProvider? _schema;
     private readonly DocumentParsingCoordinator? _coordinator;
+    private readonly SqlDialect _dialect;
     private readonly object _cacheLock = new();
     private string? _cachedKey;
     private SemanticTokenSpan[] _cachedSpans = [];
@@ -34,10 +36,11 @@ public sealed class NzSemanticTokenClassifier
         "deprecated", "definition", "defaultLibrary"
     ];
 
-    public NzSemanticTokenClassifier(ISchemaProvider? schema = null, DocumentParsingCoordinator? coordinator = null)
+    public NzSemanticTokenClassifier(ISchemaProvider? schema = null, DocumentParsingCoordinator? coordinator = null, SqlDialect dialect = SqlDialect.Netezza)
     {
         _schema = schema;
         _coordinator = coordinator;
+        _dialect = dialect;
     }
 
     public IReadOnlyList<SemanticTokenSpan> Classify(string sql, string? documentUri = null, int knownLineCount = -1)
@@ -149,7 +152,7 @@ public sealed class NzSemanticTokenClassifier
         Token<NzToken>[] tokens;
         try
         {
-            tokens = NzLexer.Tokenize(sql).ToArray();
+            tokens = (_dialect == SqlDialect.Oracle ? OracleLexer.Tokenize(sql) : NzLexer.Tokenize(sql)).ToArray();
         }
         catch
         {
@@ -167,7 +170,7 @@ public sealed class NzSemanticTokenClassifier
         if (useScope)
         {
             if (_coordinator is not null)
-                _ = _coordinator.GetOrCreate(documentUri ?? "semantic-default").Parse(sql);
+                _ = _coordinator.GetOrCreate(documentUri ?? "semantic-default", _dialect).Parse(sql);
             scopeCollector = new TokenScopeCollector(_schema);
             scopeCollector.Collect(tokens, sql.Length);
             aliasNames = BuildAliasNames(tokens);
@@ -246,7 +249,10 @@ public sealed class NzSemanticTokenClassifier
                 return (SemanticTokenKind.Number, SemanticTokenModifiers.None);
             case NzToken.Parameter:
             case NzToken.DollarNumber:
+            case NzToken.OracleBindVariable:
                 return (SemanticTokenKind.Parameter, SemanticTokenModifiers.None);
+            case NzToken.OracleQualifiedFunction:
+                return (SemanticTokenKind.Function, SemanticTokenModifiers.None);
             case NzToken.BracedVariable:
             case NzToken.BracesOnlyVariable:
             case NzToken.DollarIdentifier:

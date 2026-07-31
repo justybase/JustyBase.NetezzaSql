@@ -3,6 +3,7 @@ using System.Text.Json;
 using JustyBase.NetezzaSqlLsp.Protocol;
 using JustyBase.NetezzaSqlLsp.Workspace;
 using JustyBase.NetezzaSqlLsp.Services;
+using JustyBase.NetezzaSqlParser.Dialects;
 using JustyBase.NetezzaSqlParser.Visitor;
 
 namespace JustyBase.NetezzaSqlLsp.Handlers;
@@ -15,7 +16,7 @@ public static class TextDocumentHandlers
 
     /// <summary>Handles textDocument/didOpen: stores the document and publishes diagnostics.</summary>
     /// <summary>Handles textDocument/didOpen: stores the document and publishes diagnostics.</summary>
-    public static async Task HandleDidOpen(LspServer server, DocumentManager docs, ISchemaProvider? schema, JsonElement root, CancellationToken ct)
+    public static async Task HandleDidOpen(LspServer server, DocumentManager docs, ISchemaProvider? schema, SqlDialect dialect, JsonElement root, CancellationToken ct)
     {
         var p = root.GetProperty("params");
         var textDoc = p.GetProperty("textDocument");
@@ -24,11 +25,11 @@ public static class TextDocumentHandlers
         var version = textDoc.GetProperty("version").GetInt32();
 
         docs.OpenOrUpdate(uri, text, version);
-        await PublishDiagnosticsAsync(server, docs, schema, uri, ct);
+        await PublishDiagnosticsAsync(server, docs, schema, dialect, uri, ct);
     }
 
     /// <summary>Handles textDocument/didChange: updates the document text and re-publishes diagnostics.</summary>
-    public static async Task HandleDidChange(LspServer server, DocumentManager docs, ISchemaProvider? schema, JsonElement root, CancellationToken ct)
+    public static async Task HandleDidChange(LspServer server, DocumentManager docs, ISchemaProvider? schema, SqlDialect dialect, JsonElement root, CancellationToken ct)
     {
         var p = root.GetProperty("params");
         var textDoc = p.GetProperty("textDocument");
@@ -40,7 +41,7 @@ public static class TextDocumentHandlers
             var text = changes[0].GetProperty("text").GetString() ?? "";
             docs.UpdateText(uri, text, version);
         }
-        await PublishDiagnosticsAsync(server, docs, schema, uri, ct);
+        await PublishDiagnosticsAsync(server, docs, schema, dialect, uri, ct);
     }
 
     /// <summary>Handles textDocument/didClose: removes the document and clears diagnostics.</summary>
@@ -55,7 +56,7 @@ public static class TextDocumentHandlers
     }
 
     /// <summary>Lints the document and sends a textDocument/publishDiagnostics notification.</summary>
-    public static async Task PublishDiagnosticsAsync(LspServer server, DocumentManager docs, ISchemaProvider? schema, string uri, CancellationToken ct)
+    public static async Task PublishDiagnosticsAsync(LspServer server, DocumentManager docs, ISchemaProvider? schema, SqlDialect dialect, string uri, CancellationToken ct)
     {
         var docLock = _docLocks.GetOrAdd(uri, _ => new SemaphoreSlim(1, 1));
         await docLock.WaitAsync(ct);
@@ -64,7 +65,7 @@ public static class TextDocumentHandlers
             var text = docs.GetText(uri);
             if (text is null) return;
 
-            var diagnostics = LintService.Lint(text, schema);
+            var diagnostics = LintService.Lint(text, schema, dialect);
             await server.SendNotification("textDocument/publishDiagnostics",
                 new PublishDiagnosticsParams(uri, diagnostics.ToArray()), ct);
         }

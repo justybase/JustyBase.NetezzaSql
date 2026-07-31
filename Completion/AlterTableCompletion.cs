@@ -134,17 +134,21 @@ public static class AlterTableCompletion
         return lastName is null ? (string.Empty, 0) : (lastName, i - begin);
     }
 
-    public static IReadOnlyList<string> GetKeywordsForPhase(AlterTablePhase phase) => phase switch
+    public static IReadOnlyList<string> GetKeywordsForPhase(AlterTablePhase phase, ISqlAuthoringCatalog? catalog = null)
     {
-        AlterTablePhase.TopLevel => TopLevelActions,
-        AlterTablePhase.Add => ["COLUMN", "CONSTRAINT"],
-        AlterTablePhase.Drop => ["COLUMN", "CONSTRAINT"],
-        AlterTablePhase.Rename => ["COLUMN", "TO"],
-        AlterTablePhase.AddColumnType => NetezzaSqlCatalog.DataTypeNames.ToArray(),
-        AlterTablePhase.OrganizeOn => ["NONE"],
-        AlterTablePhase.DistributeOn => ["ON", "HASH", "RANDOM"],
-        _ => Array.Empty<string>()
-    };
+        catalog ??= NetezzaSqlAuthoringCatalog.Instance;
+        return phase switch
+        {
+            AlterTablePhase.TopLevel => TopLevelActions,
+            AlterTablePhase.Add => ["COLUMN", "CONSTRAINT"],
+            AlterTablePhase.Drop => ["COLUMN", "CONSTRAINT"],
+            AlterTablePhase.Rename => ["COLUMN", "TO"],
+            AlterTablePhase.AddColumnType => catalog.DataTypeNames.ToArray(),
+            AlterTablePhase.OrganizeOn => ["NONE"],
+            AlterTablePhase.DistributeOn => ["ON", "HASH", "RANDOM"],
+            _ => Array.Empty<string>()
+        };
+    }
 
     public static bool PhaseNeedsTableColumns(AlterTablePhase phase) =>
         phase is AlterTablePhase.DropColumn or AlterTablePhase.AlterColumn

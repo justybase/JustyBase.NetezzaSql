@@ -1,4 +1,5 @@
 using JustyBase.NetezzaSqlParser.Ast;
+using JustyBase.NetezzaSqlParser.Dialects;
 using JustyBase.NetezzaSqlParser.Lexer;
 using JustyBase.NetezzaSqlParser.Linter;
 using JustyBase.NetezzaSqlParser.Parser;
@@ -10,13 +11,21 @@ namespace JustyBase.NetezzaSqlLsp.Services;
 /// <summary>Produces LSP diagnostics for a SQL document.</summary>
 public static class LintService
 {
+    private static readonly QualityRuleRegistry NetezzaRules = new(NzLintRules.AllRules);
+    private static readonly QualityRuleRegistry OracleRules = CreateOracleRules();
+
+    private static QualityRuleRegistry CreateOracleRules() =>
+        new(OracleLintRules.AllRules);
+
     /// <summary>Lints the given SQL text using regex rules and semantic (parser + visitor) validation.</summary>
     /// <param name="sql">The SQL source text.</param>
     /// <param name="schema">Optional schema provider for semantic validation.</param>
+    /// <param name="dialect">The SQL dialect whose lexer, parser and quality rules apply.</param>
     /// <returns>A list of LSP diagnostics.</returns>
-    public static IReadOnlyList<Diagnostic> Lint(string sql, ISchemaProvider? schema)
+    public static IReadOnlyList<Diagnostic> Lint(string sql, ISchemaProvider? schema, SqlDialect dialect = SqlDialect.Netezza)
     {
         var issues = new List<Diagnostic>();
+        var isOracle = dialect == SqlDialect.Oracle;
 
         if (string.IsNullOrEmpty(sql))
             return issues;
@@ -24,12 +33,14 @@ public static class LintService
         // Pre-compute line start offsets for O(1) position conversion
         var lineOffsets = ComputeLineOffsets(sql);
 
-        // 1. Text-based regex rules (NZ001-NZ020, NZP001-NZP013)
-        foreach (var rule in NzLintRules.AllRules)
+        // 1. Text-based regex rules (NZ* for Netezza, ORA* for Oracle — never mixed)
+        var registry = isOracle ? OracleRules : NetezzaRules;
+        var source = isOracle ? "Oracle SQL" : "Netezza SQL";
+        foreach (var rule in registry.AllRules)
         {
             foreach (var result in rule.Check(sql))
             {
-                issues.Add(MapLintIssue(result, sql, lineOffsets));
+                issues.Add(MapLintIssue(result, sql, lineOffsets, source));
             }
         }
 
@@ -38,8 +49,8 @@ public static class LintService
         {
             try
             {
-                var tokens = NzLexer.Tokenize(sql).ToArray();
-                var parser = new NzSqlParser(tokens);
+                var tokens = (isOracle ? OracleLexer.Tokenize(sql) : NzLexer.Tokenize(sql)).ToArray();
+                var parser = isOracle ? new OracleSqlParser(tokens) : new NzSqlParser(tokens);
                 Statement? stmt;
 
                 // Dedup set for parser errors
@@ -56,7 +67,7 @@ public static class LintService
                         if (perr.Position.Absolute >= sql.Length) continue;
                         if (!seenParserErrors.Add((perr.Message, perr.Position.Absolute)))
                             continue;
-                        issues.Add(MapParserError(perr, sql, lineOffsets));
+                        issues.Add(MapParserError(perr, sql, lineOffsets, source));
                     }
 
                     if (stmt is null) break;
@@ -67,7 +78,7 @@ public static class LintService
                     foreach (var err in visitor.Errors)
                     {
                         if (err.Position.Absolute >= sql.Length) continue;
-                        issues.Add(MapVisitorError(err, sql, lineOffsets));
+                        issues.Add(MapVisitorError(err, sql, lineOffsets, source));
                     }
                 }
             }
@@ -107,7 +118,7 @@ public static class LintService
         return new Position(line, offset - lineOffsets[line]);
     }
 
-    private static Diagnostic MapLintIssue(LintIssue issue, string sql, int[] lineOffsets)
+    private static Diagnostic MapLintIssue(LintIssue issue, string sql, int[] lineOffsets, string source)
     {
         var startPos = OffsetToPosition(issue.StartOffset, lineOffsets);
         int endOffset = Math.Min(issue.EndOffset, sql.Length);
@@ -122,12 +133,12 @@ public static class LintService
             new Protocol.Range(startPos, endPos),
             issue.Severity == LintSeverity.Error ? DiagnosticSeverity.Error : DiagnosticSeverity.Warning,
             issue.RuleId,
-            "Netezza SQL",
+            source,
             issue.Message
         );
     }
 
-    private static Diagnostic MapParserError(ValidationError perr, string sql, int[] lineOffsets)
+    private static Diagnostic MapParserError(ValidationError perr, string sql, int[] lineOffsets, string source)
     {
         var start = OffsetToPosition(perr.Position.Absolute, lineOffsets);
         int endOffset = perr.EndColumn > 0
@@ -143,13 +154,13 @@ public static class LintService
             new Protocol.Range(start, end),
             perr.Severity == "error" ? DiagnosticSeverity.Error : DiagnosticSeverity.Warning,
             perr.Code,
-            "Netezza SQL",
+            source,
             perr.Message,
             Data: data
         );
     }
 
-    private static Diagnostic MapVisitorError(ValidationError err, string sql, int[] lineOffsets)
+    private static Diagnostic MapVisitorError(ValidationError err, string sql, int[] lineOffsets, string source)
     {
         var start = OffsetToPosition(err.Position.Absolute, lineOffsets);
         int endOffset;
@@ -168,7 +179,7 @@ public static class LintService
             new Protocol.Range(start, end),
             err.Severity == "error" ? DiagnosticSeverity.Error : DiagnosticSeverity.Warning,
             err.Code,
-            "Netezza SQL",
+            source,
             err.Message
         );
     }

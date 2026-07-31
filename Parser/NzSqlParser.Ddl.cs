@@ -129,11 +129,19 @@ public partial class NzSqlParser
             return new CreateTableStatement(FromToken(createTok), table, ifNotExists, temporary, global, null, null, null, null, null);
         }
 
-        var distribute = ParseDistributeClause();
-        var organize = ParseOrganizeClause();
+        var (distribute, organize) = ParseTableStorageClauses();
 
         return new CreateTableStatement(FromToken(createTok), table, ifNotExists, temporary, global,
             columns, constraints, asSelect, distribute, organize);
+    }
+
+    /// <summary>
+    /// Dialect hook: parses the Netezza table storage clauses (DISTRIBUTE ON,
+    /// ORGANIZE ON). Oracle overrides this to reject them.
+    /// </summary>
+    protected virtual (DistributeClause? Distribute, OrganizeClause? Organize) ParseTableStorageClauses()
+    {
+        return (ParseDistributeClause(), ParseOrganizeClause());
     }
 
     private ColumnDefList ParseColumnDefinitionList()
@@ -362,7 +370,7 @@ public partial class NzSqlParser
         return null;
     }
 
-    private IReadOnlyList<string> ParseIdentifierList()
+    protected IReadOnlyList<string> ParseIdentifierList()
     {
         var list = new List<string> { ExpectNameToken().ToStringValue() };
         while (Peek().Kind == NzToken.Comma)

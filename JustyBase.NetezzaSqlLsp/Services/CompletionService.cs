@@ -1,4 +1,6 @@
+using JustyBase.NetezzaSqlParser.Authoring;
 using JustyBase.NetezzaSqlParser.Completion;
+using JustyBase.NetezzaSqlParser.Dialects;
 using JustyBase.NetezzaSqlParser.Visitor;
 using JustyBase.NetezzaSqlLsp.Protocol;
 
@@ -12,6 +14,7 @@ public static class CompletionService
         CompletionKind.Keyword => Protocol.CompletionItemKind.Keyword,
         CompletionKind.Table => Protocol.CompletionItemKind.Struct,
         CompletionKind.View => Protocol.CompletionItemKind.Class,
+        CompletionKind.ExternalTable => Protocol.CompletionItemKind.Struct,
         CompletionKind.Column => Protocol.CompletionItemKind.Field,
         CompletionKind.Function => Protocol.CompletionItemKind.Function,
         CompletionKind.Schema => Protocol.CompletionItemKind.Module,
@@ -25,7 +28,7 @@ public static class CompletionService
     };
 
     /// <summary>Returns LSP completions at the given position.</summary>
-    public static Protocol.CompletionList GetCompletions(string text, int line, int character, ISchemaProvider? schema)
+    public static Protocol.CompletionList GetCompletions(string text, int line, int character, ISchemaProvider? schema, SqlDialect dialect = SqlDialect.Netezza)
     {
         // Convert line/character to offset
         int offset = 0;
@@ -41,7 +44,8 @@ public static class CompletionService
                 currentLine++;
         }
 
-        var engine = new NzCompletionEngine(schema);
+        var catalog = dialect == SqlDialect.Oracle ? OracleSqlCatalog.Instance : null;
+        var engine = new NzCompletionEngine(schema, catalog: catalog, dialect: dialect);
         var items = engine.GetCompletions(text, offset);
 
         var mapped = new List<Protocol.CompletionItem>(items.Count);

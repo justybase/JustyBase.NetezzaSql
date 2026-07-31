@@ -13,7 +13,7 @@ public partial class NzSqlParser
 {
     // ====== INSERT Statement ======
 
-    private InsertStatement? ParseInsert()
+    protected virtual InsertStatement? ParseInsert()
     {
         var insertTok = Expect(NzToken.Insert);
 
@@ -141,7 +141,7 @@ public partial class NzSqlParser
 
     // ====== UPDATE Statement ======
 
-    private UpdateStatement? ParseUpdate()
+    protected virtual UpdateStatement? ParseUpdate()
     {
         var updateTok = Expect(NzToken.Update);
 
@@ -226,7 +226,7 @@ public partial class NzSqlParser
 
     // ====== DELETE Statement ======
 
-    private DeleteStatement? ParseDelete()
+    protected virtual DeleteStatement? ParseDelete()
     {
         var deleteTok = Expect(NzToken.Delete);
 

@@ -1,4 +1,5 @@
 using JustyBase.NetezzaSqlParser.Ast;
+using JustyBase.NetezzaSqlParser.Dialects;
 using JustyBase.NetezzaSqlParser.Lexer;
 using System.Text.RegularExpressions;
 using JustyBase.NetezzaSqlParser.Parser;
@@ -15,6 +16,7 @@ namespace JustyBase.NetezzaSqlParser.Caching;
 public sealed class DocumentParseSession : IDisposable
 {
     private const int MaxParseEntries = 32;
+    private readonly SqlDialect _dialect;
 
     // Cache key: contentHash
     // Cache value: (tokens, statements, errors, createdAtMs)
@@ -25,8 +27,9 @@ public sealed class DocumentParseSession : IDisposable
     private int _parseCacheMisses;
     private bool _disposed;
 
-    public DocumentParseSession()
+    public DocumentParseSession(SqlDialect dialect = SqlDialect.Netezza)
     {
+        _dialect = dialect;
     }
 
     /// <summary>
@@ -51,7 +54,7 @@ public sealed class DocumentParseSession : IDisposable
         }
 
         // Cache miss — parse outside lock
-        var result = ParseSql(sql);
+        var result = ParseSql(sql, _dialect);
 
         lock (_lock)
         {
@@ -137,7 +140,9 @@ public sealed class DocumentParseSession : IDisposable
     /// <summary>
     /// Full parse: tokenize + parse all statements.
     /// </summary>
-    internal static ParseResult ParseSql(string sql)
+    internal static ParseResult ParseSql(string sql) => ParseSql(sql, SqlDialect.Netezza);
+
+    internal static ParseResult ParseSql(string sql, SqlDialect dialect)
     {
         if (string.IsNullOrEmpty(sql))
             return new ParseResult([], [], true);
@@ -148,8 +153,10 @@ public sealed class DocumentParseSession : IDisposable
             // before tokenization so the core grammar can parse the labelled
             // LOOP/FOR statement identically to its unlabelled form.
             sql = Regex.Replace(sql, @"<<\s*[A-Za-z_][A-Za-z0-9_]*\s*>>", "", RegexOptions.CultureInvariant);
-            var tokens = NzLexer.Tokenize(sql).ToArray();
-            var parser = new NzSqlParser(tokens);
+            var tokens = (dialect == SqlDialect.Oracle ? OracleLexer.Tokenize(sql) : NzLexer.Tokenize(sql)).ToArray();
+            var parser = dialect == SqlDialect.Oracle
+                ? new OracleSqlParser(tokens)
+                : new NzSqlParser(tokens);
             var statements = new List<Statement>();
             var errors = new List<ValidationError>();
 

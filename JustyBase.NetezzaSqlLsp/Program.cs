@@ -5,12 +5,18 @@ using JustyBase.NetezzaSqlLsp.Workspace;
 using JustyBase.NetezzaSqlLsp.Services;
 using JustyBase.NetezzaSqlParser.Authoring;
 using JustyBase.NetezzaSqlParser.Caching;
+using JustyBase.NetezzaSqlParser.Dialects;
 using JustyBase.NetezzaSqlParser.Visitor;
 using JustyBase.NetezzaSqlParser.Ast;
 using System.Text.Json;
 
 Console.InputEncoding = System.Text.Encoding.UTF8;
 Console.OutputEncoding = System.Text.Encoding.UTF8;
+
+// --dialect netezza|oracle selects the default SQL dialect; clients can
+// switch it at runtime with the justy/setDialect request.
+// Accepts both --dialect=oracle and --dialect oracle.
+var dialect = LspDialectArgs.Parse(args);
 
 var input = Console.OpenStandardInput();
 var output = Console.OpenStandardOutput();
@@ -20,7 +26,7 @@ var server = new LspServer(transport);
 var docs = new DocumentManager();
 var schema = new InMemorySchemaProvider();
 using var parsingCoordinator = new DocumentParsingCoordinator();
-var semanticClassifier = new NzSemanticTokenClassifier(schema, parsingCoordinator);
+NzSemanticTokenClassifier semanticClassifier = new(schema, parsingCoordinator, dialect);
 using var shutdownCts = new CancellationTokenSource();
 
 // Handle Ctrl+C gracefully
@@ -30,13 +36,13 @@ Console.CancelKeyPress += (_, e) =>
     shutdownCts.Cancel();
 };
 
-// ---- Helper: re-lint all open documents after schema sync ----
+// ---- Helper: re-lint all open documents after schema/dialect changes ----
 async Task ReLintAllAsync(CancellationToken ct)
 {
     var tasks = new List<Task>();
     foreach (var uri in docs.GetAllUris())
     {
-        tasks.Add(TextDocumentHandlers.PublishDiagnosticsAsync(server, docs, schema, uri, ct));
+        tasks.Add(TextDocumentHandlers.PublishDiagnosticsAsync(server, docs, schema, dialect, uri, ct));
     }
     await Task.WhenAll(tasks);
 }
@@ -52,11 +58,31 @@ server.RegisterRequestHandler("initialized", (_, _, _) =>
     return Task.CompletedTask;
 });
 
+// ---- Dialect (custom JustyBase protocol) ----
+server.RegisterRequestHandler("justy/setDialect", async (root, id, ct) =>
+{
+    try
+    {
+        var value = root.GetProperty("params").GetProperty("dialect").GetString() ?? "netezza";
+        dialect = value.Equals("oracle", StringComparison.OrdinalIgnoreCase)
+            ? SqlDialect.Oracle
+            : SqlDialect.Netezza;
+        parsingCoordinator.Clear();
+        semanticClassifier = new NzSemanticTokenClassifier(schema, parsingCoordinator, dialect);
+        await server.SendResult(id!, "ok", ct);
+        await ReLintAllAsync(ct);
+    }
+    catch (Exception ex)
+    {
+        await server.SendError(id!, JsonRpcErrorCodes.InternalError, $"Set dialect error: {ex.Message}", ct);
+    }
+});
+
 // ---- Text Document Sync ----
 server.RegisterRequestHandler("textDocument/didOpen", (root, _, ct) =>
-    TextDocumentHandlers.HandleDidOpen(server, docs, schema, root, ct));
+    TextDocumentHandlers.HandleDidOpen(server, docs, schema, dialect, root, ct));
 server.RegisterRequestHandler("textDocument/didChange", (root, _, ct) =>
-    TextDocumentHandlers.HandleDidChange(server, docs, schema, root, ct));
+    TextDocumentHandlers.HandleDidChange(server, docs, schema, dialect, root, ct));
 server.RegisterRequestHandler("textDocument/didClose", (root, _, ct) =>
     TextDocumentHandlers.HandleDidClose(server, docs, root, ct));
 
@@ -119,7 +145,7 @@ server.RegisterRequestHandler("textDocument/completion", async (root, id, ct) =>
             return;
         }
 
-        var completions = CompletionService.GetCompletions(text, line, character, schema);
+        var completions = CompletionService.GetCompletions(text, line, character, schema, dialect);
         await server.SendResult(id!, completions, ct);
     }
     catch (Exception ex)
@@ -137,8 +163,7 @@ server.RegisterRequestHandler("textDocument/semanticTokens/full", async (root, i
         var uri = p.GetProperty("textDocument").GetProperty("uri").GetString() ?? "";
         var text = docs.GetText(uri) ?? "";
 
-        var result = SemanticTokensService.GetSemanticTokens(text, semanticClassifier, uri);
-        await server.SendResult(id!, result, ct);
+        var result = SemanticTokensService.GetSemanticTokens(text, semanticClassifier, uri);        await server.SendResult(id!, result, ct);
     }
     catch (Exception ex)
     {
@@ -164,7 +189,7 @@ server.RegisterRequestHandler("textDocument/hover", async (root, id, ct) =>
             return;
         }
 
-        var result = HoverService.GetHover(text, line, character, schema);
+        var result = HoverService.GetHover(text, line, character, schema, dialect);
         await server.SendResult(id!, result, ct);
     }
     catch (Exception ex)
@@ -253,7 +278,7 @@ server.RegisterRequestHandler("textDocument/signatureHelp", async (root, id, ct)
             return;
         }
 
-        var result = SignatureHelpService.GetSignatureHelp(text, line, character);
+        var result = SignatureHelpService.GetSignatureHelp(text, line, character, dialect);
         await server.SendResult(id!, result, ct);
     }
     catch (Exception ex)

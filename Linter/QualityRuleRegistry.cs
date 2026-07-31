@@ -67,6 +67,22 @@ public sealed class QualityRuleRegistry
     }
 
     /// <summary>
+    /// Register additional dialect rules (e.g. Oracle ORA* rules) into this
+    /// registry at runtime. Existing rules with the same Id are replaced.
+    /// </summary>
+    public void AddRules(IEnumerable<LintRule> rules)
+    {
+        lock (_lock)
+        {
+            foreach (var rule in rules)
+                _rules[rule.Id] = new RuleRegistration(rule, rule.DefaultSeverity);
+        }
+        _cachedAllRules = null;
+        InvalidateSeverityCache();
+        InvalidatePriorityCache();
+    }
+
+    /// <summary>
     /// All registered rules, regardless of severity or enabled status.
     /// </summary>
     public IReadOnlyList<LintRule> AllRules

@@ -1,6 +1,7 @@
 using JustyBase.NetezzaSqlParser.Ast;
 using JustyBase.NetezzaSqlParser.Authoring;
 using JustyBase.NetezzaSqlParser.Caching;
+using JustyBase.NetezzaSqlParser.Dialects;
 using JustyBase.NetezzaSqlParser.Lexer;
 using JustyBase.NetezzaSqlParser.Visitor;
 using Superpower.Model;
@@ -29,7 +30,8 @@ public enum CompletionKind
     Cte,
     DataType,
     Snippet,
-    Variable
+    Variable,
+    ExternalTable
 }
 
 /// <summary>
@@ -40,6 +42,8 @@ public class NzCompletionEngine
     private readonly ISchemaProvider? _schema;
     private readonly DocumentParsingCoordinator? _parsingCoordinator;
     private readonly CompletionWildcardResolver _wildcardResolver;
+    private readonly ISqlAuthoringCatalog _catalog;
+    private readonly SqlDialect _dialect;
     private string? _documentUri;
     private int _cursorPosition;
 
@@ -52,11 +56,17 @@ public class NzCompletionEngine
     private TokenScopeCollector? _lastScopeCollector;
     private Token<NzToken>[]? _lastFullTokens;
 
-    public NzCompletionEngine(ISchemaProvider? schema = null, DocumentParsingCoordinator? parsingCoordinator = null)
+    public NzCompletionEngine(
+        ISchemaProvider? schema = null,
+        DocumentParsingCoordinator? parsingCoordinator = null,
+        ISqlAuthoringCatalog? catalog = null,
+        SqlDialect dialect = SqlDialect.Netezza)
     {
         _schema = schema;
         _parsingCoordinator = parsingCoordinator;
+        _catalog = catalog ?? NetezzaSqlAuthoringCatalog.Instance;
         _wildcardResolver = new CompletionWildcardResolver(schema);
+        _dialect = dialect;
     }
 
     public void SetDocumentUri(string? documentUri) => _documentUri = documentUri;
@@ -93,7 +103,7 @@ public class NzCompletionEngine
             filterPartial = string.Empty;
         }
 
-        _parsingCoordinator?.GetOrCreate(_documentUri ?? "default").Parse(sql);
+        _parsingCoordinator?.GetOrCreate(_documentUri ?? "default", _dialect).Parse(sql);
 
         var context = AnalyzeContext(contextTokens);
 
@@ -297,7 +307,10 @@ public class NzCompletionEngine
 
             case CompletionContext.TopLevel:
             default:
-                AddKeywords(suggestions, SqlContext.TopLevelKeywords);
+                AddKeywords(suggestions, SqlContext.TopLevelKeywords
+                    .Concat(_catalog.CompletionKeywords)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray());
                 break;
         }
 
@@ -555,9 +568,7 @@ public class NzCompletionEngine
         if (names is null) return;
         foreach (var (name, kind) in names)
         {
-            list.Add(new CompletionItem(name,
-                kind == TableKind.View ? CompletionKind.View : CompletionKind.Table,
-                Priority: 3));
+            list.Add(new CompletionItem(name, ToRelationCompletionKind(kind), Priority: 3));
         }
     }
 
@@ -568,8 +579,8 @@ public class NzCompletionEngine
         if (names is null) return;
         foreach (var (name, kind) in names)
         {
-            if (kind != TableKind.View)
-                list.Add(new CompletionItem(name, CompletionKind.Table, Priority: 3));
+            if (kind is TableKind.Table or TableKind.External)
+                list.Add(new CompletionItem(name, ToRelationCompletionKind(kind), Priority: 3));
         }
     }
 
@@ -584,6 +595,13 @@ public class NzCompletionEngine
                 list.Add(new CompletionItem(name, CompletionKind.View, Priority: 3));
         }
     }
+
+    private static CompletionKind ToRelationCompletionKind(TableKind kind) => kind switch
+    {
+        TableKind.View => CompletionKind.View,
+        TableKind.External => CompletionKind.ExternalTable,
+        _ => CompletionKind.Table
+    };
 
     /// <summary>
     /// Resolves database/schema prefix for the table name currently being typed in FROM/JOIN.
@@ -654,18 +672,16 @@ public class NzCompletionEngine
         if (tables is { Count: > 0 })
         {
             foreach (var (name, kind) in tables)
-                list.Add(new CompletionItem(name,
-                    kind == TableKind.View ? CompletionKind.View : CompletionKind.Table,
-                    Priority: 3));
+                list.Add(new CompletionItem(name, ToRelationCompletionKind(kind), Priority: 3));
             return true;
         }
 
         return false;
     }
 
-    private static void AddFunctions(List<CompletionItem> list)
+    private void AddFunctions(List<CompletionItem> list)
     {
-        var catalogFunctions = NetezzaSqlCatalog.BuiltinFunctions
+        var catalogFunctions = _catalog.BuiltinFunctions
             .Select(f => (f.Name, Detail: f.Signatures.FirstOrDefault()?.Label));
         var legacyFunctions = SqlContext.BuiltinFunctions
             .Select(name => (Name: name, Detail: (string?)null));
@@ -1185,11 +1201,13 @@ public class NzCompletionEngine
 
     // ====== Helpers ======
 
-    private static Token<NzToken>[]? TokenizePrefix(string prefix)
+    private Token<NzToken>[]? TokenizePrefix(string prefix)
     {
         try
         {
-            var result = NzLexer.Tokenize(prefix);
+            var result = _dialect == SqlDialect.Oracle
+                ? OracleLexer.Tokenize(prefix)
+                : NzLexer.Tokenize(prefix);
             return result.ToArray();
         }
         catch

@@ -28,7 +28,7 @@ public record TableQualificationProposal(
     bool IsPreferred = false
 );
 
-public enum TableKind { Table, View, Synonym }
+public enum TableKind { Table, View, Synonym, External }
 
 /// <summary>
 /// In-memory schema provider for testing.
@@ -166,7 +166,7 @@ public class InMemorySchemaProvider : ISchemaProvider
                     continue;
                 if (schema is not null && !IdentifiersEqual(info.Schema, schema))
                     continue;
-                results.Add((info.Name, info.IsView ? TableKind.View : TableKind.Table));
+                results.Add((info.Name, ToTableKind(info)));
             }
             var ordered = results
                 .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
@@ -250,6 +250,13 @@ public class InMemorySchemaProvider : ISchemaProvider
 
     private static bool IdentifiersEqual(string? left, string? right) =>
         string.Equals(NormalizeIdentifier(left), NormalizeIdentifier(right), StringComparison.Ordinal);
+
+    private static TableKind ToTableKind(TableInfo info)
+    {
+        if (info.IsView) return TableKind.View;
+        if (info.IsExternal) return TableKind.External;
+        return TableKind.Table;
+    }
 
     /// <summary>
     /// Produces the comparison form used by Netezza catalog lookups. Quoting is

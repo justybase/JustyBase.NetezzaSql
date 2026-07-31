@@ -125,6 +125,11 @@ public partial class NzSqlVisitor
             case CommentStatement s: Visit(s); break;
             case GroomStatement s: Visit(s); break;
             case GenerateStatisticsStatement s: Visit(s); break;
+            // Oracle dialect statements keep their body as an opaque token
+            // range; there is nothing to validate inside (mirrors the reference
+            // TypeScript visitor, which has no Oracle-specific handling).
+            case OracleAnonymousBlockStatement s: break;
+            case OracleProgramUnitStatement s: break;
         }
     }
 

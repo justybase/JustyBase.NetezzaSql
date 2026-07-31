@@ -46,7 +46,8 @@ public record TableInfo(
     string? Alias = null,
     IReadOnlyList<ColumnInfo>? Columns = null,
     SourcePosition? Position = null,
-    bool IsView = false
+    bool IsView = false,
+    bool IsExternal = false
 );
 
 public record CteInfo(
@@ -98,7 +99,8 @@ public record InsertStatement(
     TableName Target,
     IReadOnlyList<string>? Columns,
     IReadOnlyList<IReadOnlyList<Expression>>? Values,
-    SelectStatement? SourceQuery
+    SelectStatement? SourceQuery,
+    OracleReturningClause? Returning = null
 ) : Statement(Position);
 
 public record UpdateStatement(
@@ -107,14 +109,16 @@ public record UpdateStatement(
     string? Alias,
     IReadOnlyList<UpdateSetItem> SetItems,
     IReadOnlyList<TableReference>? From,
-    Expression? Where
+    Expression? Where,
+    OracleReturningClause? Returning = null
 ) : Statement(Position);
 
 public record DeleteStatement(
     SourcePosition Position,
     TableName Target,
     string? Alias,
-    Expression? Where
+    Expression? Where,
+    OracleReturningClause? Returning = null
 ) : Statement(Position);
 
 public record MergeStatement(
@@ -712,4 +716,30 @@ public record UpdateSetItem(
     SourcePosition Position,
     ColumnReference Column,
     Expression Value
+) : AstNode(Position);
+
+// ====== Oracle Program Units ======
+// Port of the reference oracle/sql/parser.ts: anonymous PL/SQL blocks and
+// CREATE FUNCTION/PROCEDURE/PACKAGE/TRIGGER units are kept as offset-stable
+// token sequences so symbol analysis, formatting, and editing remain cheap
+// without a deep PL/SQL grammar.
+
+public enum OracleProgramUnitKind { Function, Procedure, Package, PackageBody, Trigger }
+
+public record OracleAnonymousBlockStatement(
+    SourcePosition Position,
+    IReadOnlyList<Token<NzToken>> Tokens
+) : Statement(Position);
+
+public record OracleProgramUnitStatement(
+    SourcePosition Position,
+    OracleProgramUnitKind Kind,
+    TableName Name,
+    IReadOnlyList<Token<NzToken>> Tokens
+) : Statement(Position);
+
+public record OracleReturningClause(
+    SourcePosition Position,
+    IReadOnlyList<string> Columns,
+    IReadOnlyList<string> IntoVariables
 ) : AstNode(Position);

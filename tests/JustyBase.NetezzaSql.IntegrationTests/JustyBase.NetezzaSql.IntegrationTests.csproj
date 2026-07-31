@@ -13,6 +13,7 @@
     </PackageReference>
     <PackageReference Include="JustyBase.NetezzaDriver" Version="1.7.1" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
+    <PackageReference Include="Oracle.ManagedDataAccess.Core" Version="23.26.300" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
       <PrivateAssets>all</PrivateAssets>
@@ -25,6 +26,8 @@
     <ProjectReference Include="..\..\JustyBase.NetezzaDdl\JustyBase.NetezzaDdl.csproj" />
     <ProjectReference Include="..\..\JustyBase.Core\JustyBase.Core.csproj" />
     <ProjectReference Include="..\..\JustyBase.ImportExport\JustyBase.ImportExport.csproj" />
+    <ProjectReference Include="..\..\JustyBase.NetezzaSqlParser.csproj" />
+    <ProjectReference Include="..\..\JustyBase.NetezzaSqlLsp\JustyBase.NetezzaSqlLsp.csproj" />
   </ItemGroup>
 
   <ItemGroup>

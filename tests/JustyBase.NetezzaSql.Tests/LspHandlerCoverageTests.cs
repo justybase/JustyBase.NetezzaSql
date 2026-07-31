@@ -4,6 +4,7 @@ using JustyBase.NetezzaSqlLsp;
 using JustyBase.NetezzaSqlLsp.Handlers;
 using JustyBase.NetezzaSqlLsp.Protocol;
 using JustyBase.NetezzaSqlLsp.Workspace;
+using JustyBase.NetezzaSqlParser.Dialects;
 using JustyBase.NetezzaSqlParser.Visitor;
 
 namespace JustyBase.NetezzaSql.Tests;
@@ -22,11 +23,11 @@ public sealed class LspHandlerCoverageTests
         const string uri = "file:///handler.sql";
 
         using var open = JsonDocument.Parse("""{"params":{"textDocument":{"uri":"file:///handler.sql","version":1,"text":"SELECT * FROM missing"}}}""");
-        await TextDocumentHandlers.HandleDidOpen(server, documents, schema, open.RootElement, CancellationToken.None);
+        await TextDocumentHandlers.HandleDidOpen(server, documents, schema, SqlDialect.Netezza, open.RootElement, CancellationToken.None);
         Assert.Equal("SELECT * FROM missing", documents.GetText(uri));
 
         using var change = JsonDocument.Parse("""{"params":{"textDocument":{"uri":"file:///handler.sql","version":2},"contentChanges":[{"text":"SELECT 1"}]}}""");
-        await TextDocumentHandlers.HandleDidChange(server, documents, schema, change.RootElement, CancellationToken.None);
+        await TextDocumentHandlers.HandleDidChange(server, documents, schema, SqlDialect.Netezza, change.RootElement, CancellationToken.None);
         Assert.Equal("SELECT 1", documents.GetText(uri));
 
         using var close = JsonDocument.Parse("""{"params":{"textDocument":{"uri":"file:///handler.sql"}}}""");

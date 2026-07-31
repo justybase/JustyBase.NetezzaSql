@@ -1,5 +1,7 @@
 using System.Text;
 using JustyBase.NetezzaSqlParser.Ast;
+using JustyBase.NetezzaSqlParser.Lexer;
+using Superpower.Model;
 
 namespace JustyBase.NetezzaSqlParser.Formatter;
 
@@ -109,9 +111,32 @@ public sealed class NzSqlFormatter
             case VariableSetStatement variableSet:
                 FormatVariableSet(variableSet);
                 break;
+            case OracleAnonymousBlockStatement oracleBlock:
+                FormatOracleTokenRange(oracleBlock.Tokens);
+                break;
+            case OracleProgramUnitStatement oracleUnit:
+                FormatOracleTokenRange(oracleUnit.Tokens);
+                break;
             default:
                 Write("?");
                 break;
+        }
+    }
+
+    private void FormatOracleTokenRange(IReadOnlyList<Token<NzToken>> tokens)
+    {
+        Token<NzToken>? prev = null;
+        foreach (var token in tokens)
+        {
+            var noSpace = prev is null
+                || token.Kind == NzToken.Semicolon
+                || (prev.Value.Kind == NzToken.Identifier
+                    && token.Kind == NzToken.StringLiteral
+                    && string.Equals(prev.Value.ToStringValue(), "q", StringComparison.OrdinalIgnoreCase));
+            if (!noSpace)
+                Write(" ");
+            Write(token.ToStringValue());
+            prev = token;
         }
     }
 

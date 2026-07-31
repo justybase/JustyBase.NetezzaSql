@@ -7,9 +7,9 @@ namespace JustyBase.NetezzaSqlParser.Parser;
 
 public partial class NzSqlParser
 {
-    private Token<NzToken>[] _tokens;
-    private int _pos;
-    private readonly List<ValidationError> _errors = new();
+    protected Token<NzToken>[] _tokens;
+    protected int _pos;
+    protected readonly List<ValidationError> _errors = new();
     private static readonly KeywordTypoChecker _typoChecker = new();
 
     public NzSqlParser(Token<NzToken>[] tokens)
@@ -32,11 +32,11 @@ public partial class NzSqlParser
         _errors.Clear();
     }
 
-    private Token<NzToken> Peek(int ahead = 0) =>
+    protected Token<NzToken> Peek(int ahead = 0) =>
         _pos + ahead < _tokens.Length ? _tokens[_pos + ahead] :
             new Token<NzToken>(NzToken.Unknown, TextSpan.Empty);
 
-    private Token<NzToken> Advance() => _tokens[_pos++];
+    protected Token<NzToken> Advance() => _tokens[_pos++];
 
     private bool Match(NzToken kind)
     {
@@ -69,7 +69,7 @@ public partial class NzSqlParser
             Advance();
     }
 
-    private void SynchronizeStatement()
+    protected void SynchronizeStatement()
     {
         while (Peek().Kind != NzToken.Semicolon && Peek().Kind != NzToken.Unknown)
         {
@@ -91,12 +91,12 @@ public partial class NzSqlParser
         }
     }
 
-    private static bool IsContextualIdentifier(NzToken kind) => kind is
+    protected static bool IsContextualIdentifier(NzToken kind) => kind is
         NzToken.Identifier or NzToken.QuotedIdentifier or NzToken.Replace
         or NzToken.Owner or NzToken.Hash or NzToken.Start or NzToken.Out or NzToken.Inout
         or NzToken.Perform or NzToken.Reverse or NzToken.Warning or NzToken.Within;
 
-    private bool IsSetOperationStart() => Peek().Kind is NzToken.Union or NzToken.Intersect or NzToken.Except or NzToken.MinusSet
+    protected bool IsSetOperationStart() => Peek().Kind is NzToken.Union or NzToken.Intersect or NzToken.Except or NzToken.MinusSet
         || (Peek().Kind == NzToken.Identifier &&
             string.Equals(Peek().ToStringValue(), "MINUS", StringComparison.OrdinalIgnoreCase));
 
@@ -108,7 +108,7 @@ public partial class NzSqlParser
         _ => false
     };
 
-    private Token<NzToken> Expect(NzToken kind, string? context = null)
+    protected Token<NzToken> Expect(NzToken kind, string? context = null)
     {
         var t = Peek();
         if (t.Kind == kind) { _pos++; return t; }
@@ -123,10 +123,10 @@ public partial class NzSqlParser
     private static string DescribeToken(Token<NzToken> t) =>
         t.Kind == NzToken.Unknown ? "end of input" : t.Kind.ToString();
 
-    private static string DescribeToken(NzToken kind) =>
+    protected static string DescribeToken(NzToken kind) =>
         kind == NzToken.Unknown ? "end of input" : kind.ToString();
 
-    private void AddParserError(string message, Token<NzToken> t, string code)
+    protected void AddParserError(string message, Token<NzToken> t, string code)
     {
         _errors.Add(new ValidationError(message, "error",
             SourcePosition.FromToken(t), code,
@@ -137,11 +137,11 @@ public partial class NzSqlParser
     private static (int EndLine, int EndColumn) EndOfToken(Token<NzToken> t) =>
         (t.Position.Line, t.Position.Column + Math.Max(t.Span.Length, 1));
 
-    private SourcePosition FromToken(Token<NzToken> t) => SourcePosition.FromToken(t);
+    protected SourcePosition FromToken(Token<NzToken> t) => SourcePosition.FromToken(t);
 
     // ====== Top-Level Dispatch ======
 
-    public Statement? Parse()
+    public virtual Statement? Parse()
     {
         SkipSemicolons();
         if (_pos >= _tokens.Length)
@@ -210,7 +210,7 @@ public partial class NzSqlParser
         return null;
     }
 
-    private void SkipSemicolons()
+    protected void SkipSemicolons()
     {
         while (Peek().Kind == NzToken.Semicolon) Advance();
     }
@@ -225,7 +225,7 @@ public partial class NzSqlParser
         return t.Name;
     }
 
-    private string ParseIdentifier()
+    protected string ParseIdentifier()
     {
         var t = ExpectNameToken();
         return t.ToStringValue();

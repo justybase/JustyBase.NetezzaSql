@@ -236,4 +236,61 @@ public sealed class NzSqlFormatterTests
         Assert.Contains("RETURN 1", result);
         Assert.Contains("END_PROC", result);
     }
+
+    // ====== Oracle dialect statements ======
+
+    private static string ParseAndFormatOracle(string sql)
+    {
+        var tokens = OracleLexer.Tokenize(sql).ToArray();
+        var parser = new OracleSqlParser(tokens);
+        var stmt = parser.Parse();
+        if (stmt is null) return "<PARSE FAILED>";
+        return NzSqlFormatter.Format(stmt);
+    }
+
+    [Fact]
+    public void Format_OracleAnonymousBlock_RoundTripsTokenRange()
+    {
+        var sql = """
+                  BEGIN
+                    IF :NEW.ID IS NULL THEN
+                      :NEW.ID := seq.NEXTVAL;
+                    END IF;
+                  END;
+                  """;
+
+        var result = ParseAndFormatOracle(sql);
+
+        Assert.Equal("BEGIN IF :NEW.ID IS NULL THEN :NEW.ID := seq . NEXTVAL; END IF; END", result);
+    }
+
+    [Fact]
+    public void Format_OracleAnonymousBlock_QQuotedString_KeepsQuotesAdjacent()
+    {
+        var sql = """
+                  BEGIN
+                    v := q'[it is here]';
+                  END;
+                  """;
+
+        var result = ParseAndFormatOracle(sql);
+
+        Assert.Equal("BEGIN v := q'[it is here]'; END", result);
+    }
+
+    [Fact]
+    public void Format_OracleProgramUnit_RoundTripsTokenRange()
+    {
+        var sql = """
+                  CREATE OR REPLACE PROCEDURE greet(name VARCHAR2)
+                  AS
+                  BEGIN
+                    DBMS_OUTPUT.PUT_LINE('Hello ' || name);
+                  END greet;
+                  """;
+
+        var result = ParseAndFormatOracle(sql);
+
+        Assert.Equal("CREATE OR REPLACE PROCEDURE greet ( name VARCHAR2 ) AS BEGIN DBMS_OUTPUT.PUT_LINE ( 'Hello ' || name ); END", result);
+    }
 }

@@ -1,4 +1,5 @@
 using JustyBase.NetezzaSqlParser.Authoring;
+using JustyBase.NetezzaSqlParser.Dialects;
 using JustyBase.NetezzaSqlParser.Visitor;
 using JustyBase.NetezzaSqlLsp.Protocol;
 
@@ -8,13 +9,14 @@ namespace JustyBase.NetezzaSqlLsp.Services;
 public static class HoverService
 {
     /// <summary>Returns hover content at the given position, or <see langword="null"/>.</summary>
-    public static Hover? GetHover(string text, int line, int character, ISchemaProvider? schema)
+    public static Hover? GetHover(string text, int line, int character, ISchemaProvider? schema, SqlDialect dialect = SqlDialect.Netezza)
     {
         if (string.IsNullOrEmpty(text))
             return null;
 
         int offset = LspTextUtilities.PositionToOffset(text, line, character);
-        var hover = NzHoverService.GetHover(text, offset, schema);
+        var catalog = dialect == SqlDialect.Oracle ? OracleSqlCatalog.Instance : null;
+        var hover = NzHoverService.GetHover(text, offset, schema, catalog: catalog, dialect: dialect);
         return hover is null
             ? null
             : new Hover(new MarkupContent("markdown", hover.Content), null);

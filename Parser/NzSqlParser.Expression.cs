@@ -13,7 +13,7 @@ public partial class NzSqlParser
 {
     // ====== Expressions (simple recursive descent) ======
 
-    private Expression ParseExpression()
+    protected Expression ParseExpression()
     {
         return ParseOrExpression();
     }
@@ -342,6 +342,10 @@ public partial class NzSqlParser
         if (t.Kind == NzToken.Parameter)
             return new ParameterExpression(FromToken(Advance()));
 
+        // Dialect hook: Oracle qualified function calls and bind variables.
+        if (TryParseDialectPrimary() is { } dialectExpr)
+            return dialectExpr;
+
         if (IsContextualIdentifier(t.Kind))
         {
             var id = Advance();
@@ -384,7 +388,13 @@ public partial class NzSqlParser
         return new Literal(FromToken(t), LiteralKind.Null, "NULL");
     }
 
-    private Expression ParseFunctionCall(Token<NzToken> name)
+    /// <summary>
+    /// Dialect hook: parses dialect-specific primary expressions (e.g. Oracle
+    /// qualified function calls and bind variables). Base returns null.
+    /// </summary>
+    protected virtual Expression? TryParseDialectPrimary() => null;
+
+    protected Expression ParseFunctionCall(Token<NzToken> name)
     {
         Expect(NzToken.LParen);
         var args = new List<Expression>();
@@ -711,7 +721,7 @@ public partial class NzSqlParser
         return new CastExpression(FromToken(c), expr, type);
     }
 
-    private DataTypeInfo ParseDataType()
+    protected DataTypeInfo ParseDataType()
     {
         var first = Peek().Kind == NzToken.QuotedIdentifier
             ? Advance()
@@ -759,12 +769,22 @@ public partial class NzSqlParser
             if (argList.Count > 0) args = argList;
         }
 
+        ParseDataTypeSuffix();
+
         return new DataTypeInfo(FromToken(first), string.Join(" ", nameParts), args);
+    }
+
+    /// <summary>
+    /// Dialect hook: consumes type-name suffixes such as Oracle's
+    /// TIMESTAMP WITH [LOCAL] TIME ZONE. Base does nothing.
+    /// </summary>
+    protected virtual void ParseDataTypeSuffix()
+    {
     }
 
     // ====== Helpers ======
 
-    private IReadOnlyList<Expression> ParseExpressionList()
+    protected IReadOnlyList<Expression> ParseExpressionList()
     {
         var list = new List<Expression>();
         list.Add(ParseExpression());
@@ -776,7 +796,7 @@ public partial class NzSqlParser
         return list;
     }
 
-    private IReadOnlyList<OrderByItem> ParseOrderByItems()
+    protected IReadOnlyList<OrderByItem> ParseOrderByItems()
     {
         var items = new List<OrderByItem>();
         items.Add(ParseOrderByItem());
