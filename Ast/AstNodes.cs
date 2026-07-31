@@ -35,7 +35,7 @@ public record ValidationError(string Message, string Severity, SourcePosition Po
 
 // ====== Core SQL Types ======
 
-public record ColumnInfo(string Name, string? Alias = null, SourcePosition? Position = null, string? DataType = null);
+public record ColumnInfo(string Name, string? Alias = null, SourcePosition? Position = null, string? DataType = null, string? Description = null);
 
 public record TableInfo(
     string Name,

@@ -228,6 +228,22 @@ public sealed class NzCompletionEngineTests
     }
 
     [Fact]
+    public void Alias_dot_prefers_data_type_and_documentation_when_present()
+    {
+        var schema = new InMemorySchemaProvider();
+        schema.AddTable(new TableInfo("employees", Columns:
+        [
+            new ColumnInfo("id", DataType: "INTEGER", Description: "Primary key"),
+            new ColumnInfo("name", DataType: "VARCHAR(100)", Description: "Display name")
+        ]));
+        var engine = new NzCompletionEngine(schema);
+        var i = engine.GetCompletions("SELECT e. FROM employees e", 9);
+
+        Assert.Contains(i, x => x.Label == "id" && x.Detail == "INTEGER" && x.Documentation == "Primary key");
+        Assert.Contains(i, x => x.Label == "name" && x.Detail == "VARCHAR(100)" && x.Documentation == "Display name");
+    }
+
+    [Fact]
     public void Update_where_table_dot_suggests_columns()
     {
         var i = _engine.GetCompletions("UPDATE employees WHERE employees.", 33);

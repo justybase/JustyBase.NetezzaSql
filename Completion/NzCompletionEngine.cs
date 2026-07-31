@@ -12,7 +12,8 @@ public record CompletionItem(
     CompletionKind Kind,
     string? Detail = null,
     int Priority = 0,
-    string? InsertText = null
+    string? InsertText = null,
+    string? Documentation = null
 );
 
 public enum CompletionKind
@@ -720,10 +721,7 @@ public class NzCompletionEngine
                 hasTables = true;
                 var displayName = table.Alias ?? table.Name;
                 foreach (var col in table.Columns)
-                {
-                    list.Add(new CompletionItem(col.Name, CompletionKind.Column,
-                        Detail: $"{displayName}.{col.Name}", Priority: 1));
-                }
+                    list.Add(CreateColumnItem(col, displayName));
             }
             // If AST found tables, use it exclusively (it's more accurate)
             if (hasTables) return;
@@ -741,10 +739,7 @@ public class NzCompletionEngine
                 if (info?.Columns is { Count: > 0 })
                 {
                     foreach (var col in info.Columns)
-                    {
-                        list.Add(new CompletionItem(col.Name, CompletionKind.Column,
-                            Detail: $"{tableName}.{col.Name}", Priority: 1));
-                    }
+                        list.Add(CreateColumnItem(col, tableName));
                     continue;
                 }
             }
@@ -754,10 +749,7 @@ public class NzCompletionEngine
             if (cteCols is not null && cteCols.Count > 0)
             {
                 foreach (var col in cteCols)
-                {
-                    list.Add(new CompletionItem(col, CompletionKind.Column,
-                        Detail: $"{tableName}.{col}", Priority: 1));
-                }
+                    list.Add(CreateColumnItem(col, tableName));
             }
         }
     }
@@ -773,10 +765,7 @@ public class NzCompletionEngine
             if (table?.Columns is { Count: > 0 })
             {
                 foreach (var col in table.Columns)
-                {
-                    list.Add(new CompletionItem(col.Name, CompletionKind.Column,
-                        Detail: $"{qualifier}.{col.Name}", Priority: 1));
-                }
+                    list.Add(CreateColumnItem(col, qualifier));
                 return;
             }
 
@@ -787,10 +776,7 @@ public class NzCompletionEngine
                 if (directInfo?.Columns is { Count: > 0 })
                 {
                     foreach (var col in directInfo.Columns)
-                    {
-                        list.Add(new CompletionItem(col.Name, CompletionKind.Column,
-                            Detail: $"{qualifier}.{col.Name}", Priority: 1));
-                    }
+                        list.Add(CreateColumnItem(col, qualifier));
                     return;
                 }
             }
@@ -804,10 +790,7 @@ public class NzCompletionEngine
         if (cteColumns is { Count: > 0 })
         {
             foreach (var col in cteColumns)
-            {
-                list.Add(new CompletionItem(col, CompletionKind.Column,
-                    Detail: $"{qualifier}.{col}", Priority: 1));
-            }
+                list.Add(CreateColumnItem(col, qualifier));
             return;
         }
 
@@ -824,10 +807,7 @@ public class NzCompletionEngine
             if (resolvedCteCols is { Count: > 0 })
             {
                 foreach (var col in resolvedCteCols)
-                {
-                    list.Add(new CompletionItem(col, CompletionKind.Column,
-                        Detail: $"{qualifier}.{col}", Priority: 1));
-                }
+                    list.Add(CreateColumnItem(col, qualifier));
                 return;
             }
 
@@ -842,10 +822,7 @@ public class NzCompletionEngine
                     if (pathInfo?.Columns is { Count: > 0 })
                     {
                         foreach (var col in pathInfo.Columns)
-                        {
-                            list.Add(new CompletionItem(col.Name, CompletionKind.Column,
-                                Detail: $"{qualifier}.{col.Name}", Priority: 1));
-                        }
+                            list.Add(CreateColumnItem(col, qualifier));
                         return;
                     }
                 }
@@ -854,10 +831,7 @@ public class NzCompletionEngine
                 if (info?.Columns is { Count: > 0 })
                 {
                     foreach (var col in info.Columns)
-                    {
-                        list.Add(new CompletionItem(col.Name, CompletionKind.Column,
-                            Detail: $"{qualifier}.{col.Name}", Priority: 1));
-                    }
+                        list.Add(CreateColumnItem(col, qualifier));
                     return;
                 }
             }
@@ -870,10 +844,7 @@ public class NzCompletionEngine
             if (directInfo?.Columns is { Count: > 0 })
             {
                 foreach (var col in directInfo.Columns)
-                {
-                    list.Add(new CompletionItem(col.Name, CompletionKind.Column,
-                        Detail: $"{qualifier}.{col.Name}", Priority: 1));
-                }
+                    list.Add(CreateColumnItem(col, qualifier));
             }
         }
     }
@@ -890,10 +861,7 @@ public class NzCompletionEngine
         if (info?.Columns is not { Count: > 0 }) return false;
 
         foreach (var col in info.Columns)
-        {
-            list.Add(new CompletionItem(col.Name, CompletionKind.Column,
-                Detail: $"{qualifier}.{col.Name}", Priority: 1));
-        }
+            list.Add(CreateColumnItem(col, qualifier));
 
         return true;
     }
@@ -1107,8 +1075,7 @@ public class NzCompletionEngine
         if (table?.Columns is null) return;
 
         foreach (var col in table.Columns)
-            list.Add(new CompletionItem(col.Name, CompletionKind.Column,
-                Detail: col.DataType, Priority: 5));
+            list.Add(CreateColumnItem(col, tableName, priority: 5));
     }
 
     private void AddAlterTablePhaseCompletions(List<CompletionItem> list, Token<NzToken>[] tokens)
@@ -1120,8 +1087,7 @@ public class NzCompletionEngine
             if (tableName is not null && _schema?.GetTable(null, null, tableName)?.Columns is { } cols)
             {
                 foreach (var col in cols)
-                    list.Add(new CompletionItem(col.Name, CompletionKind.Column,
-                        Detail: col.DataType, Priority: 5));
+                    list.Add(CreateColumnItem(col, tableName, priority: 5));
             }
         }
 
@@ -1242,6 +1208,25 @@ public class NzCompletionEngine
 
     private static bool IsWordChar(char c) =>
         char.IsLetterOrDigit(c) || c == '_' || c == '$' || c == '#';
+
+    /// <summary>
+    /// Column completion: Detail prefers data type; falls back to qualifier.Name when type is unknown.
+    /// </summary>
+    private static CompletionItem CreateColumnItem(ColumnInfo col, string qualifier, int priority = 1)
+    {
+        var detail = string.IsNullOrWhiteSpace(col.DataType)
+            ? $"{qualifier}.{col.Name}"
+            : col.DataType;
+        return new CompletionItem(
+            col.Name,
+            CompletionKind.Column,
+            Detail: detail,
+            Documentation: col.Description,
+            Priority: priority);
+    }
+
+    private static CompletionItem CreateColumnItem(string columnName, string qualifier, int priority = 1)
+        => new(columnName, CompletionKind.Column, Detail: $"{qualifier}.{columnName}", Priority: priority);
 }
 
 internal static class SqlContext
