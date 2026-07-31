@@ -40,11 +40,15 @@ public static class NetezzaPipeImportExecutor
         char delimiter = DefaultDelimiter,
         Encoding? encoding = null,
         long rowsCount = -1,
+        Action<long>? rowProgress = null,
+        long progressEvery = 10_000,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(reader);
         ArgumentException.ThrowIfNullOrWhiteSpace(pipeName);
         encoding ??= Utf8NoBom;
+        if (progressEvery <= 0)
+            progressEvery = 10_000;
 
         string escape = DefaultEscapeChar.ToString();
         string escapedDelimiter = escape + delimiter;
@@ -100,12 +104,17 @@ public static class NetezzaPipeImportExecutor
                 }
 
                 writer.Flush();
-                if (++progressLineNumber % 10_000 == 0 && sw.Elapsed > TimeSpan.FromSeconds(1))
+                progressLineNumber++;
+                if (progressLineNumber % progressEvery == 0)
                 {
-                    progress?.Invoke(rowsCount > 0
-                        ? $"{(double)progressLineNumber / rowsCount:P1} rows loaded"
-                        : $"{progressLineNumber:N0} rows loaded");
-                    sw.Restart();
+                    rowProgress?.Invoke(progressLineNumber);
+                    if (sw.Elapsed > TimeSpan.FromSeconds(1))
+                    {
+                        progress?.Invoke(rowsCount > 0
+                            ? $"{(double)progressLineNumber / rowsCount:P1} rows loaded"
+                            : $"{progressLineNumber:N0} rows loaded");
+                        sw.Restart();
+                    }
                 }
             }
 

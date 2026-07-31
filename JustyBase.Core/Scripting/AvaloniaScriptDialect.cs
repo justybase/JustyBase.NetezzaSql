@@ -138,7 +138,8 @@ public static partial class LegacyScriptDialectAdapter
         return sql;
     }
 
-    private static bool IsInsideQuotedLiteral(string text, int position)
+    /// <summary>Shared quote/comment scan used by Legacy directive processors.</summary>
+    public static bool IsInsideQuotedLiteral(string text, int position)
     {
         if (position <= 0 || position >= text.Length)
             return false;

@@ -81,6 +81,35 @@ public sealed class SharedCoreTests
         Assert.Equal(2.5m, stats.Maximum);
     }
 
+    [Fact]
+    public void SchemaContextMenuCatalog_formats_shared_sql_and_marks_host_only()
+    {
+        Assert.True(SchemaContextMenuCatalog.TryGet(SchemaContextMenuCatalog.Ids.Count, out var count));
+        Assert.Equal("SELECT COUNT(*) FROM DB.PUBLIC.T;", SchemaContextMenuCatalog.Format(count, "DB.PUBLIC.T"));
+        Assert.Contains("LIMIT 100", SchemaContextMenuCatalog.Format(SchemaContextMenuCatalog.Ids.SelectTop100, "T"));
+        Assert.True(SchemaContextMenuCatalog.GetRequired(SchemaContextMenuCatalog.Ids.Import).IsHostOnly);
+        Assert.True(SchemaContextMenuCatalog.GetRequired(SchemaContextMenuCatalog.Ids.Groom).IsDestructive);
+    }
+
+    [Fact]
+    public async Task LegacySqlDirectiveProcessor_processes_let_and_session_expression()
+    {
+        var known = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var let = LegacySqlDirectiveProcessor.ProcessLetDirectives("__Let $db=SYSTEM\nSELECT 1", known);
+        Assert.Equal("SYSTEM", known["$DB"]);
+
+        SessionVarDefinitionResult? session = await LegacySqlDirectiveProcessor.TryEvaluateSessionOrGlobalDefinitionAsync(
+            "__SessionVar__$counter = 1 + 2\nSELECT $counter",
+            known,
+            new Dictionary<string, string>(),
+            sqlEvaluator: null);
+
+        Assert.NotNull(session);
+        Assert.Equal("$counter", session!.VariableName);
+        Assert.Equal("3", session.EvaluatedValue);
+        Assert.DoesNotContain("__SessionVar__", session.SqlWithoutDefinition, StringComparison.OrdinalIgnoreCase);
+    }
+
     private sealed class TestBackend : ISqlExecutionBackend
     {
         public async IAsyncEnumerable<SqlExecutionEvent> ExecuteAsync(

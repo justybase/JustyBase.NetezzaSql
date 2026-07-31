@@ -11,6 +11,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\JustyBase.NetezzaDdl\JustyBase.NetezzaDdl.csproj" />
+    <PackageReference Include="Parquet.Net" Version="6.0.3" />
     <None Include="..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
   <ItemGroup>

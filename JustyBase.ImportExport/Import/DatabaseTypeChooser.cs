@@ -5,8 +5,9 @@ namespace JustyBase.ImportExport.Import;
 public sealed record DetectedColumn(string Name, string NetezzaType, bool IsNullable = true);
 
 /// <summary>
-/// UI-free type inference shared by CSV, Excel, and named-pipe import modes.
-/// Hosts can replace the sample source while keeping the resulting SQL model.
+/// UI-free batch type inference shared by sample-based CSV/pipe import modes.
+/// This is <b>not</b> a drop-in for Avalonia's streaming <c>DatabaseTypeChooser</c>
+/// (<c>InitTypes</c>/<c>ChooseTypes</c>); parity requires an explicit audit before unification.
 /// Text columns prefer <c>NVARCHAR</c> with length = ceil(maxLen × 1.2) rounded up to the next 10.
 /// </summary>
 public static class DatabaseTypeChooser

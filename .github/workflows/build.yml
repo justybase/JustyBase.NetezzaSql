@@ -31,13 +31,24 @@ jobs:
         run: dotnet test JustyBase.NetezzaSql.sln --no-build -c Release --verbosity normal
 
       - name: Pack
-        run: dotnet pack JustyBase.NetezzaSql.sln --no-build -c Release -o ./artifacts
+        shell: pwsh
+        run: |
+          $ver = '${{ github.event.release.tag_name }}'
+          if ([string]::IsNullOrWhiteSpace($ver)) {
+            dotnet pack JustyBase.NetezzaSql.sln --no-build -c Release -o ./artifacts
+          } else {
+            if ($ver.StartsWith('v')) { $ver = $ver.Substring(1) }
+            Write-Host "Packing with PackageVersion=$ver"
+            dotnet pack JustyBase.NetezzaSql.sln --no-build -c Release -o ./artifacts -p:PackageVersion=$ver
+          }
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
           name: nupkgs
-          path: ./artifacts/*.nupkg
+          path: |
+            ./artifacts/*.nupkg
+            ./artifacts/*.snupkg
 
   publish:
     if: github.event_name == 'release' && github.event.action == 'published'
@@ -67,6 +78,8 @@ jobs:
       - name: Push to NuGet
         shell: pwsh
         run: |
-          foreach ($file in Get-ChildItem ./artifacts/*.nupkg) {
-            dotnet nuget push $file.FullName --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+          $key = '${{ steps.login.outputs.NUGET_API_KEY }}'
+          foreach ($file in Get-ChildItem ./artifacts/*.nupkg, ./artifacts/*.snupkg -ErrorAction SilentlyContinue) {
+            Write-Host "Pushing $($file.Name)"
+            dotnet nuget push $file.FullName --api-key $key --source https://api.nuget.org/v3/index.json --skip-duplicate
           }
