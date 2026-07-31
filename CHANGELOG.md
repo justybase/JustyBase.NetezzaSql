@@ -4,6 +4,10 @@ All notable changes to this project will be documented here.
 
 ## Unreleased
 
+## 0.3.0-preview.8
+
+- Propagate column descriptions through NetezzaSchemaProviderAdapter for tooltip/completion metadata.
+
 ## 0.3.0-preview.7
 
 - Multi-dialect SQL authoring: Oracle and Db2 alongside Netezza (tokenizer, parser, formatter, lint, completion, hover).

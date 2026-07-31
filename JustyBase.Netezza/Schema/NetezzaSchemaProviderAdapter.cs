@@ -51,7 +51,8 @@ internal sealed class DefaultNetezzaSchemaProviderAdapter : INetezzaSchemaProvid
     {
         var columns = table.Columns?.Select(column => new ColumnInfo(
             column.Name,
-            DataType: column.DataType)).ToArray() ?? [];
+            DataType: column.DataType,
+            Description: column.Description)).ToArray() ?? [];
 
         provider.AddTable(new TableInfo(
             table.Name,

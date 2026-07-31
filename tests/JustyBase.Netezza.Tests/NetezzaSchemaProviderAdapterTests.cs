@@ -19,7 +19,7 @@ public sealed class NetezzaSchemaProviderAdapterTests
                 IsView: false,
                 Columns: [
                     new NetezzaSchemaColumn("ID", "INTEGER", Nullable: false),
-                    new NetezzaSchemaColumn("NAME", "VARCHAR(100)")]),
+                    new NetezzaSchemaColumn("NAME", "VARCHAR(100)", Description: "Customer display name")]),
             new NetezzaSchemaTable("ACTIVE_CUSTOMERS", "PUBLIC", "SALES", IsView: true)
         ], Version: 7);
 
@@ -30,6 +30,7 @@ public sealed class NetezzaSchemaProviderAdapterTests
         Assert.False(table!.IsView);
         Assert.Equal(["ID", "NAME"], table.Columns!.Select(c => c.Name));
         Assert.Equal("INTEGER", table.Columns![0].DataType);
+        Assert.Equal("Customer display name", table.Columns![1].Description);
         Assert.True(provider.GetTable("SALES", "PUBLIC", "ACTIVE_CUSTOMERS")!.IsView);
     }
 
