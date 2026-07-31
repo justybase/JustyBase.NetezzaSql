@@ -1,23 +1,24 @@
 # JustyBase Netezza SQL
 
-Open-source .NET libraries for working with Netezza SQL without requiring a live database connection.
+Open-source .NET libraries for working with SQL without requiring a live database connection.
 
-The solution contains six libraries:
+The solution ships six NuGet libraries plus a standalone LSP executable:
 
-| Library | Purpose |
+| Project | Purpose |
 | --- | --- |
-| `JustyBase.NetezzaSqlParser` | Lexer, recursive-descent parser, AST, formatter, linter, completion, and editor-authoring services. |
+| `JustyBase.NetezzaSqlParser` | Lexer, recursive-descent parser, AST, formatter, linter, completion, and editor-authoring services. Primary target is Netezza SQL / NZPLSQL; Oracle and Db2 dialects are also supported. |
 | `JustyBase.NetezzaDdl` | Netezza DDL text builders, identifier/literal helpers, import/maintenance SQL, and external-table option mapping. |
 | `JustyBase.NetezzaCatalogSql` | Reusable SQL statements for reading Netezza catalog metadata. |
 | `JustyBase.Netezza` | UI-agnostic metadata models, schema adapter for the parser, and DDL input mapping. |
 | `JustyBase.Core` | Shared host-agnostic app core: risk analysis, scripting dialect, execution contracts, schema cache/catalog ports. |
 | `JustyBase.ImportExport` | Shared Netezza import engines and tabular export writers used by Avalonia and Legacy hosts. |
+| `JustyBase.NetezzaSqlLsp` | NativeAOT Language Server Protocol executable built on the parser package (not published to NuGet). |
 
 ## Status
 
-This project is in active development and currently targets `net10.0`. The parser is designed for Netezza SQL and NZPLSQL grammar used by JustyBase tooling. It is not a database driver and does not open connections or execute SQL by itself. Shared app-core packages (`JustyBase.Core`, `JustyBase.ImportExport`) hold host-agnostic risk/import/export/scripting surfaces; see [docs/shared-core-status.md](docs/shared-core-status.md) for production vs scaffold.
+This project is in active development and currently targets `net10.0`. Netezza SQL and NZPLSQL remain the primary grammar and tooling focus. Oracle and Db2 dialects share the same lexer/parser/formatter/lint/completion/hover surfaces via `SqlDialect` (see [docs/node-parity.md](docs/node-parity.md)). The libraries are not a database driver and do not open connections or execute SQL by themselves. Shared app-core packages (`JustyBase.Core`, `JustyBase.ImportExport`) hold host-agnostic risk/import/export/scripting surfaces; see [docs/shared-core-status.md](docs/shared-core-status.md) for production vs scaffold.
 
-The public API and supported grammar may evolve before the first stable `1.0.0` release. Use tagged GitHub releases when consuming the source.
+The public API and supported grammar may evolve before the first stable `1.0.0` release. Prefer tagged GitHub releases when consuming packages.
 
 ## Parse and format SQL
 
@@ -100,20 +101,31 @@ Before pushing to `master`, prefer `Verify-Local.ps1` (build, tests, coverage ga
 
 The test suite covers parser and linter conformance, malformed SQL, runtime behavior, DDL helpers, and regression cases.
 
-Optional database-backed smoke tests are documented in [docs/live-tests.md](docs/live-tests.md).
+Optional database-backed smoke tests:
+
+- Netezza: [docs/live-tests.md](docs/live-tests.md) and `pwsh .\eng\Run-LiveImportProof.ps1`
+- Oracle / Db2 parser proof (local only): `pwsh .\eng\Run-OracleLiveProof.ps1` and `pwsh .\eng\Run-Db2LiveProof.ps1` — see [docs/local-ci.md](docs/local-ci.md)
 
 ## Create NuGet packages
 
-The four libraries can be packed independently:
+Pack all six libraries under the same `PackageVersion` (default from `Directory.Build.props`):
+
+```powershell
+dotnet pack .\JustyBase.NetezzaSql.sln -c Release -o .\artifacts
+```
+
+Or pack individually:
 
 ```powershell
 dotnet pack .\JustyBase.NetezzaSqlParser.csproj -c Release
 dotnet pack .\JustyBase.NetezzaDdl\JustyBase.NetezzaDdl.csproj -c Release
 dotnet pack .\JustyBase.NetezzaCatalogSql\JustyBase.NetezzaCatalogSql.csproj -c Release
 dotnet pack .\JustyBase.Netezza\JustyBase.Netezza.csproj -c Release
+dotnet pack .\JustyBase.Core\JustyBase.Core.csproj -c Release
+dotnet pack .\JustyBase.ImportExport\JustyBase.ImportExport.csproj -c Release
 ```
 
-Each package includes README and XML documentation. The CI workflow builds, tests, packs, and uploads all four packages as one artifact.
+Each package includes README and XML documentation. On push/PR, CI builds, tests, packs, and uploads all packages as one artifact. Publishing a GitHub Release (tag like `v0.3.0-preview.7`) runs the same workflow’s **publish** job and pushes `.nupkg` / `.snupkg` to NuGet.org via OIDC. See [docs/release.md](docs/release.md).
 
 ## Runnable examples
 
@@ -127,7 +139,7 @@ The sample uses in-memory metadata and does not connect to a Netezza database.
 
 ## Compatibility and limitations
 
-- Netezza-specific SQL and NZPLSQL syntax is the primary compatibility target.
+- Netezza-specific SQL and NZPLSQL syntax is the primary compatibility target; Oracle and Db2 dialects are supported on the shared authoring stack.
 - Parser support is intentionally broader than the formatter's canonical output for some command-tail statements.
 - Catalog SQL is generated as text; callers remain responsible for connection management, permissions, and execution.
 - The libraries do not validate that generated SQL is accepted by a particular Netezza appliance version.
@@ -135,10 +147,7 @@ The sample uses in-memory metadata and does not connect to a Netezza database.
 
 See [docs/compatibility.md](docs/compatibility.md) for the supported surface and [CONTRIBUTING.md](CONTRIBUTING.md) for development guidance.
 
-The Node.js-to-C# behavioral boundary is maintained in
-[docs/node-parity.md](docs/node-parity.md). The project does not publish from
-CI; see [docs/release.md](docs/release.md) for the manual GitHub and NuGet
-handoff.
+The Node.js-to-C# behavioral boundary (including Oracle/Db2 dialect mapping) is maintained in [docs/node-parity.md](docs/node-parity.md).
 
 ## License
 
