@@ -4,6 +4,12 @@ All notable changes to this project will be documented here.
 
 ## Unreleased
 
+## 0.3.0-preview.7
+
+- Multi-dialect SQL authoring: Oracle and Db2 alongside Netezza (tokenizer, parser, formatter, lint, completion, hover).
+- Add Oracle program-unit AST/structures and Db2 statement support; dialect-aware service wiring.
+- Document Db2 live proof via `eng/Run-Db2LiveProof.ps1`; bump dependent package versions.
+
 ## 0.3.0-preview.5
 
 - Large-document SQL authoring: progressive lex→full semantic coloring; lex-only above 150k chars (no empty spans for huge line counts alone).
