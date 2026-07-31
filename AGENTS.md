@@ -11,6 +11,7 @@ This repository contains .NET 10 class libraries for Netezza SQL tooling and sha
 - `JustyBase.Core/` is the shared app core (risk, scripting dialect, execution contracts, schema cache ports, history/vars, grid stats, credentials/DB ports).
 - `JustyBase.ImportExport/` is the shared import/export engine (Netezza pipe/CSV import, tabular export).
 - `JustyBase.NetezzaSqlLsp/` contains the standalone NativeAOT LSP executable built on the parser package.
+- `tests/JustyBase.NetezzaSql.Db2LiveTests/` is an optional live Db2 proof project (clidriver); run via `eng/Run-Db2LiveProof.ps1`, not solution-wide `dotnet test`.
 
 Keep related partial-class files together (for example, `Parser/NzSqlParser.*.cs`). Do not place build output from `bin/` or `obj/` under source control.
 

@@ -116,7 +116,7 @@ public static class NzHoverService
 
         try
         {
-            var tokens = (dialect == SqlDialect.Oracle ? OracleLexer.Tokenize(text) : NzLexer.Tokenize(text)).ToArray();
+            var tokens = DialectRuntime.Tokenize(text, dialect).ToArray();
             if (tokens.Length == 0)
                 return null;
 

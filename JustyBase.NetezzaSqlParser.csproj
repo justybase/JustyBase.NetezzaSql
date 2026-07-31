@@ -25,6 +25,7 @@
     <Compile Remove="samples\**\*.cs" />
     <Compile Remove="artifacts\**\*.cs" />
     <Compile Remove="tmp_diag\**\*.cs" />
+    <Compile Remove="tmp_*\**\*.cs" />
     <Compile Remove="eng\**\*.cs" />
   </ItemGroup>
 

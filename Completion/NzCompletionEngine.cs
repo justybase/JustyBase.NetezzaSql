@@ -1205,9 +1205,7 @@ public class NzCompletionEngine
     {
         try
         {
-            var result = _dialect == SqlDialect.Oracle
-                ? OracleLexer.Tokenize(prefix)
-                : NzLexer.Tokenize(prefix);
+            var result = DialectRuntime.Tokenize(prefix, _dialect);
             return result.ToArray();
         }
         catch

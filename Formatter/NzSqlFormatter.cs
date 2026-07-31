@@ -117,6 +117,25 @@ public sealed class NzSqlFormatter
             case OracleProgramUnitStatement oracleUnit:
                 FormatOracleTokenRange(oracleUnit.Tokens);
                 break;
+            case Db2ProcedureUnitStatement db2Proc:
+                FormatOracleTokenRange(db2Proc.Tokens);
+                break;
+            case Db2DeclareGlobalTempTableStatement dgtt:
+                Write("DECLARE GLOBAL TEMPORARY TABLE ");
+                Write(FormatTableName(dgtt.Name));
+                break;
+            case Db2CreateAliasStatement alias:
+                Write("CREATE ALIAS ");
+                Write(FormatTableName(alias.Alias));
+                Write(" FOR ");
+                Write(FormatTableName(alias.Target));
+                break;
+            case Db2CreateNicknameStatement nickname:
+                Write("CREATE NICKNAME ");
+                Write(FormatTableName(nickname.Nickname));
+                Write(" FOR ");
+                Write(FormatTableName(nickname.Target));
+                break;
             default:
                 Write("?");
                 break;

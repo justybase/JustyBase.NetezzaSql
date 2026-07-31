@@ -15,7 +15,7 @@ public static class HoverService
             return null;
 
         int offset = LspTextUtilities.PositionToOffset(text, line, character);
-        var catalog = dialect == SqlDialect.Oracle ? OracleSqlCatalog.Instance : null;
+        var catalog = DialectRuntime.AuthoringCatalogOrNull(dialect);
         var hover = NzHoverService.GetHover(text, offset, schema, catalog: catalog, dialect: dialect);
         return hover is null
             ? null

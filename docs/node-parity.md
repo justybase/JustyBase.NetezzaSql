@@ -16,6 +16,11 @@ VS Code, a connection manager, or query execution.
 | Oracle quality rules | `extensions/oracle/src/sql/qualityRules.ts` | `OracleLintRules` (ORA001-ORA004) via `QualityRuleRegistry.AddRules` | supported |
 | Oracle SQL authoring | `extensions/oracle/src/sql/authoring.ts` | `OracleSqlCatalog` through `ISqlAuthoringCatalog` (completion, hover, signature help) | supported |
 | Oracle formatter output | — (no TS formatter override) | token-range reconstruction for Oracle statements in `NzSqlFormatter` | supported |
+| Db2 dialect lexer | `src/dialects/db2/sql/lexer.ts` | `Db2Lexer` (Db2* multi-word tokens before shared chain) | supported |
+| Db2 dialect parser | `src/dialects/db2/sql/parser.ts` | `Db2SqlParser` partials; DGTT/ALIAS/NICKNAME/PROCEDURE; FINAL TABLE; PAR001 rejections | supported |
+| Db2 quality rules | `extensions/db2/src/sql/qualityRules.ts` | `Db2LintRules` (DB2001–DB2008) via dialect-only `QualityRuleRegistry` | supported |
+| Db2 SQL authoring | `extensions/db2/src/sql/authoring.ts` | `Db2SqlCatalog` through `ISqlAuthoringCatalog` | supported |
+| Dialect dispatch | — | `DialectRuntime` (`Tokenize`/`CreateParser`/`QualityRules`/`AuthoringCatalog`) | supported |
 | Query flow and CTE refactoring | `queryStructureAnalyzer.ts`, `flowAnalyzer.ts` | no public C# API | intentionally deferred |
 | Connections, execution and VS Code UI | extension host | no public C# API | out of scope |
 
@@ -45,9 +50,24 @@ offsets are preserved by the lexer and parser.
 - Oracle quality rules and authoring live in `extensions/oracle/src/sql/`
   (not in `src/dialects/oracle`); they are composed per document in the C# LSP
   through `SqlDialect` (`Dialects/SqlDialect.cs`) with `--dialect` startup
-  argument or the `justy/setDialect` request.
+  argument or the `justy/setDialect` request (`netezza` | `oracle` | `db2`).
 - q-quoted strings (`q'[...]'`) tokenize as `q` identifier + string literal in
   both the TS and C# lexers; embedded quote handling is preserved only in the
   linter's statement scanner (`OracleLintHelpers.StatementEnd`).
 - Netezza-only constructs (LIMIT, `DB..TABLE`, DISTRIBUTE/ORGANIZE, EXTERNAL
   TABLE, GROOM, GENERATE STATISTICS) are rejected in Oracle mode with PAR001.
+
+## Db2 dialect mapping notes
+
+- The TS `src/dialects/db2` project contains the lexer and parser; quality rules
+  and authoring live in `extensions/db2/src/sql/`. C# mirrors that split via
+  `Db2Lexer` / `Db2SqlParser` / `Db2LintRules` / `Db2SqlCatalog`, composed through
+  `DialectRuntime` and `SqlDialect.Db2`.
+- Isolation phrases (`WITH UR|CS|RS|RR`) and `FOR READ ONLY` are registered
+  before shared `WITH` / `FOR` so they win in the lexer (same order as TS).
+- SQL PL procedure bodies are opaque token ranges (`Db2ProcedureUnitStatement`);
+  deep SQL PL visitor coverage is intentionally deferred.
+- Live proof: `eng/Run-Db2LiveProof.ps1` against `DB2_LIVE_TEST_*` (soft-skip
+  without env/driver; fail-fast when `DB2_LIVE_TEST_REQUIRED=true`). Hosted in
+  `tests/JustyBase.NetezzaSql.Db2LiveTests` (not part of solution `dotnet test`)
+  so missing `db2app64`/clidriver cannot crash the shared IntegrationTests host.

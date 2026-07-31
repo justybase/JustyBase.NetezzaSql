@@ -293,4 +293,38 @@ public sealed class NzSqlFormatterTests
 
         Assert.Equal("CREATE OR REPLACE PROCEDURE greet ( name VARCHAR2 ) AS BEGIN DBMS_OUTPUT.PUT_LINE ( 'Hello ' || name ); END", result);
     }
+
+    // ====== Db2 dialect statements ======
+
+    private static string ParseAndFormatDb2(string sql)
+    {
+        var tokens = Db2Lexer.Tokenize(sql).ToArray();
+        var parser = new Db2SqlParser(tokens);
+        var stmt = parser.Parse();
+        if (stmt is null) return "<PARSE FAILED>";
+        return NzSqlFormatter.Format(stmt);
+    }
+
+    [Fact]
+    public void Format_Db2DeclareGlobalTemp_IncludesTableName()
+    {
+        var result = ParseAndFormatDb2(
+            "DECLARE GLOBAL TEMPORARY TABLE SESSION.TMP1 (ID INTEGER) ON COMMIT PRESERVE ROWS");
+        Assert.Equal("DECLARE GLOBAL TEMPORARY TABLE SESSION.TMP1", result);
+    }
+
+    [Fact]
+    public void Format_Db2CreateAlias_IncludesNames()
+    {
+        var result = ParseAndFormatDb2("CREATE ALIAS APP.ORDERS_A FOR APP.ORDERS");
+        Assert.Equal("CREATE ALIAS APP.ORDERS_A FOR APP.ORDERS", result);
+    }
+
+    [Fact]
+    public void Format_Db2CreateNickname_IncludesNames()
+    {
+        var result = ParseAndFormatDb2(
+            "CREATE NICKNAME APP.REMOTE_ORDERS FOR FEDSERVER.REMOTE_SCHEMA.ORDERS");
+        Assert.Equal("CREATE NICKNAME APP.REMOTE_ORDERS FOR FEDSERVER.REMOTE_SCHEMA.ORDERS", result);
+    }
 }

@@ -153,10 +153,8 @@ public sealed class DocumentParseSession : IDisposable
             // before tokenization so the core grammar can parse the labelled
             // LOOP/FOR statement identically to its unlabelled form.
             sql = Regex.Replace(sql, @"<<\s*[A-Za-z_][A-Za-z0-9_]*\s*>>", "", RegexOptions.CultureInvariant);
-            var tokens = (dialect == SqlDialect.Oracle ? OracleLexer.Tokenize(sql) : NzLexer.Tokenize(sql)).ToArray();
-            var parser = dialect == SqlDialect.Oracle
-                ? new OracleSqlParser(tokens)
-                : new NzSqlParser(tokens);
+            var tokens = DialectRuntime.Tokenize(sql, dialect).ToArray();
+            var parser = DialectRuntime.CreateParser(tokens, dialect);
             var statements = new List<Statement>();
             var errors = new List<ValidationError>();
 

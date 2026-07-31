@@ -1,8 +1,6 @@
 using JustyBase.NetezzaSqlParser.Ast;
 using JustyBase.NetezzaSqlParser.Dialects;
-using JustyBase.NetezzaSqlParser.Lexer;
 using JustyBase.NetezzaSqlParser.Linter;
-using JustyBase.NetezzaSqlParser.Parser;
 using JustyBase.NetezzaSqlParser.Visitor;
 using JustyBase.NetezzaSqlLsp.Protocol;
 
@@ -11,12 +9,6 @@ namespace JustyBase.NetezzaSqlLsp.Services;
 /// <summary>Produces LSP diagnostics for a SQL document.</summary>
 public static class LintService
 {
-    private static readonly QualityRuleRegistry NetezzaRules = new(NzLintRules.AllRules);
-    private static readonly QualityRuleRegistry OracleRules = CreateOracleRules();
-
-    private static QualityRuleRegistry CreateOracleRules() =>
-        new(OracleLintRules.AllRules);
-
     /// <summary>Lints the given SQL text using regex rules and semantic (parser + visitor) validation.</summary>
     /// <param name="sql">The SQL source text.</param>
     /// <param name="schema">Optional schema provider for semantic validation.</param>
@@ -25,7 +17,6 @@ public static class LintService
     public static IReadOnlyList<Diagnostic> Lint(string sql, ISchemaProvider? schema, SqlDialect dialect = SqlDialect.Netezza)
     {
         var issues = new List<Diagnostic>();
-        var isOracle = dialect == SqlDialect.Oracle;
 
         if (string.IsNullOrEmpty(sql))
             return issues;
@@ -33,9 +24,9 @@ public static class LintService
         // Pre-compute line start offsets for O(1) position conversion
         var lineOffsets = ComputeLineOffsets(sql);
 
-        // 1. Text-based regex rules (NZ* for Netezza, ORA* for Oracle — never mixed)
-        var registry = isOracle ? OracleRules : NetezzaRules;
-        var source = isOracle ? "Oracle SQL" : "Netezza SQL";
+        // 1. Text-based regex rules — dialect registry only (never mixed)
+        var registry = DialectRuntime.QualityRules(dialect);
+        var source = DialectRuntime.DiagnosticSource(dialect);
         foreach (var rule in registry.AllRules)
         {
             foreach (var result in rule.Check(sql))
@@ -49,8 +40,8 @@ public static class LintService
         {
             try
             {
-                var tokens = (isOracle ? OracleLexer.Tokenize(sql) : NzLexer.Tokenize(sql)).ToArray();
-                var parser = isOracle ? new OracleSqlParser(tokens) : new NzSqlParser(tokens);
+                var tokens = DialectRuntime.Tokenize(sql, dialect).ToArray();
+                var parser = DialectRuntime.CreateParser(tokens, dialect);
                 Statement? stmt;
 
                 // Dedup set for parser errors

@@ -743,3 +743,30 @@ public record OracleReturningClause(
     IReadOnlyList<string> Columns,
     IReadOnlyList<string> IntoVariables
 ) : AstNode(Position);
+
+// ====== Db2 dialect statements ======
+// Thin SQL PL / DGTT / ALIAS / NICKNAME units keep offset-stable token ranges
+// (or simple names) until deeper SQL PL visitor work lands.
+
+public record Db2DeclareGlobalTempTableStatement(
+    SourcePosition Position,
+    TableName Name
+) : Statement(Position);
+
+public record Db2CreateAliasStatement(
+    SourcePosition Position,
+    TableName Alias,
+    TableName Target
+) : Statement(Position);
+
+public record Db2CreateNicknameStatement(
+    SourcePosition Position,
+    TableName Nickname,
+    TableName Target
+) : Statement(Position);
+
+public record Db2ProcedureUnitStatement(
+    SourcePosition Position,
+    TableName Name,
+    IReadOnlyList<Token<NzToken>> Tokens
+) : Statement(Position);

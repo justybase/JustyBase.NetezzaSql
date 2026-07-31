@@ -130,6 +130,10 @@ public partial class NzSqlVisitor
             // TypeScript visitor, which has no Oracle-specific handling).
             case OracleAnonymousBlockStatement s: break;
             case OracleProgramUnitStatement s: break;
+            case Db2DeclareGlobalTempTableStatement s: break;
+            case Db2CreateAliasStatement s: break;
+            case Db2CreateNicknameStatement s: break;
+            case Db2ProcedureUnitStatement s: break;
         }
     }
 

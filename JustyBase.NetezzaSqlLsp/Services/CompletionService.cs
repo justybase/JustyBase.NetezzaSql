@@ -44,7 +44,7 @@ public static class CompletionService
                 currentLine++;
         }
 
-        var catalog = dialect == SqlDialect.Oracle ? OracleSqlCatalog.Instance : null;
+        var catalog = DialectRuntime.AuthoringCatalogOrNull(dialect);
         var engine = new NzCompletionEngine(schema, catalog: catalog, dialect: dialect);
         var items = engine.GetCompletions(text, offset);
 

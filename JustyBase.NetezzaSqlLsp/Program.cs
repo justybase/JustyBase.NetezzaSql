@@ -13,9 +13,9 @@ using System.Text.Json;
 Console.InputEncoding = System.Text.Encoding.UTF8;
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 
-// --dialect netezza|oracle selects the default SQL dialect; clients can
+// --dialect netezza|oracle|db2 selects the default SQL dialect; clients can
 // switch it at runtime with the justy/setDialect request.
-// Accepts both --dialect=oracle and --dialect oracle.
+// Accepts both --dialect=oracle and --dialect oracle (likewise db2).
 var dialect = LspDialectArgs.Parse(args);
 
 var input = Console.OpenStandardInput();
@@ -64,9 +64,7 @@ server.RegisterRequestHandler("justy/setDialect", async (root, id, ct) =>
     try
     {
         var value = root.GetProperty("params").GetProperty("dialect").GetString() ?? "netezza";
-        dialect = value.Equals("oracle", StringComparison.OrdinalIgnoreCase)
-            ? SqlDialect.Oracle
-            : SqlDialect.Netezza;
+        dialect = DialectRuntime.ParseName(value);
         parsingCoordinator.Clear();
         semanticClassifier = new NzSemanticTokenClassifier(schema, parsingCoordinator, dialect);
         await server.SendResult(id!, "ok", ct);

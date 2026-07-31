@@ -14,7 +14,7 @@ public static class SignatureHelpService
             return null;
 
         int offset = LspTextUtilities.PositionToOffset(text, line, character);
-        var catalog = dialect == SqlDialect.Oracle ? OracleSqlCatalog.Instance : null;
+        var catalog = DialectRuntime.AuthoringCatalogOrNull(dialect);
         var signatureHelp = NzSignatureHelpService.GetSignatureHelp(text, offset, catalog: catalog, dialect: dialect);
         if (signatureHelp is null)
             return null;

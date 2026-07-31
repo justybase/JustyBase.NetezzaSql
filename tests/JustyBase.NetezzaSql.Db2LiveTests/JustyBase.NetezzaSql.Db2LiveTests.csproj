@@ -4,16 +4,15 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <!-- Kept out of solution-wide `dotnet test` (Verify-Local): Net.IBM.Data.Db2
+         finalizers crash the host when db2app64/clidriver is absent. Run via
+         eng/Run-Db2LiveProof.ps1 only. -->
+    <IsTestProject>true</IsTestProject>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="coverlet.collector" Version="10.0.1">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
-    <PackageReference Include="JustyBase.NetezzaDriver" Version="1.7.2" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
-    <PackageReference Include="Oracle.ManagedDataAccess.Core" Version="23.26.300" />
+    <PackageReference Include="Net.IBM.Data.Db2" Version="10.0.0.200" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
       <PrivateAssets>all</PrivateAssets>
@@ -22,10 +21,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\JustyBase.NetezzaCatalogSql\JustyBase.NetezzaCatalogSql.csproj" />
-    <ProjectReference Include="..\..\JustyBase.NetezzaDdl\JustyBase.NetezzaDdl.csproj" />
-    <ProjectReference Include="..\..\JustyBase.Core\JustyBase.Core.csproj" />
-    <ProjectReference Include="..\..\JustyBase.ImportExport\JustyBase.ImportExport.csproj" />
     <ProjectReference Include="..\..\JustyBase.NetezzaSqlParser.csproj" />
     <ProjectReference Include="..\..\JustyBase.NetezzaSqlLsp\JustyBase.NetezzaSqlLsp.csproj" />
   </ItemGroup>

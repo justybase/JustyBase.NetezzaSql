@@ -152,7 +152,7 @@ public sealed class NzSemanticTokenClassifier
         Token<NzToken>[] tokens;
         try
         {
-            tokens = (_dialect == SqlDialect.Oracle ? OracleLexer.Tokenize(sql) : NzLexer.Tokenize(sql)).ToArray();
+            tokens = DialectRuntime.Tokenize(sql, _dialect).ToArray();
         }
         catch
         {

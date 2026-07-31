@@ -94,7 +94,9 @@ public partial class NzSqlParser
     protected static bool IsContextualIdentifier(NzToken kind) => kind is
         NzToken.Identifier or NzToken.QuotedIdentifier or NzToken.Replace
         or NzToken.Owner or NzToken.Hash or NzToken.Start or NzToken.Out or NzToken.Inout
-        or NzToken.Perform or NzToken.Reverse or NzToken.Warning or NzToken.Within;
+        or NzToken.Perform or NzToken.Reverse or NzToken.Warning or NzToken.Within
+        // Db2-only tokens (never emitted by NzLexer / OracleLexer).
+        or NzToken.Db2Identity or NzToken.Db2Nickname;
 
     protected bool IsSetOperationStart() => Peek().Kind is NzToken.Union or NzToken.Intersect or NzToken.Except or NzToken.MinusSet
         || (Peek().Kind == NzToken.Identifier &&
@@ -239,7 +241,7 @@ public partial class NzSqlParser
         return false;
     }
 
-    private void ParseCommandTail()
+    protected void ParseCommandTail()
     {
         while (Peek().Kind != NzToken.Semicolon && Peek().Kind != NzToken.Unknown)
         {
@@ -262,7 +264,7 @@ public partial class NzSqlParser
         }
     }
 
-    private Statement ParseCommandTailFallback(Token<NzToken> startTok)
+    protected Statement ParseCommandTailFallback(Token<NzToken> startTok)
     {
         ParseCommandTail();
         return new SetStatement(FromToken(startTok));

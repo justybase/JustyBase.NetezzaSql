@@ -203,8 +203,11 @@ public partial class NzSqlParser
         IReadOnlyList<ColumnConstraint>? constraints = null;
         var consList = new List<ColumnConstraint>();
 
-        while (IsColumnConstraintStart())
+        while (IsColumnConstraintStart() || IsDialectColumnClauseStart())
         {
+            if (TryParseDialectColumnClause())
+                continue;
+
             if (Peek().Kind == NzToken.Constraint)
             {
                 Advance();
@@ -242,6 +245,18 @@ public partial class NzSqlParser
         if (consList.Count > 0) constraints = consList;
         return new ColumnDefinition(colPos, colName, dataType, notNull, defaultValue, constraints);
     }
+
+    /// <summary>
+    /// Dialect hook: true when the next token starts a dialect-specific column
+    /// clause (e.g. Db2 GENERATED ALWAYS AS IDENTITY).
+    /// </summary>
+    protected virtual bool IsDialectColumnClauseStart() => false;
+
+    /// <summary>
+    /// Dialect hook: consume a dialect-specific column clause. Returns true when
+    /// a clause was consumed.
+    /// </summary>
+    protected virtual bool TryParseDialectColumnClause() => false;
 
     private bool IsColumnConstraintStart()
     {
