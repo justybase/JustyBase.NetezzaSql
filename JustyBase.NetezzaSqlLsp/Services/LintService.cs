@@ -1,4 +1,5 @@
 using JustyBase.NetezzaSqlParser.Ast;
+using JustyBase.NetezzaSqlParser.Caching;
 using JustyBase.NetezzaSqlParser.Dialects;
 using JustyBase.NetezzaSqlParser.Linter;
 using JustyBase.NetezzaSqlParser.Visitor;
@@ -47,21 +48,26 @@ public static class LintService
                 // Dedup set for parser errors
                 var seenParserErrors = new HashSet<(string message, int offset)>();
 
-                while (true)
+                while (parser.Position < tokens.Length)
                 {
-                    var errorsBefore = parser.Errors.Count;
+                    var positionBefore = parser.Position;
+                    var errorsBefore = parser.ErrorCount;
                     stmt = parser.Parse();
 
-                    for (int i = errorsBefore; i < parser.Errors.Count; i++)
+                    foreach (var perr in parser.GetErrorsSince(errorsBefore))
                     {
-                        var perr = parser.Errors[i];
                         if (perr.Position.Absolute >= sql.Length) continue;
                         if (!seenParserErrors.Add((perr.Message, perr.Position.Absolute)))
                             continue;
                         issues.Add(MapParserError(perr, sql, lineOffsets, source));
                     }
 
-                    if (stmt is null) break;
+                    if (stmt is null)
+                    {
+                        if (parser.Position <= positionBefore)
+                            break;
+                        continue;
+                    }
 
                     var visitor = new NzSqlVisitor(schema);
                     visitor.Visit(stmt);
@@ -71,6 +77,9 @@ public static class LintService
                         if (err.Position.Absolute >= sql.Length) continue;
                         issues.Add(MapVisitorError(err, sql, lineOffsets, source));
                     }
+
+                    if (parser.Position <= positionBefore)
+                        break;
                 }
             }
             catch
@@ -80,6 +89,20 @@ public static class LintService
         }
 
         return issues;
+    }
+
+    internal static IReadOnlyList<Diagnostic> MapLintResult(
+        LintResult result,
+        string sql,
+        string source)
+    {
+        if (string.IsNullOrEmpty(sql) || result.Issues.Count == 0)
+            return Array.Empty<Diagnostic>();
+
+        var lineOffsets = ComputeLineOffsets(sql);
+        return result.Issues
+            .Select(issue => MapLintIssue(issue, sql, lineOffsets, source))
+            .ToArray();
     }
 
     private static int[] ComputeLineOffsets(string text)
@@ -96,16 +119,21 @@ public static class LintService
     private static Position OffsetToPosition(int offset, int[] lineOffsets)
     {
         if (offset <= 0) return new Position(0, 0);
-        int line = 0;
-        for (int i = 1; i < lineOffsets.Length; i++)
+        var low = 0;
+        var high = lineOffsets.Length - 1;
+        while (low <= high)
         {
-            if (lineOffsets[i] > offset)
+            var middle = low + ((high - low) / 2);
+            if (lineOffsets[middle] <= offset)
             {
-                line = i - 1;
-                return new Position(line, offset - lineOffsets[line]);
+                low = middle + 1;
+            }
+            else
+            {
+                high = middle - 1;
             }
         }
-        line = lineOffsets.Length - 1;
+        var line = Math.Max(0, high);
         return new Position(line, offset - lineOffsets[line]);
     }
 
@@ -174,4 +202,137 @@ public static class LintService
             err.Message
         );
     }
+}
+
+/// <summary>
+/// Owns incremental lint engines for open LSP documents. Each document/dialect
+/// pair shares the parse runtime used by semantic classification.
+/// </summary>
+public sealed class LintCoordinator : IDisposable
+{
+    private readonly DocumentParsingCoordinator _parsingCoordinator;
+    private readonly Dictionary<string, LintEngine> _engines = new(StringComparer.Ordinal);
+    private readonly object _lock = new();
+    private bool _disposed;
+
+    public LintCoordinator(DocumentParsingCoordinator parsingCoordinator)
+    {
+        _parsingCoordinator = parsingCoordinator ?? throw new ArgumentNullException(nameof(parsingCoordinator));
+    }
+
+    public IReadOnlyList<Diagnostic> Lint(
+        string sql,
+        ISchemaProvider? schema,
+        SqlDialect dialect,
+        string documentUri,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(sql);
+        ArgumentNullException.ThrowIfNull(documentUri);
+
+        if (string.IsNullOrEmpty(sql))
+            return Array.Empty<Diagnostic>();
+
+        LintEngine engine;
+        lock (_lock)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            var key = MakeKey(documentUri, dialect);
+            if (!_engines.TryGetValue(key, out var existing))
+            {
+                var runtime = _parsingCoordinator.GetOrCreate(documentUri, dialect);
+                engine = new LintEngine(dialect, runtime);
+                _engines[key] = engine;
+            }
+            else
+            {
+                engine = existing;
+            }
+        }
+
+        LintResult result;
+        try
+        {
+            result = engine.RunFullLint(new LintConfig(
+                sql,
+                schema,
+                documentUri,
+                CancellationToken: cancellationToken,
+                Dialect: dialect));
+        }
+        catch (ObjectDisposedException)
+        {
+            // DocumentParsingCoordinator may evict an idle runtime while this
+            // coordinator still holds its engine. Recreate the pair lazily.
+            lock (_lock)
+            {
+                if (_engines.Remove(MakeKey(documentUri, dialect), out var stale))
+                    stale.Dispose();
+
+                var runtime = _parsingCoordinator.GetOrCreate(documentUri, dialect);
+                engine = new LintEngine(dialect, runtime);
+                _engines[MakeKey(documentUri, dialect)] = engine;
+            }
+
+            result = engine.RunFullLint(new LintConfig(
+                sql,
+                schema,
+                documentUri,
+                CancellationToken: cancellationToken,
+                Dialect: dialect));
+        }
+
+        return LintService.MapLintResult(
+            result,
+            sql,
+            DialectRuntime.DiagnosticSource(dialect));
+    }
+
+    public void Release(string documentUri)
+    {
+        lock (_lock)
+        {
+            var prefix = string.IsNullOrWhiteSpace(documentUri)
+                ? "default\0"
+                : documentUri + "\0";
+            var keys = _engines.Keys
+                .Where(key => key.StartsWith(prefix, StringComparison.Ordinal))
+                .ToArray();
+
+            foreach (var key in keys)
+            {
+                _engines[key].Dispose();
+                _engines.Remove(key);
+            }
+        }
+
+        _parsingCoordinator.Release(documentUri);
+    }
+
+    public void Clear()
+    {
+        lock (_lock)
+        {
+            foreach (var engine in _engines.Values)
+                engine.Dispose();
+            _engines.Clear();
+        }
+    }
+
+    public void Dispose()
+    {
+        lock (_lock)
+        {
+            if (_disposed)
+                return;
+
+            _disposed = true;
+            foreach (var engine in _engines.Values)
+                engine.Dispose();
+            _engines.Clear();
+        }
+    }
+
+    private static string MakeKey(string documentUri, SqlDialect dialect) =>
+        (string.IsNullOrWhiteSpace(documentUri) ? "default" : documentUri) + "\0" + dialect;
 }

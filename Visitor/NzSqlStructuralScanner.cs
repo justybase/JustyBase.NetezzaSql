@@ -1,4 +1,5 @@
 using JustyBase.NetezzaSqlParser.Ast;
+using JustyBase.NetezzaSqlParser.Dialects;
 using JustyBase.NetezzaSqlParser.Lexer;
 using JustyBase.NetezzaSqlParser.Linter;
 using Superpower.Model;
@@ -8,6 +9,9 @@ namespace JustyBase.NetezzaSqlParser.Visitor;
 public static class NzSqlStructuralScanner
 {
     public static IEnumerable<ValidationError> Scan(string sql)
+        => Scan(sql, SqlDialect.Netezza);
+
+    public static IEnumerable<ValidationError> Scan(string sql, SqlDialect dialect)
     {
         // PAR002: Consecutive commas
         for (int i = 0; i < sql.Length - 1; i++)
@@ -113,7 +117,7 @@ public static class NzSqlStructuralScanner
         Token<NzToken>[] tokens;
         try
         {
-            tokens = NzLexer.Tokenize(sql).ToArray();
+            tokens = DialectRuntime.Tokenize(sql, dialect).ToArray();
         }
         catch (Superpower.ParseException)
         {

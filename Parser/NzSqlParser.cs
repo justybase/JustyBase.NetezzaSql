@@ -17,11 +17,29 @@ public partial class NzSqlParser
         _tokens = tokens;
     }
 
-    public IReadOnlyList<ValidationError> Errors => _errors
-        .Select(error => error.Code is "PARSE001" or "PARSE002"
-            ? error with { Code = "PAR001" }
-            : error)
-        .ToList();
+    public IReadOnlyList<ValidationError> Errors => GetErrorsSince(0);
+
+    /// <summary>Number of parser errors recorded so far.</summary>
+    public int ErrorCount => _errors.Count;
+
+    /// <summary>
+    /// Returns a normalized snapshot of errors recorded from <paramref name="startIndex"/>
+    /// onward without repeatedly materializing the complete error list.
+    /// </summary>
+    public IReadOnlyList<ValidationError> GetErrorsSince(int startIndex)
+    {
+        startIndex = Math.Clamp(startIndex, 0, _errors.Count);
+        var errors = new ValidationError[_errors.Count - startIndex];
+        for (var i = startIndex; i < _errors.Count; i++)
+        {
+            var error = _errors[i];
+            errors[i - startIndex] = error.Code is "PARSE001" or "PARSE002"
+                ? error with { Code = "PAR001" }
+                : error;
+        }
+
+        return errors;
+    }
 
     public int Position => _pos;
 

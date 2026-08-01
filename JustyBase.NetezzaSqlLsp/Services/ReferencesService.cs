@@ -1,4 +1,5 @@
 using JustyBase.NetezzaSqlLsp.Protocol;
+using JustyBase.NetezzaSqlParser.Dialects;
 
 namespace JustyBase.NetezzaSqlLsp.Services;
 
@@ -6,7 +7,7 @@ namespace JustyBase.NetezzaSqlLsp.Services;
 public static class ReferencesService
 {
     /// <summary>Returns reference locations for the symbol at the given position.</summary>
-    public static Location[] GetReferences(string text, int line, int character, string uri, bool includeDeclaration)
+    public static Location[] GetReferences(string text, int line, int character, string uri, bool includeDeclaration, SqlDialect dialect = SqlDialect.Netezza)
     {
         if (string.IsNullOrEmpty(text))
             return [];
@@ -14,7 +15,7 @@ public static class ReferencesService
         try
         {
             var absolute = LspTextUtilities.PositionToOffset(text, line, character);
-            var index = SymbolCollector.Collect(text);
+            var index = SymbolCollector.Collect(text, dialect);
             var occurrence = index.FindOccurrenceAt(absolute);
             if (occurrence is null)
                 return [];

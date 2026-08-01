@@ -26,6 +26,7 @@ var server = new LspServer(transport);
 var docs = new DocumentManager();
 var schema = new InMemorySchemaProvider();
 using var parsingCoordinator = new DocumentParsingCoordinator();
+using var lintCoordinator = new LintCoordinator(parsingCoordinator);
 NzSemanticTokenClassifier semanticClassifier = new(schema, parsingCoordinator, dialect);
 using var shutdownCts = new CancellationTokenSource();
 
@@ -42,7 +43,7 @@ async Task ReLintAllAsync(CancellationToken ct)
     var tasks = new List<Task>();
     foreach (var uri in docs.GetAllUris())
     {
-        tasks.Add(TextDocumentHandlers.PublishDiagnosticsAsync(server, docs, schema, dialect, uri, ct));
+        tasks.Add(TextDocumentHandlers.PublishDiagnosticsAsync(server, docs, schema, dialect, lintCoordinator, uri, ct));
     }
     await Task.WhenAll(tasks);
 }
@@ -65,6 +66,7 @@ server.RegisterRequestHandler("justy/setDialect", async (root, id, ct) =>
     {
         var value = root.GetProperty("params").GetProperty("dialect").GetString() ?? "netezza";
         dialect = DialectRuntime.ParseName(value);
+        lintCoordinator.Clear();
         parsingCoordinator.Clear();
         semanticClassifier = new NzSemanticTokenClassifier(schema, parsingCoordinator, dialect);
         await server.SendResult(id!, "ok", ct);
@@ -78,11 +80,11 @@ server.RegisterRequestHandler("justy/setDialect", async (root, id, ct) =>
 
 // ---- Text Document Sync ----
 server.RegisterRequestHandler("textDocument/didOpen", (root, _, ct) =>
-    TextDocumentHandlers.HandleDidOpen(server, docs, schema, dialect, root, ct));
+    TextDocumentHandlers.HandleDidOpen(server, docs, schema, dialect, lintCoordinator, root, ct));
 server.RegisterRequestHandler("textDocument/didChange", (root, _, ct) =>
-    TextDocumentHandlers.HandleDidChange(server, docs, schema, dialect, root, ct));
+    TextDocumentHandlers.HandleDidChange(server, docs, schema, dialect, lintCoordinator, root, ct));
 server.RegisterRequestHandler("textDocument/didClose", (root, _, ct) =>
-    TextDocumentHandlers.HandleDidClose(server, docs, root, ct));
+    TextDocumentHandlers.HandleDidClose(server, docs, lintCoordinator, root, ct));
 
 // ---- Schema Sync (custom JustyBase protocol) ----
 server.RegisterRequestHandler("justy/syncSchema", async (root, id, ct) =>
@@ -210,7 +212,7 @@ server.RegisterRequestHandler("textDocument/definition", async (root, id, ct) =>
         var text = docs.GetText(uri);
         var result = text is null
             ? null
-            : DefinitionService.GetDefinitions(text, line, character, uri);
+            : DefinitionService.GetDefinitions(text, line, character, uri, dialect);
         await server.SendResult(id!, result, ct);
     }
     catch (Exception ex)
@@ -232,7 +234,7 @@ server.RegisterRequestHandler("textDocument/references", async (root, id, ct) =>
         var text = docs.GetText(uri);
         var result = text is null
             ? Array.Empty<Location>()
-            : ReferencesService.GetReferences(text, line, character, uri, includeDeclaration);
+            : ReferencesService.GetReferences(text, line, character, uri, includeDeclaration, dialect);
         await server.SendResult(id!, result, ct);
     }
     catch (Exception ex)
@@ -249,7 +251,7 @@ server.RegisterRequestHandler("textDocument/documentSymbol", async (root, id, ct
         var text = docs.GetText(uri);
         var result = text is null
             ? Array.Empty<SymbolInformation>()
-            : DocumentSymbolService.GetDocumentSymbols(text);
+            : DocumentSymbolService.GetDocumentSymbols(text, dialect);
         await server.SendResult(id!, result, ct);
     }
     catch (Exception ex)
@@ -303,7 +305,7 @@ server.RegisterRequestHandler("textDocument/prepareRename", async (root, id, ct)
             return;
         }
 
-        var result = RenameService.PrepareRename(text, line, character);
+        var result = RenameService.PrepareRename(text, line, character, dialect);
         await server.SendResult(id!, result, ct);
     }
     catch (Exception ex)
@@ -329,7 +331,7 @@ server.RegisterRequestHandler("textDocument/rename", async (root, id, ct) =>
             return;
         }
 
-        var result = RenameService.Rename(text, line, character, newName, uri);
+        var result = RenameService.Rename(text, line, character, newName, uri, dialect);
         await server.SendResult(id!, result, ct);
     }
     catch (Exception ex)

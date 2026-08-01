@@ -1,4 +1,5 @@
 using JustyBase.NetezzaSqlLsp.Protocol;
+using JustyBase.NetezzaSqlParser.Dialects;
 
 namespace JustyBase.NetezzaSqlLsp.Services;
 
@@ -6,7 +7,7 @@ namespace JustyBase.NetezzaSqlLsp.Services;
 public static class DefinitionService
 {
     /// <summary>Returns definition locations at the given position, or <see langword="null"/>.</summary>
-    public static Location[]? GetDefinitions(string text, int line, int character, string uri)
+    public static Location[]? GetDefinitions(string text, int line, int character, string uri, SqlDialect dialect = SqlDialect.Netezza)
     {
         if (string.IsNullOrEmpty(text))
             return null;
@@ -14,7 +15,7 @@ public static class DefinitionService
         try
         {
             var absolute = LspTextUtilities.PositionToOffset(text, line, character);
-            var index = SymbolCollector.Collect(text);
+            var index = SymbolCollector.Collect(text, dialect);
             var occurrence = index.FindOccurrenceAt(absolute);
             if (occurrence is null)
                 return null;

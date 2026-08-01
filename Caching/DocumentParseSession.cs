@@ -1,7 +1,6 @@
 using JustyBase.NetezzaSqlParser.Ast;
 using JustyBase.NetezzaSqlParser.Dialects;
 using JustyBase.NetezzaSqlParser.Lexer;
-using System.Text.RegularExpressions;
 using JustyBase.NetezzaSqlParser.Parser;
 using Superpower.Model;
 using Superpower;
@@ -45,7 +44,8 @@ public sealed class DocumentParseSession : IDisposable
         {
             if (_disposed) throw new ObjectDisposedException(nameof(DocumentParseSession));
 
-            if (_parseCache.TryGetValue(contentHash, out var cached))
+            if (_parseCache.TryGetValue(contentHash, out var cached) &&
+                string.Equals(cached.Sql, sql, StringComparison.Ordinal))
             {
                 _parseCacheHits++;
                 TouchEntry(contentHash);
@@ -62,15 +62,21 @@ public sealed class DocumentParseSession : IDisposable
 
             _parseCacheMisses++;
 
+            // A hash collision is treated as a miss. Replace the old entry
+            // without leaving duplicate keys in the LRU list.
+            if (_parseCache.ContainsKey(contentHash))
+            {
+                _parseLruOrder.Remove(contentHash);
+            }
             // Evict if at capacity
-            if (_parseCache.Count >= MaxParseEntries)
+            else if (_parseCache.Count >= MaxParseEntries)
             {
                 var oldest = _parseLruOrder.Last!.Value;
                 _parseCache.Remove(oldest);
                 _parseLruOrder.RemoveLast();
             }
 
-            _parseCache[contentHash] = new CachedParseEntry(result, Environment.TickCount64);
+            _parseCache[contentHash] = new CachedParseEntry(sql, result, Environment.TickCount64);
             _parseLruOrder.AddFirst(contentHash);
         }
 
@@ -149,27 +155,27 @@ public sealed class DocumentParseSession : IDisposable
 
         try
         {
-            // NZPLSQL loop labels are optional structural markers; remove them
-            // before tokenization so the core grammar can parse the labelled
-            // LOOP/FOR statement identically to its unlabelled form.
-            sql = Regex.Replace(sql, @"<<\s*[A-Za-z_][A-Za-z0-9_]*\s*>>", "", RegexOptions.CultureInvariant);
             var tokens = DialectRuntime.Tokenize(sql, dialect).ToArray();
             var parser = DialectRuntime.CreateParser(tokens, dialect);
             var statements = new List<Statement>();
             var errors = new List<ValidationError>();
 
-            while (true)
+            while (parser.Position < tokens.Length)
             {
-                var errorsBefore = parser.Errors.Count;
+                var positionBefore = parser.Position;
+                var errorsBefore = parser.ErrorCount;
                 var stmt = parser.Parse();
 
-                for (int i = errorsBefore; i < parser.Errors.Count; i++)
-                {
-                    errors.Add(parser.Errors[i]);
-                }
+                errors.AddRange(parser.GetErrorsSince(errorsBefore));
 
-                if (stmt is null) break;
-                statements.Add(stmt);
+                if (stmt is not null)
+                    statements.Add(stmt);
+
+                // Parse() synchronizes malformed statements to a semicolon. Keep
+                // parsing later statements, but never spin if a future parser rule
+                // returns without consuming input.
+                if (parser.Position <= positionBefore)
+                    break;
             }
 
             return new ParseResult(statements, errors, errors.Count == 0);
@@ -198,4 +204,4 @@ public readonly record struct ParseResult(
     bool Valid
 );
 
-internal sealed record CachedParseEntry(ParseResult Result, long CreatedAtMs);
+internal sealed record CachedParseEntry(string Sql, ParseResult Result, long CreatedAtMs);

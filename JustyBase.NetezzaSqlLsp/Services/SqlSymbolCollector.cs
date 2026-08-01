@@ -1,5 +1,6 @@
 using JustyBase.NetezzaSqlLsp.Protocol;
 using JustyBase.NetezzaSqlParser.Ast;
+using JustyBase.NetezzaSqlParser.Dialects;
 using JustyBase.NetezzaSqlParser.Lexer;
 using JustyBase.NetezzaSqlParser.Parser;
 using Superpower.Model;
@@ -93,14 +94,14 @@ internal sealed class SymbolCollector
         }
     }
 
-    public static SymbolIndex Collect(string text)
+    public static SymbolIndex Collect(string text, SqlDialect dialect = SqlDialect.Netezza)
     {
         var collector = new SymbolCollector();
-        collector.Analyze(text);
+        collector.Analyze(text, dialect);
         return new SymbolIndex(collector._occurrences);
     }
 
-    private void Analyze(string text)
+    private void Analyze(string text, SqlDialect dialect)
     {
         if (string.IsNullOrEmpty(text))
             return;
@@ -110,7 +111,7 @@ internal sealed class SymbolCollector
         Token<NzToken>[] tokens;
         try
         {
-            tokens = NzLexer.Tokenize(text).ToArray();
+            tokens = DialectRuntime.Tokenize(text, dialect).ToArray();
         }
         catch
         {
@@ -130,7 +131,7 @@ internal sealed class SymbolCollector
                 break;
 
             var remaining = tokens.Skip(currentTokenIndex).ToArray();
-            var subParser = new NzSqlParser(remaining);
+            var subParser = DialectRuntime.CreateParser(remaining, dialect);
             var stmt = subParser.Parse();
             if (stmt is null || subParser.Position <= 0)
                 break;

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using JustyBase.NetezzaSqlParser.Ast;
 using JustyBase.NetezzaSqlParser.Authoring;
 using JustyBase.NetezzaSqlParser.Caching;
+using JustyBase.NetezzaSqlParser.Dialects;
 using JustyBase.NetezzaSqlParser.Lexer;
 using JustyBase.NetezzaSqlParser.Parser;
 using JustyBase.NetezzaSqlParser.Visitor;
@@ -19,7 +20,8 @@ public readonly record struct LintConfig(
     int? MetadataEpoch = null,
     CancellationToken CancellationToken = default,
     IReadOnlyList<LintRule>? AdditionalRules = null,
-    IDictionary<string, RuleSeverityConfig>? RuleSeverities = null
+    IDictionary<string, RuleSeverityConfig>? RuleSeverities = null,
+    SqlDialect Dialect = SqlDialect.Netezza
 );
 
 /// <summary>
@@ -51,36 +53,47 @@ public sealed class LintEngine : IDisposable
     private readonly QualityRuleRegistry _registry;
     private readonly LintQueue _queue;
     private readonly LintEngineMetrics _metrics = new();
+    private readonly SqlDialect _dialect;
 
     /// <summary>
     /// Create engine with all built-in NZ and NZP rules.
     /// </summary>
-    public LintEngine() : this(new QualityRuleRegistry(), null) { }
+    public LintEngine() : this(new QualityRuleRegistry(), null, SqlDialect.Netezza) { }
 
     /// <summary>
     /// Create engine with optional shared parse runtime (e.g. from DocumentParsingCoordinator).
     /// </summary>
     public LintEngine(ParsingRuntime? sharedParsingRuntime)
-        : this(new QualityRuleRegistry(), sharedParsingRuntime) { }
+        : this(new QualityRuleRegistry(), sharedParsingRuntime, SqlDialect.Netezza) { }
+
+    /// <summary>
+    /// Create an engine using the built-in rules and parser runtime for a dialect.
+    /// </summary>
+    public LintEngine(SqlDialect dialect, ParsingRuntime? sharedParsingRuntime = null)
+        : this(DialectRuntime.QualityRules(dialect), sharedParsingRuntime, dialect) { }
 
     /// <summary>
     /// Create engine with a custom QualityRuleRegistry.
     /// </summary>
     public LintEngine(QualityRuleRegistry registry)
-        : this(registry, null) { }
+        : this(registry, null, SqlDialect.Netezza) { }
 
     /// <summary>
     /// Create engine with a custom set of rules (wraps them in a QualityRuleRegistry).
     /// </summary>
     public LintEngine(IEnumerable<LintRule> customRules)
-        : this(new QualityRuleRegistry(customRules), null) { }
+        : this(new QualityRuleRegistry(customRules), null, SqlDialect.Netezza) { }
 
-    private LintEngine(QualityRuleRegistry registry, ParsingRuntime? sharedParsingRuntime)
+    private LintEngine(
+        QualityRuleRegistry registry,
+        ParsingRuntime? sharedParsingRuntime,
+        SqlDialect dialect)
     {
-        _parsingRuntime = sharedParsingRuntime ?? new ParsingRuntime();
+        _parsingRuntime = sharedParsingRuntime ?? new ParsingRuntime(dialect);
         _ownsParsingRuntime = sharedParsingRuntime is null;
         _registry = registry ?? throw new ArgumentNullException(nameof(registry));
         _queue = new LintQueue(_registry);
+        _dialect = dialect;
     }
 
     /// <summary>
@@ -270,7 +283,7 @@ public sealed class LintEngine : IDisposable
 
         // Collect parser errors
         var seenErrors = new HashSet<(string message, int offset)>();
-        foreach (var structural in NzSqlStructuralScanner.Scan(sql))
+        foreach (var structural in NzSqlStructuralScanner.Scan(sql, _dialect))
         {
             if (!seenErrors.Add((structural.Message, structural.Position.Absolute))) continue;
             issues.Add(new LintIssue(

@@ -4,6 +4,12 @@ All notable changes to this project will be documented here.
 
 ## Unreleased
 
+## 0.3.0-preview.9
+
+- Improve parser runtime conformance and structural scanning.
+- Add lint coordination and expand LSP linting, symbol, reference, rename, and document handling.
+- Add parser performance coverage.
+
 ## 0.3.0-preview.8
 
 - Propagate column descriptions through NetezzaSchemaProviderAdapter for tooltip/completion metadata.

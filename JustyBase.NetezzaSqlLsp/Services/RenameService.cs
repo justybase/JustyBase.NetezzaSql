@@ -1,11 +1,12 @@
 using JustyBase.NetezzaSqlLsp.Protocol;
+using JustyBase.NetezzaSqlParser.Dialects;
 using LspRange = JustyBase.NetezzaSqlLsp.Protocol.Range;
 
 namespace JustyBase.NetezzaSqlLsp.Services;
 
 internal static class RenameService
 {
-    public static PrepareRenameResult? PrepareRename(string text, int line, int character)
+    public static PrepareRenameResult? PrepareRename(string text, int line, int character, SqlDialect dialect = SqlDialect.Netezza)
     {
         if (string.IsNullOrEmpty(text))
             return null;
@@ -13,7 +14,7 @@ internal static class RenameService
         try
         {
             var absolute = LspTextUtilities.PositionToOffset(text, line, character);
-            var index = SymbolCollector.Collect(text);
+            var index = SymbolCollector.Collect(text, dialect);
             var occurrence = index.FindOccurrenceAt(absolute);
             if (occurrence is null || occurrence.IsStatement)
                 return null;
@@ -26,7 +27,7 @@ internal static class RenameService
         }
     }
 
-    public static WorkspaceEdit? Rename(string text, int line, int character, string newName, string uri)
+    public static WorkspaceEdit? Rename(string text, int line, int character, string newName, string uri, SqlDialect dialect = SqlDialect.Netezza)
     {
         if (string.IsNullOrEmpty(text))
             return null;
@@ -35,7 +36,7 @@ internal static class RenameService
         {
             var absolute = LspTextUtilities.PositionToOffset(text, line, character);
             var lineStarts = LspTextUtilities.ComputeLineStarts(text);
-            var index = SymbolCollector.Collect(text);
+            var index = SymbolCollector.Collect(text, dialect);
             var occurrence = index.FindOccurrenceAt(absolute);
             if (occurrence is null || occurrence.IsStatement)
                 return null;

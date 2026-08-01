@@ -1,4 +1,5 @@
 using JustyBase.NetezzaSqlParser.Caching;
+using JustyBase.NetezzaSqlParser.Ast;
 
 namespace JustyBase.NetezzaSql.Tests;
 
@@ -73,5 +74,30 @@ public sealed class ParserRuntimeConformanceTests
 
         Assert.Single(diff.DirtyIndices);
         Assert.Equal(1, diff.DirtyIndices[0]);
+    }
+
+    [Fact]
+    public void ParsingRuntime_ContinuesAfterMalformedStatement()
+    {
+        using var runtime = new ParsingRuntime();
+
+        var result = runtime.Parse("NOT_A_STATEMENT; SELECT 1;");
+
+        Assert.False(result.Valid);
+        Assert.NotEmpty(result.Errors);
+        var statement = Assert.Single(result.Statements);
+        Assert.IsType<SelectStatement>(statement);
+    }
+
+    [Fact]
+    public void ParsingRuntime_PreservesOffsetsForIgnoredLoopLabels()
+    {
+        using var runtime = new ParsingRuntime();
+        const string sql = "<<loop_label>> SELECT FROM t;";
+
+        var result = runtime.Parse(sql);
+
+        var error = Assert.Single(result.Errors);
+        Assert.Equal(sql.IndexOf("FROM", StringComparison.Ordinal), error.Position.Absolute);
     }
 }
