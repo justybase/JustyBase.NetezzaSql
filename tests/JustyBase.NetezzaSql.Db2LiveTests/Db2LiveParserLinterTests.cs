@@ -150,6 +150,23 @@ public sealed class Db2LiveParserLinterTests : IClassFixture<Db2LiveFixture>
 
     [Fact]
     [Trait("Category", "Live")]
+    public void Live_OffsetFetch_FirstNextAndOffsetOnly_ParseAndExecute()
+    {
+        if (!RequireLive()) return;
+
+        AssertParsesAndExecutes(
+            $"SELECT ID FROM {_fx.QualifiedTable} ORDER BY ID OFFSET 1 ROWS FETCH FIRST 1 ROW ONLY",
+            expectRows: true);
+        AssertParsesAndExecutes(
+            $"SELECT ID FROM {_fx.QualifiedTable} ORDER BY ID OFFSET 1 ROW FETCH NEXT 1 ROW ONLY",
+            expectRows: true);
+        AssertParsesAndExecutes(
+            $"SELECT ID FROM {_fx.QualifiedTable} ORDER BY ID OFFSET 1 ROWS",
+            expectRows: true);
+    }
+
+    [Fact]
+    [Trait("Category", "Live")]
     public void Live_Merge_ParsesAndExecutes()
     {
         if (!RequireLive()) return;

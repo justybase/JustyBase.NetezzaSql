@@ -75,7 +75,7 @@ public partial class NzSqlParser
             {
                 return new SelectStatement(stmt.Position, stmt.Modifier, stmt.SelectList, stmt.From,
                     stmt.Where, stmt.GroupBy, stmt.Having, stmt.OrderBy, stmt.Limit,
-                    setOps, compoundSelects, stmt.With);
+                    setOps, compoundSelects, stmt.With, stmt.HasInto, stmt.OffsetFetch);
             }
             return stmt;
         }
@@ -163,7 +163,7 @@ public partial class NzSqlParser
         {
             query = new SelectStatement(query.Position, query.Modifier, query.SelectList, query.From,
                 query.Where, query.GroupBy, query.Having, query.OrderBy, query.Limit,
-                query.SetOperations, compoundSelects, query.With);
+                query.SetOperations, compoundSelects, query.With, query.HasInto, query.OffsetFetch);
         }
 
         return new CteDefinition(SourcePosition.FromToken(Peek()), name, columns, query);
@@ -201,6 +201,7 @@ public partial class NzSqlParser
         Expression? having = null;
         IReadOnlyList<OrderByItem>? orderBy = null;
         LimitClause? limit = null;
+        OffsetFetchClause? offsetFetch = null;
 
         if (Peek().Kind == NzToken.From)
         {
@@ -268,19 +269,12 @@ public partial class NzSqlParser
                 SourcePosition.FromToken(Peek()), "PARSE001"));
         }
 
+        if (Peek().Kind == NzToken.Offset)
+            offsetFetch = ParseOffsetFetchClause();
         if (Peek().Kind == NzToken.Fetch)
         {
-            var fetchTok = Advance(); // FETCH
-            Expect(NzToken.First);
-            var count = 1;
-            if (Peek().Kind == NzToken.NumberLiteral)
-            {
-                count = int.Parse(Advance().ToStringValue());
-            }
-            if (Peek().Kind is NzToken.Row or NzToken.Rows)
-                Advance();
-            Expect(NzToken.Only);
-            limit = new LimitClause(FromToken(fetchTok), count, null);
+            offsetFetch = ParseOffsetFetchClause();
+            limit = ToFetchCompatibilityLimit(offsetFetch);
         }
 
         // Handle set operations: UNION / INTERSECT / EXCEPT
@@ -318,9 +312,93 @@ public partial class NzSqlParser
             }
         }
 
-        return new SelectStatement(FromToken(sel), distinct ? new SelectModifier(true, false) : null, items, from, where, groupBy, having,
+        var result = new SelectStatement(FromToken(sel), distinct ? new SelectModifier(true, false) : null, items, from, where, groupBy, having,
             orderBy, limit, setOps.Count > 0 ? setOps : null, compoundSelects.Count > 0 ? compoundSelects : null, with, hasInto);
+        return result with { OffsetFetch = offsetFetch };
     }
+
+    /// <summary>
+    /// Parses the shared ANSI OFFSET/FETCH tail. Dialect parsers reuse this
+    /// method and may still add their own clauses after it.
+    /// </summary>
+    protected virtual OffsetFetchClause ParseOffsetFetchClause()
+    {
+        var start = Peek();
+        int? offset = null;
+
+        if (Peek().Kind == NzToken.Offset)
+        {
+            var offsetToken = Advance();
+            if (Peek().Kind == NzToken.NumberLiteral)
+                offset = int.Parse(Advance().ToStringValue());
+            else
+                AddParserError("Expected number after OFFSET", Peek(), "PAR120");
+
+            if (Peek().Kind is NzToken.Row or NzToken.Rows)
+                Advance();
+            start = offsetToken;
+        }
+
+        int? fetchCount = null;
+        var direction = FetchDirection.First;
+        var only = false;
+        var percent = false;
+        var withTies = false;
+
+        if (Peek().Kind == NzToken.Fetch)
+        {
+            var fetchToken = Advance();
+            start = offset is null ? fetchToken : start;
+
+            if (Peek().Kind == NzToken.First)
+            {
+                direction = FetchDirection.First;
+                Advance();
+            }
+            else if (Peek().Kind == NzToken.Next)
+            {
+                direction = FetchDirection.Next;
+                Advance();
+            }
+
+            if (Peek().Kind == NzToken.NumberLiteral)
+                fetchCount = int.Parse(Advance().ToStringValue());
+            else
+                fetchCount = 1;
+
+            if (Peek().Kind == NzToken.Identifier &&
+                Peek().ToStringValue().Equals("PERCENT", StringComparison.OrdinalIgnoreCase))
+            {
+                percent = true;
+                Advance();
+            }
+
+            if (Peek().Kind is NzToken.Row or NzToken.Rows)
+                Advance();
+
+            if (Peek().Kind == NzToken.Only)
+            {
+                only = true;
+                Advance();
+            }
+            else if (Peek().Kind == NzToken.With && Peek(1).Kind == NzToken.Ties)
+            {
+                Advance();
+                Advance();
+                withTies = true;
+            }
+            else if (Peek().Kind == NzToken.Ties)
+            {
+                Advance();
+                withTies = true;
+            }
+        }
+
+        return new OffsetFetchClause(FromToken(start), offset, fetchCount, direction, only, percent, withTies);
+    }
+
+    private static LimitClause ToFetchCompatibilityLimit(OffsetFetchClause clause)
+        => new(clause.Position, clause.FetchCount ?? 1, clause.Offset, LimitClauseSyntax.Fetch);
 
     // ====== Select List ======
 

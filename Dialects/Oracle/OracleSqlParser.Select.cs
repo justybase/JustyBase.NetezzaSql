@@ -99,42 +99,17 @@ public partial class OracleSqlParser
         // produces an unexpected-token diagnostic at statement level,
         // mirroring the reference Oracle parser which has no LIMIT alternative.
 
-        // FETCH FIRST/NEXT [n [PERCENT]] ROW|ROWS ONLY|WITH TIES (Oracle 12c).
+        // Shared ANSI OFFSET/FETCH, including Oracle's PERCENT and WITH TIES
+        // extensions. OFFSET-only remains distinct from the compatibility
+        // LimitClause so callers can inspect the original syntax.
         LimitClause? limit = null;
-        if (Peek().Kind == NzToken.Fetch)
+        OffsetFetchClause? offsetFetch = null;
+        if (Peek().Kind is NzToken.Offset or NzToken.Fetch)
         {
-            var fetchTok = Advance(); // FETCH
-            if (Peek().Kind is NzToken.First or NzToken.Next)
-                Advance();
-            var count = 1;
-            if (Peek().Kind == NzToken.NumberLiteral)
-            {
-                count = int.Parse(Advance().ToStringValue());
-                if (Peek().Kind == NzToken.Identifier &&
-                    Peek().ToStringValue().Equals("PERCENT", StringComparison.OrdinalIgnoreCase))
-                {
-                    Advance();
-                    count = 0; // percentage rows are not representable as a count
-                }
-            }
-            if (Peek().Kind is NzToken.Row or NzToken.Rows)
-                Advance();
-            if (Peek().Kind == NzToken.Only)
-            {
-                Advance();
-                limit = new LimitClause(FromToken(fetchTok), count, null);
-            }
-            else if (Peek().Kind == NzToken.With && Peek(1).Kind == NzToken.Ties)
-            {
-                Advance(); // WITH
-                Advance(); // TIES
-                limit = new LimitClause(FromToken(fetchTok), count, null);
-            }
-            else if (Peek().Kind == NzToken.Ties)
-            {
-                Advance();
-                limit = new LimitClause(FromToken(fetchTok), count, null);
-            }
+            offsetFetch = ParseOffsetFetchClause();
+            if (offsetFetch.FetchCount is not null)
+                limit = new LimitClause(offsetFetch.Position, offsetFetch.FetchCount.Value,
+                    offsetFetch.Offset, LimitClauseSyntax.Fetch);
         }
 
         // Set operations: UNION / INTERSECT / EXCEPT
@@ -172,8 +147,9 @@ public partial class OracleSqlParser
             }
         }
 
-        return new SelectStatement(FromToken(sel), distinct ? new SelectModifier(true, false) : null, items, from, where, groupBy, having,
+        var result = new SelectStatement(FromToken(sel), distinct ? new SelectModifier(true, false) : null, items, from, where, groupBy, having,
             orderBy, limit, setOps.Count > 0 ? setOps : null, compoundSelects.Count > 0 ? compoundSelects : null, with, hasInto);
+        return result with { OffsetFetch = offsetFetch };
     }
 
     // ====== Dialect Primary Expressions ======

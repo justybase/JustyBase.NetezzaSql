@@ -65,7 +65,7 @@ public partial class NzSqlParser
     private static bool IsClauseStartKeyword(NzToken kind) => kind switch
     {
         NzToken.From or NzToken.Where or NzToken.GroupBy or NzToken.Having
-            or NzToken.OrderBy or NzToken.Limit or NzToken.Into or NzToken.Fetch
+            or NzToken.OrderBy or NzToken.Limit or NzToken.Offset or NzToken.Into or NzToken.Fetch
             or NzToken.Union or NzToken.Intersect or NzToken.Except or NzToken.MinusSet
             or NzToken.Semicolon => true,
         _ => false
@@ -75,7 +75,7 @@ public partial class NzSqlParser
     {
         NzToken.Semicolon, NzToken.RParen, NzToken.Comma,
         NzToken.From, NzToken.Where, NzToken.GroupBy, NzToken.Having,
-        NzToken.OrderBy, NzToken.Limit, NzToken.Fetch,
+        NzToken.OrderBy, NzToken.Limit, NzToken.Offset, NzToken.Fetch,
         NzToken.Union, NzToken.Intersect, NzToken.Except, NzToken.MinusSet,
         NzToken.And, NzToken.Or, NzToken.Then, NzToken.Else, NzToken.End,
         NzToken.Unknown
@@ -123,7 +123,7 @@ public partial class NzSqlParser
     private static bool IsUnambiguousTableSourceEnd(NzToken kind) => kind switch
     {
         NzToken.Where or NzToken.GroupBy or NzToken.OrderBy or NzToken.Having
-            or NzToken.Limit or NzToken.Fetch or NzToken.Union or NzToken.Intersect
+            or NzToken.Limit or NzToken.Offset or NzToken.Fetch or NzToken.Union or NzToken.Intersect
             or NzToken.Except or NzToken.MinusSet or NzToken.Semicolon => true,
         _ => false
     };

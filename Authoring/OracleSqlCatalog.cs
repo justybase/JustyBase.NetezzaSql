@@ -38,8 +38,6 @@ public sealed class OracleSqlCatalog : ISqlAuthoringCatalog
         new("INTERVAL DAY TO SECOND", ["INTERVAL DAY TO SECOND"], 1, 1),
     ];
 
-    public static OracleSqlCatalog Instance { get; } = new();
-
     private OracleSqlCatalog()
     {
     }
@@ -59,7 +57,7 @@ public sealed class OracleSqlCatalog : ISqlAuthoringCatalog
         params NetezzaFunctionSignature[] signatures)
         => new(name, category, signatures);
 
-    public IReadOnlyList<NetezzaBuiltinFunction> BuiltinFunctions { get; } =
+    private static IReadOnlyList<NetezzaBuiltinFunction> OracleBuiltinFunctions { get; } =
     [
         Function("COUNT", NetezzaFunctionCategory.Aggregate,
             Signature("COUNT(expression)", "Returns the number of non-null values for the expression.", Parameter("expression", "Expression or *."))),
@@ -81,6 +79,11 @@ public sealed class OracleSqlCatalog : ISqlAuthoringCatalog
             Signature("ADD_MONTHS(date, months)", "Returns a date shifted by the requested number of months.", Parameter("date", "Date expression."), Parameter("months", "Number of months."))),
     ];
 
+    public static OracleSqlCatalog Instance { get; } = new();
+
+    public IReadOnlyList<NetezzaBuiltinFunction> BuiltinFunctions { get; } =
+        SqlAuthoringCatalogComposer.MergeFunctions(AnsiSqlCatalog.BuiltinFunctions, OracleBuiltinFunctions);
+
     // Validation profile: builtinFunctions from authoring.ts (Oracle).
     public IReadOnlyList<NetezzaBuiltinFunction> ValidationBuiltinFunctions { get; } =
         new[]
@@ -94,14 +97,16 @@ public sealed class OracleSqlCatalog : ISqlAuthoringCatalog
         }.Select(name => new NetezzaBuiltinFunction(name, NetezzaFunctionCategory.System,
             [new NetezzaFunctionSignature($"{name}(...)", "Oracle built-in function.", [])])).ToArray();
 
-    public IReadOnlyList<NetezzaDataTypeSpec> DataTypes => OracleDataTypes;
+    public IReadOnlyList<NetezzaDataTypeSpec> DataTypes { get; } =
+        SqlAuthoringCatalogComposer.MergeTypes(AnsiSqlCatalog.DataTypes, OracleDataTypes);
 
     public IReadOnlyList<string> DataTypeNames { get; } =
-        OracleDataTypes.SelectMany(t => t.Aliases).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        SqlAuthoringCatalogComposer.MergeTypes(AnsiSqlCatalog.DataTypes, OracleDataTypes)
+            .SelectMany(t => t.Aliases).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 
     // Completion keywords from authoring.ts.
     public IReadOnlyList<string> CompletionKeywords { get; } =
-    [
+        SqlAuthoringCatalogComposer.MergeValues(AnsiSqlCatalog.CompletionKeywords, [
         "SELECT", "FROM", "WHERE", "INSERT", "UPDATE", "DELETE", "MERGE",
         "BEGIN", "DECLARE", "CALL", "CREATE", "ALTER", "DROP", "TABLE", "VIEW",
         "SEQUENCE", "PROCEDURE", "FUNCTION", "PACKAGE", "TRIGGER", "SYNONYM",
@@ -109,12 +114,12 @@ public sealed class OracleSqlCatalog : ISqlAuthoringCatalog
         "SAVEPOINT", "RETURNING INTO", "PIVOT", "UNPIVOT", "ORDER BY",
         "GROUP BY", "CONNECT BY", "START WITH", "FETCH FIRST", "FETCH NEXT",
         "ROWNUM", "DUAL",
-    ];
+    ]);
 
     // Keywords surfaced by hover for non-identifier tokens (formatter profile
     // keyword list from authoring.ts).
     public IReadOnlyList<string> Keywords { get; } =
-    [
+        SqlAuthoringCatalogComposer.MergeValues(AnsiSqlCatalog.Keywords, [
         "SELECT", "FROM", "WHERE", "GROUP", "BY", "ORDER", "FETCH", "FIRST",
         "NEXT", "ROWS", "ROW", "ONLY", "INSERT", "UPDATE", "DELETE", "MERGE",
         "INTO", "VALUES", "SET", "WITH", "CONNECT", "START", "JOIN", "INNER",
@@ -123,7 +128,12 @@ public sealed class OracleSqlCatalog : ISqlAuthoringCatalog
         "DROP", "TABLE", "VIEW", "PACKAGE", "PROCEDURE", "FUNCTION", "TRIGGER",
         "SEQUENCE", "SYNONYM", "PIVOT", "UNPIVOT", "RETURNING", "PRIOR",
         "NOCYCLE", "SIBLINGS", "GRANT", "REVOKE", "COMMIT", "ROLLBACK",
-    ];
+    ]);
+
+    public SqlFormatterProfile FormatterProfile { get; } =
+        SqlAuthoringCatalogComposer.MergeFormatterProfiles(
+            AnsiSqlCatalog.FormatterProfile,
+            new SqlFormatterProfile(["CONNECT BY", "START WITH", "ORDER SIBLINGS BY"]));
 
     public bool TryGetFunction(string name, out NetezzaBuiltinFunction function)
     {

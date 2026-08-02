@@ -165,17 +165,17 @@ public static class NetezzaSqlCatalog
     ];
 
     public static IReadOnlyList<NetezzaBuiltinFunction> BuiltinFunctions { get; } =
-        CoreBuiltinFunctions
+        SqlAuthoringCatalogComposer.MergeFunctions(
+            AnsiSqlCatalog.BuiltinFunctions,
+            CoreBuiltinFunctions
             .Concat(AdditionalFunctionNames.Select(name => Function(
                 name,
                 NetezzaFunctionCategory.NetezzaSpecific,
                 Signature($"{name}(...)", "Netezza built-in function.", Parameter("expression", "Function expression.")))))
-            .GroupBy(function => function.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(group => group.First())
-            .ToArray();
+            .ToArray());
 
     public static IReadOnlyList<NetezzaDataTypeSpec> DataTypes { get; } =
-    [
+        SqlAuthoringCatalogComposer.MergeTypes(AnsiSqlCatalog.DataTypes, [
         new("BOOLEAN", ["BOOLEAN", "BOOL"]),
         new("INT1", ["INT1", "BYTEINT"]),
         new("INT2", ["INT2", "SMALLINT", "INT16"]),
@@ -202,7 +202,7 @@ public static class NetezzaSqlCatalog
         new("CLOB", ["CLOB"], 0, 1),
         new("NCLOB", ["NCLOB"], 0, 1),
         new("BLOB", ["BLOB"], 0, 1),
-    ];
+    ]);
 
     public static IReadOnlyList<string> BuiltinFunctionNames { get; } =
         BuiltinFunctions.Select(f => f.Name).ToArray();
@@ -211,14 +211,20 @@ public static class NetezzaSqlCatalog
         DataTypes.SelectMany(t => t.Aliases).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 
     public static IReadOnlyList<string> NetezzaKeywords { get; } =
-    [
+        SqlAuthoringCatalogComposer.MergeValues(AnsiSqlCatalog.Keywords, [
         "BEGIN_PROC", "END_PROC", "NOTICE", "DEBUG", "DISTRIBUTE", "RANDOM", "ORGANIZE",
         "GROOM", "GENERATE", "STATISTICS", "REFTABLE", "VARARGS", "NZPLSQL", "SESSION",
         "RECLAIM", "BACKUPSET", "EXPRESS", "SAMEAS", "HASH", "DISTRIBUTION", "PLANTEXT", "PLANGRAPH",
         "_V_SESSION", "_V_TABLE", "_V_VIEW", "_V_PROCEDURE", "_V_SYNONYM", "_V_RELATION_COLUMN",
         "_V_RELATION_KEYDATA", "_V_TABLE_DIST_MAP", "_V_TABLE_ORGANIZE_COLUMN", "_V_EXTERNAL",
         "_V_EXTOBJECT", "_V_DATABASE", "_V_SCHEMA"
-    ];
+    ]);
+
+    public static IReadOnlyList<string> CompletionKeywords { get; } =
+        AnsiSqlCatalog.CompletionKeywords;
+
+    public static SqlFormatterProfile FormatterProfile { get; } =
+        AnsiSqlCatalog.FormatterProfile;
 
     public static bool TryGetFunction(string name, out NetezzaBuiltinFunction function)
     {

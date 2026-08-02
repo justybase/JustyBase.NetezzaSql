@@ -29,8 +29,6 @@ public sealed class Db2SqlCatalog : ISqlAuthoringCatalog
         new("TIMESTAMP", ["TIMESTAMP"], 0, 1),
     ];
 
-    public static Db2SqlCatalog Instance { get; } = new();
-
     private Db2SqlCatalog()
     {
     }
@@ -50,7 +48,7 @@ public sealed class Db2SqlCatalog : ISqlAuthoringCatalog
         params NetezzaFunctionSignature[] signatures)
         => new(name, category, signatures);
 
-    public IReadOnlyList<NetezzaBuiltinFunction> BuiltinFunctions { get; } =
+    private static IReadOnlyList<NetezzaBuiltinFunction> Db2BuiltinFunctions { get; } =
     [
         Function("COUNT", NetezzaFunctionCategory.Aggregate,
             Signature("COUNT(expression)", "Returns the number of non-null values for the expression.", Parameter("expression", "Expression or *."))),
@@ -61,6 +59,13 @@ public sealed class Db2SqlCatalog : ISqlAuthoringCatalog
         Function("VARCHAR", NetezzaFunctionCategory.Conversion,
             Signature("VARCHAR(expression, length?)", "Casts or truncates an expression to VARCHAR.", Parameter("expression", "Value to cast."), Parameter("length", "Optional length."))),
     ];
+
+    public static Db2SqlCatalog Instance { get; } = new();
+
+    public IReadOnlyList<NetezzaBuiltinFunction> BuiltinFunctions { get; } =
+        SqlAuthoringCatalogComposer.MergeFunctions(
+            AnsiSqlCatalog.BuiltinFunctions,
+            Db2BuiltinFunctions);
 
     public IReadOnlyList<NetezzaBuiltinFunction> ValidationBuiltinFunctions { get; } =
         new[]
@@ -73,13 +78,15 @@ public sealed class Db2SqlCatalog : ISqlAuthoringCatalog
         }.Select(name => new NetezzaBuiltinFunction(name, NetezzaFunctionCategory.System,
             [new NetezzaFunctionSignature($"{name}(...)", "Db2 built-in function.", [])])).ToArray();
 
-    public IReadOnlyList<NetezzaDataTypeSpec> DataTypes => Db2DataTypes;
+    public IReadOnlyList<NetezzaDataTypeSpec> DataTypes { get; } =
+        SqlAuthoringCatalogComposer.MergeTypes(AnsiSqlCatalog.DataTypes, Db2DataTypes);
 
     public IReadOnlyList<string> DataTypeNames { get; } =
-        Db2DataTypes.SelectMany(t => t.Aliases).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        SqlAuthoringCatalogComposer.MergeTypes(AnsiSqlCatalog.DataTypes, Db2DataTypes)
+            .SelectMany(t => t.Aliases).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 
     public IReadOnlyList<string> CompletionKeywords { get; } =
-    [
+        SqlAuthoringCatalogComposer.MergeValues(AnsiSqlCatalog.CompletionKeywords, [
         "SELECT", "FROM", "WHERE", "INSERT", "UPDATE", "DELETE", "MERGE", "CALL",
         "CREATE", "ALTER", "DROP", "TABLE", "VIEW", "PROCEDURE", "FUNCTION", "SEQUENCE",
         "TRIGGER", "ALIAS", "INDEX", "VALUES", "IDENTITY", "GENERATED", "ALWAYS",
@@ -89,10 +96,10 @@ public sealed class Db2SqlCatalog : ISqlAuthoringCatalog
         "ORDER BY", "GROUP BY", "HAVING", "UNION", "INTERSECT", "EXCEPT",
         "CURRENT SCHEMA", "CURRENT SERVER", "CURRENT DATE", "CURRENT TIME",
         "CURRENT TIMESTAMP", "CURRENT USER", "NICKNAME",
-    ];
+    ]);
 
     public IReadOnlyList<string> Keywords { get; } =
-    [
+        SqlAuthoringCatalogComposer.MergeValues(AnsiSqlCatalog.Keywords, [
         "SELECT", "FROM", "WHERE", "GROUP", "BY", "ORDER", "FETCH", "FIRST",
         "NEXT", "ROWS", "ROW", "ONLY", "INSERT", "UPDATE", "DELETE", "MERGE",
         "INTO", "VALUES", "SET", "WITH", "JOIN", "INNER", "LEFT", "RIGHT", "FULL",
@@ -100,7 +107,12 @@ public sealed class Db2SqlCatalog : ISqlAuthoringCatalog
         "DROP", "TABLE", "VIEW", "PROCEDURE", "FUNCTION", "ALIAS", "NICKNAME",
         "OPTIMIZE", "FOR", "READ", "UR", "CS", "RS", "RR", "FINAL", "DECLARE",
         "GLOBAL", "TEMPORARY", "LANGUAGE", "SQL", "IDENTITY", "GENERATED",
-    ];
+    ]);
+
+    public SqlFormatterProfile FormatterProfile { get; } =
+        SqlAuthoringCatalogComposer.MergeFormatterProfiles(
+            AnsiSqlCatalog.FormatterProfile,
+            new SqlFormatterProfile(["OPTIMIZE FOR", "FOR READ ONLY", "FOR UPDATE", "WITH UR", "WITH CS", "WITH RS", "WITH RR"]));
 
     public bool TryGetFunction(string name, out NetezzaBuiltinFunction function)
     {

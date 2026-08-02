@@ -19,67 +19,38 @@ public static class OracleLintRules
 }
 
 // ====== ORA001: SELECT * ======
-public class RuleORA001_SelectStar : LintRule
+public sealed class RuleORA001_SelectStar : DelegatingLintRule
 {
-    public override string Id => "ORA001";
-    public override string Name => "Select Star";
-    public override string Description => "Avoid SELECT * in production Oracle queries when a stable projection is possible.";
-    public override LintSeverity DefaultSeverity => LintSeverity.Warning;
-    public override RuleCost Cost => RuleCost.Cheap;
-
-    public override IEnumerable<LintIssue> Check(string sql)
+    public RuleORA001_SelectStar() : base(SharedQualityRuleFactory.CreateSelectStar(
+        "ORA001", "Select Star",
+        "Avoid SELECT * in production Oracle queries when a stable projection is possible.",
+        LintSeverity.Warning,
+        new SqlLintScannerOptions(HandleQQuotedStrings: true, StatementEnd: OracleLintHelpers.StatementEnd)))
     {
-        foreach (Match m in Regex.Matches(sql, @"\bSELECT\s+\*", RegexOptions.IgnoreCase))
-        {
-            if (LintHelpers.IsInsideStringOrComment(sql, m.Index)) continue;
-            var starPos = m.Value.LastIndexOf('*');
-            yield return new LintIssue(Id, $"{Id}: {Description}", DefaultSeverity,
-                m.Index + starPos, m.Index + starPos + 1);
-        }
     }
 }
 
 // ====== ORA002: DELETE without WHERE ======
-public class RuleORA002_DeleteWithoutWhere : LintRule
+public sealed class RuleORA002_DeleteWithoutWhere : DelegatingLintRule
 {
-    public override string Id => "ORA002";
-    public override string Name => "Delete Without Where";
-    public override string Description => "DELETE without WHERE removes every row in the target table.";
-    public override LintSeverity DefaultSeverity => LintSeverity.Error;
-    public override RuleCost Cost => RuleCost.Cheap;
-
-    public override IEnumerable<LintIssue> Check(string sql)
+    public RuleORA002_DeleteWithoutWhere() : base(SharedQualityRuleFactory.CreateDeleteWithoutWhere(
+        "ORA002", "Delete Without Where",
+        "DELETE without WHERE removes every row in the target table.",
+        LintSeverity.Error,
+        new SqlLintScannerOptions(HandleQQuotedStrings: true, StatementEnd: OracleLintHelpers.StatementEnd)))
     {
-        foreach (Match m in Regex.Matches(sql, @"\bDELETE\s+FROM\s+(?:""[^""]+""|[A-Za-z_][\w$#]*)(?:\s*\.\s*(?:""[^""]+""|[A-Za-z_][\w$#]*)){0,2}", RegexOptions.IgnoreCase))
-        {
-            if (LintHelpers.IsInsideStringOrComment(sql, m.Index)) continue;
-            var end = OracleLintHelpers.StatementEnd(sql, m.Index);
-            var tail = sql[(m.Index + m.Length)..end];
-            if (!Regex.IsMatch(tail, @"\bWHERE\b", RegexOptions.IgnoreCase))
-                yield return new LintIssue(Id, $"{Id}: {Description}", DefaultSeverity, m.Index, m.Index + 6);
-        }
     }
 }
 
 // ====== ORA003: UPDATE without WHERE ======
-public class RuleORA003_UpdateWithoutWhere : LintRule
+public sealed class RuleORA003_UpdateWithoutWhere : DelegatingLintRule
 {
-    public override string Id => "ORA003";
-    public override string Name => "Update Without Where";
-    public override string Description => "UPDATE without WHERE changes every row in the target table.";
-    public override LintSeverity DefaultSeverity => LintSeverity.Error;
-    public override RuleCost Cost => RuleCost.Cheap;
-
-    public override IEnumerable<LintIssue> Check(string sql)
+    public RuleORA003_UpdateWithoutWhere() : base(SharedQualityRuleFactory.CreateUpdateWithoutWhere(
+        "ORA003", "Update Without Where",
+        "UPDATE without WHERE changes every row in the target table.",
+        LintSeverity.Error,
+        new SqlLintScannerOptions(HandleQQuotedStrings: true, StatementEnd: OracleLintHelpers.StatementEnd)))
     {
-        foreach (Match m in Regex.Matches(sql, @"\bUPDATE\s+(?:""[^""]+""|[A-Za-z_][\w$#]*)(?:\s*\.\s*(?:""[^""]+""|[A-Za-z_][\w$#]*)){0,2}\s+SET\b", RegexOptions.IgnoreCase))
-        {
-            if (LintHelpers.IsInsideStringOrComment(sql, m.Index)) continue;
-            var end = OracleLintHelpers.StatementEnd(sql, m.Index);
-            var tail = sql[(m.Index + m.Length)..end];
-            if (!Regex.IsMatch(tail, @"\bWHERE\b", RegexOptions.IgnoreCase))
-                yield return new LintIssue(Id, $"{Id}: {Description}", DefaultSeverity, m.Index, m.Index + 6);
-        }
     }
 }
 

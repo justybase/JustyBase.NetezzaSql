@@ -20,6 +20,9 @@ VS Code, a connection manager, or query execution.
 | Db2 dialect parser | `src/dialects/db2/sql/parser.ts` | `Db2SqlParser` partials; DGTT/ALIAS/NICKNAME/PROCEDURE; FINAL TABLE; PAR001 rejections | supported |
 | Db2 quality rules | `extensions/db2/src/sql/qualityRules.ts` | `Db2LintRules` (DB2001–DB2008) via dialect-only `QualityRuleRegistry` | supported |
 | Db2 SQL authoring | `extensions/db2/src/sql/authoring.ts` | `Db2SqlCatalog` through `ISqlAuthoringCatalog` | supported |
+| ANSI authoring base and dialect overlays | `src/sql/authoring/baseProfiles.ts` plus dialect authoring profiles | `AnsiSqlCatalog` composed with Netezza, Oracle and Db2 overlays; signatures are merged case-insensitively | supported |
+| Common MERGE grammar | shared SQL parser and dialect parser entry points | `MergeStatement` with matched update/delete and not-matched insert clauses in all three dialects | supported |
+| ANSI OFFSET/FETCH | Oracle and Db2 select parsers; Netezza probe/fixtures | `OffsetFetchClause` preserves OFFSET-only, FIRST/NEXT, PERCENT, ONLY and WITH TIES; legacy `LimitClause` remains compatible | supported |
 | Dialect dispatch | — | `DialectRuntime` (`Tokenize`/`CreateParser`/`QualityRules`/`AuthoringCatalog`) | supported |
 | Query flow and CTE refactoring | `queryStructureAnalyzer.ts`, `flowAnalyzer.ts` | no public C# API | intentionally deferred |
 | Connections, execution and VS Code UI | extension host | no public C# API | out of scope |
@@ -56,6 +59,25 @@ offsets are preserved by the lexer and parser.
   linter's statement scanner (`OracleLintHelpers.StatementEnd`).
 - Netezza-only constructs (LIMIT, `DB..TABLE`, DISTRIBUTE/ORGANIZE, EXTERNAL
   TABLE, GROOM, GENERATE STATISTICS) are rejected in Oracle mode with PAR001.
+- The capability matrix is explicit in `SqlDialectCapabilitiesCatalog`: LIMIT
+  is enabled only for Netezza, while MERGE and ANSI OFFSET/FETCH are enabled
+  for Netezza, Oracle and Db2. The Netezza parser keeps both LIMIT and the
+  ANSI form available so a live appliance probe can refine the release
+  contract without changing the AST shape.
+
+## Shared ANSI grammar and authoring notes
+
+- `AnsiSqlCatalog` is the base profile. Dialect catalogs add functions, types,
+  completion phrases and formatter phrases through
+  `SqlAuthoringCatalogComposer`; multi-word phrases such as `GROUP BY`,
+  `ORDER BY` and `PARTITION BY` are atomic values.
+- `MergeStatement` is visited by the existing semantic visitor. MERGE source
+  and target aliases therefore participate in the same scope rules as before,
+  while `OffsetFetchClause` is a scalar-tail no-op and does not change CTE,
+  temporary-table or subquery scope traversal.
+- `LimitClause` is still populated for compatibility. New consumers should
+  inspect `SelectStatement.OffsetFetch` when the original OFFSET/FETCH syntax
+  (direction, percentage or ties behavior) matters.
 
 ## Db2 dialect mapping notes
 

@@ -105,7 +105,12 @@ public partial class NzSqlVisitor
         }
         _inOrderBy = false;
 
-        if (stmt.Limit is not null) { /* no expression to visit */ }
+        if (stmt.Limit is not null || stmt.OffsetFetch is not null)
+        {
+            // LIMIT/OFFSET/FETCH contain scalar counts, not expressions with
+            // relation scope. Keep this explicit no-op so adding the
+            // structural ANSI clause does not alter CTE/subquery traversal.
+        }
 
         ValidateGroupByRules(stmt);
 

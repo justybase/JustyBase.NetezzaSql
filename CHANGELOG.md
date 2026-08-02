@@ -4,6 +4,15 @@ All notable changes to this project will be documented here.
 
 ## Unreleased
 
+## 0.3.0
+
+- First production release of the shared JustyBase Netezza SQL libraries.
+- Add a shared ANSI authoring catalog with explicit Netezza, Oracle, and Db2 overlays.
+- Add common structured `MERGE` parsing and `OFFSET`/`FETCH` AST and formatter support,
+  preserving the existing `LimitClause` contract.
+- Add shared lint-rule factories and dialect capability coverage.
+- Add live Netezza and Db2 syntax probes and conformance tests.
+
 ## 0.3.0-preview.9
 
 - Improve parser runtime conformance and structural scanning.

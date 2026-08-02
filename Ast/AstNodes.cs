@@ -91,7 +91,8 @@ public record SelectStatement(
     IReadOnlyList<SetOperation>? SetOperations,
     IReadOnlyList<SelectStatement>? CompoundSelects,
     WithClause? With,
-    bool HasInto = false
+    bool HasInto = false,
+    OffsetFetchClause? OffsetFetch = null
 ) : Statement(Position);
 
 public record InsertStatement(
@@ -358,10 +359,38 @@ public record OrderByItem(
     bool NullsFirst
 ) : AstNode(Position);
 
+public enum LimitClauseSyntax
+{
+    Limit,
+    Fetch
+}
+
 public record LimitClause(
     SourcePosition Position,
     int Limit,
-    int? Offset
+    int? Offset,
+    LimitClauseSyntax Syntax = LimitClauseSyntax.Limit
+) : AstNode(Position);
+
+public enum FetchDirection
+{
+    First,
+    Next
+}
+
+/// <summary>
+/// Structural representation of ANSI OFFSET/FETCH. <see cref="LimitClause"/>
+/// remains populated for compatibility with existing consumers; this node
+/// preserves syntax that cannot be represented by a numeric LIMIT alone.
+/// </summary>
+public record OffsetFetchClause(
+    SourcePosition Position,
+    int? Offset,
+    int? FetchCount,
+    FetchDirection Direction,
+    bool Only,
+    bool Percent = false,
+    bool WithTies = false
 ) : AstNode(Position);
 
 public record SetOperation(

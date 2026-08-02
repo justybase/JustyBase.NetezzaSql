@@ -21,71 +21,35 @@ public static class Db2LintRules
     ];
 }
 
-public class RuleDB2001_SelectStar : LintRule
+public sealed class RuleDB2001_SelectStar : DelegatingLintRule
 {
-    public override string Id => "DB2001";
-    public override string Name => "Select Star";
-    public override string Description => "Avoid SELECT * in production Db2 queries when a stable projection is possible.";
-    public override LintSeverity DefaultSeverity => LintSeverity.Warning;
-    public override RuleCost Cost => RuleCost.Cheap;
-
-    public override IEnumerable<LintIssue> Check(string sql)
+    public RuleDB2001_SelectStar() : base(SharedQualityRuleFactory.CreateSelectStar(
+        "DB2001", "Select Star",
+        "Avoid SELECT * in production Db2 queries when a stable projection is possible.",
+        LintSeverity.Warning))
     {
-        foreach (Match m in Regex.Matches(sql, @"\bSELECT\s+\*", RegexOptions.IgnoreCase))
-        {
-            if (LintHelpers.IsInsideStringOrComment(sql, m.Index)) continue;
-            var starPos = m.Value.LastIndexOf('*');
-            yield return new LintIssue(Id, $"{Id}: {Description}", DefaultSeverity,
-                m.Index + starPos, m.Index + starPos + 1);
-        }
     }
 }
 
-public class RuleDB2002_DeleteWithoutWhere : LintRule
+public sealed class RuleDB2002_DeleteWithoutWhere : DelegatingLintRule
 {
-    public override string Id => "DB2002";
-    public override string Name => "Delete Without Where";
-    public override string Description => "DELETE without WHERE removes every row in the target table.";
-    public override LintSeverity DefaultSeverity => LintSeverity.Error;
-    public override RuleCost Cost => RuleCost.Cheap;
-
-    public override IEnumerable<LintIssue> Check(string sql)
+    public RuleDB2002_DeleteWithoutWhere() : base(SharedQualityRuleFactory.CreateDeleteWithoutWhere(
+        "DB2002", "Delete Without Where",
+        "DELETE without WHERE removes every row in the target table.",
+        LintSeverity.Error,
+        new SqlLintScannerOptions(HandleQQuotedStrings: true, StatementEnd: Db2LintHelpers.StatementEnd)))
     {
-        // Multipart quoted identifiers: (?:\s*\.\s*...){0,2} after first segment —
-        // same precedence fix as ORA002 (avoid matching only the last segment).
-        foreach (Match m in Regex.Matches(sql,
-            @"\bDELETE\s+FROM\s+(?:""[^""]+""|[A-Za-z_][\w$#]*)(?:\s*\.\s*(?:""[^""]+""|[A-Za-z_][\w$#]*)){0,2}",
-            RegexOptions.IgnoreCase))
-        {
-            if (LintHelpers.IsInsideStringOrComment(sql, m.Index)) continue;
-            var end = Db2LintHelpers.StatementEnd(sql, m.Index);
-            var tail = sql[(m.Index + m.Length)..end];
-            if (!Regex.IsMatch(tail, @"\bWHERE\b", RegexOptions.IgnoreCase))
-                yield return new LintIssue(Id, $"{Id}: {Description}", DefaultSeverity, m.Index, m.Index + 6);
-        }
     }
 }
 
-public class RuleDB2003_UpdateWithoutWhere : LintRule
+public sealed class RuleDB2003_UpdateWithoutWhere : DelegatingLintRule
 {
-    public override string Id => "DB2003";
-    public override string Name => "Update Without Where";
-    public override string Description => "UPDATE without WHERE changes every row in the target table.";
-    public override LintSeverity DefaultSeverity => LintSeverity.Error;
-    public override RuleCost Cost => RuleCost.Cheap;
-
-    public override IEnumerable<LintIssue> Check(string sql)
+    public RuleDB2003_UpdateWithoutWhere() : base(SharedQualityRuleFactory.CreateUpdateWithoutWhere(
+        "DB2003", "Update Without Where",
+        "UPDATE without WHERE changes every row in the target table.",
+        LintSeverity.Error,
+        new SqlLintScannerOptions(HandleQQuotedStrings: true, StatementEnd: Db2LintHelpers.StatementEnd)))
     {
-        foreach (Match m in Regex.Matches(sql,
-            @"\bUPDATE\s+(?:""[^""]+""|[A-Za-z_][\w$#]*)(?:\s*\.\s*(?:""[^""]+""|[A-Za-z_][\w$#]*)){0,2}\s+SET\b",
-            RegexOptions.IgnoreCase))
-        {
-            if (LintHelpers.IsInsideStringOrComment(sql, m.Index)) continue;
-            var end = Db2LintHelpers.StatementEnd(sql, m.Index);
-            var tail = sql[(m.Index + m.Length)..end];
-            if (!Regex.IsMatch(tail, @"\bWHERE\b", RegexOptions.IgnoreCase))
-                yield return new LintIssue(Id, $"{Id}: {Description}", DefaultSeverity, m.Index, m.Index + 6);
-        }
     }
 }
 
@@ -166,21 +130,13 @@ public class RuleDB2007_NetezzaLimit : LintRule
     }
 }
 
-public class RuleDB2008_NetezzaDoubleDot : LintRule
+public sealed class RuleDB2008_NetezzaDoubleDot : DelegatingLintRule
 {
-    public override string Id => "DB2008";
-    public override string Name => "Netezza Double-Dot Table";
-    public override string Description => "DB..TABLE is Netezza-only; use SCHEMA.TABLE or CURRENT SCHEMA on Db2 LUW.";
-    public override LintSeverity DefaultSeverity => LintSeverity.Error;
-    public override RuleCost Cost => RuleCost.Cheap;
-
-    public override IEnumerable<LintIssue> Check(string sql)
+    public RuleDB2008_NetezzaDoubleDot() : base(SharedQualityRuleFactory.CreateDoubleDotTable(
+        "DB2008", "Netezza Double-Dot Table",
+        "DB..TABLE is Netezza-only; use SCHEMA.TABLE or CURRENT SCHEMA on Db2 LUW.",
+        LintSeverity.Error))
     {
-        foreach (Match m in Regex.Matches(sql, @"\b[A-Za-z_][\w$#]*\s*\.\s*\.\s*[A-Za-z_][\w$#]*"))
-        {
-            if (LintHelpers.IsInsideStringOrComment(sql, m.Index)) continue;
-            yield return new LintIssue(Id, $"{Id}: {Description}", DefaultSeverity, m.Index, m.Index + m.Length);
-        }
     }
 }
 

@@ -37,6 +37,7 @@ public partial class Db2SqlParser
         Expression? having = null;
         IReadOnlyList<OrderByItem>? orderBy = null;
         LimitClause? limit = null;
+        OffsetFetchClause? offsetFetch = null;
 
         if (Peek().Kind == NzToken.From)
         {
@@ -70,17 +71,12 @@ public partial class Db2SqlParser
 
         // LIMIT is intentionally not consumed — leftover token surfaces as PAR001.
 
-        if (Peek().Kind == NzToken.Fetch)
+        if (Peek().Kind is NzToken.Offset or NzToken.Fetch)
         {
-            var fetchTok = Advance();
-            Expect(NzToken.First);
-            var count = 1;
-            if (Peek().Kind == NzToken.NumberLiteral)
-                count = int.Parse(Advance().ToStringValue());
-            if (Peek().Kind is NzToken.Row or NzToken.Rows)
-                Advance();
-            Expect(NzToken.Only);
-            limit = new LimitClause(FromToken(fetchTok), count, null);
+            offsetFetch = ParseOffsetFetchClause();
+            if (offsetFetch.FetchCount is not null)
+                limit = new LimitClause(offsetFetch.Position, offsetFetch.FetchCount.Value,
+                    offsetFetch.Offset, LimitClauseSyntax.Fetch);
         }
 
         if (Peek().Kind == NzToken.Db2OptimizeFor)
@@ -132,8 +128,9 @@ public partial class Db2SqlParser
             }
         }
 
-        return new SelectStatement(FromToken(sel), distinct ? new SelectModifier(true, false) : null, items, from, where, groupBy, having,
+        var result = new SelectStatement(FromToken(sel), distinct ? new SelectModifier(true, false) : null, items, from, where, groupBy, having,
             orderBy, limit, setOps.Count > 0 ? setOps : null, compoundSelects.Count > 0 ? compoundSelects : null, with, hasInto);
+        return result with { OffsetFetch = offsetFetch };
     }
 
     protected override TableSource ParseTableSource()

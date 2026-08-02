@@ -125,7 +125,7 @@ dotnet pack .\JustyBase.Core\JustyBase.Core.csproj -c Release
 dotnet pack .\JustyBase.ImportExport\JustyBase.ImportExport.csproj -c Release
 ```
 
-Each package includes README and XML documentation. On push/PR, CI builds, tests, packs, and uploads all packages as one artifact. Publishing a GitHub Release (tag like `v0.3.0-preview.7`) runs the same workflow’s **publish** job and pushes `.nupkg` / `.snupkg` to NuGet.org via OIDC. See [docs/release.md](docs/release.md).
+Each package includes README and XML documentation. On push/PR, CI builds, tests, packs, and uploads all packages as one artifact. Publishing a GitHub Release (tag like `v0.3.0`) runs the same workflow’s **publish** job and pushes `.nupkg` / `.snupkg` to NuGet.org via OIDC. See [docs/release.md](docs/release.md).
 
 ## Runnable examples
 

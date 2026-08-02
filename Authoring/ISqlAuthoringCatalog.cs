@@ -41,8 +41,9 @@ public sealed class NetezzaSqlAuthoringCatalog : ISqlAuthoringCatalog
     public IReadOnlyList<NetezzaBuiltinFunction> BuiltinFunctions => NetezzaSqlCatalog.BuiltinFunctions;
     public IReadOnlyList<NetezzaDataTypeSpec> DataTypes => NetezzaSqlCatalog.DataTypes;
     public IReadOnlyList<string> DataTypeNames => NetezzaSqlCatalog.DataTypeNames;
-    public IReadOnlyList<string> CompletionKeywords => Array.Empty<string>();
+    public IReadOnlyList<string> CompletionKeywords => NetezzaSqlCatalog.CompletionKeywords;
     public IReadOnlyList<string> Keywords => NetezzaSqlCatalog.NetezzaKeywords;
+    public SqlFormatterProfile FormatterProfile => NetezzaSqlCatalog.FormatterProfile;
 
     public bool TryGetFunction(string name, out NetezzaBuiltinFunction function) =>
         NetezzaSqlCatalog.TryGetFunction(name, out function);

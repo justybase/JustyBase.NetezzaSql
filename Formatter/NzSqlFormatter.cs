@@ -228,15 +228,29 @@ public sealed class NzSqlFormatter
             }
         }
 
-        if (stmt.Limit is not null)
+        if (stmt.OffsetFetch is not null)
         {
             NewLine();
-            Write("LIMIT ");
-            Write(stmt.Limit.Limit.ToString());
-            if (stmt.Limit.Offset is not null)
+            FormatOffsetFetch(stmt.OffsetFetch);
+        }
+        else if (stmt.Limit is not null)
+        {
+            NewLine();
+            if (stmt.Limit.Syntax == LimitClauseSyntax.Fetch)
             {
-                Write(" OFFSET ");
-                Write(stmt.Limit.Offset.Value.ToString());
+                Write("FETCH FIRST ");
+                Write(stmt.Limit.Limit.ToString());
+                Write(" ROWS ONLY");
+            }
+            else
+            {
+                Write("LIMIT ");
+                Write(stmt.Limit.Limit.ToString());
+                if (stmt.Limit.Offset is not null)
+                {
+                    Write(" OFFSET ");
+                    Write(stmt.Limit.Offset.Value.ToString());
+                }
             }
         }
 
@@ -263,6 +277,33 @@ public sealed class NzSqlFormatter
                 }
             }
         }
+    }
+
+    private void FormatOffsetFetch(OffsetFetchClause clause)
+    {
+        var hasOffset = clause.Offset is not null;
+        if (hasOffset)
+        {
+            Write("OFFSET ");
+            Write(clause.Offset!.Value.ToString());
+            Write(" ROWS");
+        }
+
+        if (clause.FetchCount is null)
+            return;
+
+        if (hasOffset)
+            Write(" ");
+        Write("FETCH ");
+        Write(clause.Direction == FetchDirection.Next ? "NEXT " : "FIRST ");
+        Write(clause.FetchCount.Value.ToString());
+        if (clause.Percent)
+            Write(" PERCENT");
+        Write(" ROWS");
+        if (clause.Only)
+            Write(" ONLY");
+        else if (clause.WithTies)
+            Write(" WITH TIES");
     }
 
     private void FormatWithClause(WithClause withClause)
