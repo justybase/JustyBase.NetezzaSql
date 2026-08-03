@@ -92,6 +92,12 @@ public partial class NzSqlVisitor
         var source = new TableSource(stmt.Position, stmt.Target, null, stmt.Alias);
         Visit(source);
 
+        if (stmt.From is not null)
+        {
+            foreach (var tableRef in stmt.From)
+                Visit(tableRef);
+        }
+
         // Validate WHERE
         if (stmt.Where is not null)
             Visit(stmt.Where);

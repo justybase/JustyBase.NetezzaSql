@@ -43,15 +43,18 @@ pwsh .\eng\Run-LiveImportProof.ps1
 
 Do not wire this into GitHub Actions. Details: [live-import-roundtrip.md](live-import-roundtrip.md).
 
-## Live Oracle / Db2 parser proof (optional, local only)
+## Live Oracle / Db2 / MSSQL parser proof (optional, local only)
 
 ```powershell
 pwsh .\eng\Run-OracleLiveProof.ps1
 pwsh .\eng\Run-Db2LiveProof.ps1
+pwsh .\eng\Run-MssqlLiveProof.ps1
 ```
 
 Db2 live tests live in `tests/JustyBase.NetezzaSql.Db2LiveTests` (not in the solution
-test set) so a missing IBM clidriver cannot crash `Verify-Local`.
+test set) so a missing IBM clidriver cannot crash `Verify-Local`. MSSQL live tests
+live in `tests/JustyBase.NetezzaSql.MssqlLiveTests` using `Microsoft.Data.SqlClient`
+against `MSSQL_LIVE_TEST_*`.
 
 ## Common failures
 

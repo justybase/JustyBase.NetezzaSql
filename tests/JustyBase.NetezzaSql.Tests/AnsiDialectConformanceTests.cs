@@ -17,6 +17,7 @@ public sealed class AnsiDialectConformanceTests
             (NetezzaSqlAuthoringCatalog.Instance, NetezzaSqlAuthoringCatalog.Instance.FormatterProfile),
             (OracleSqlCatalog.Instance, OracleSqlCatalog.Instance.FormatterProfile),
             (Db2SqlCatalog.Instance, Db2SqlCatalog.Instance.FormatterProfile),
+            (MssqlSqlCatalog.Instance, MssqlSqlCatalog.Instance.FormatterProfile),
         };
 
         foreach (var (catalog, formatter) in catalogs)
@@ -40,8 +41,9 @@ public sealed class AnsiDialectConformanceTests
         var netezza = SqlDialectCapabilitiesCatalog.For(SqlDialect.Netezza);
         var oracle = SqlDialectCapabilitiesCatalog.For(SqlDialect.Oracle);
         var db2 = SqlDialectCapabilitiesCatalog.For(SqlDialect.Db2);
+        var mssql = SqlDialectCapabilitiesCatalog.For(SqlDialect.Mssql);
 
-        Assert.All(new[] { netezza, oracle, db2 }, capabilities =>
+        Assert.All(new[] { netezza, oracle, db2, mssql }, capabilities =>
         {
             Assert.True(capabilities.SupportsMerge);
             Assert.True(capabilities.SupportsFetchFirst);
@@ -50,12 +52,14 @@ public sealed class AnsiDialectConformanceTests
         Assert.True(netezza.SupportsLimit);
         Assert.False(oracle.SupportsLimit);
         Assert.False(db2.SupportsLimit);
+        Assert.False(mssql.SupportsLimit);
     }
 
     [Theory]
     [InlineData(SqlDialect.Netezza)]
     [InlineData(SqlDialect.Oracle)]
     [InlineData(SqlDialect.Db2)]
+    [InlineData(SqlDialect.Mssql)]
     public void Merge_IsStructuredAcrossAllDialects(SqlDialect dialect)
     {
         const string sql = "MERGE INTO target AS t USING source AS s ON (t.id = s.id) " +
@@ -82,6 +86,9 @@ public sealed class AnsiDialectConformanceTests
     [InlineData(SqlDialect.Db2, "SELECT id FROM t OFFSET 3 ROWS FETCH FIRST 10 ROWS ONLY")]
     [InlineData(SqlDialect.Db2, "SELECT id FROM t OFFSET 3 ROWS")]
     [InlineData(SqlDialect.Db2, "SELECT id FROM t FETCH FIRST 10 ROWS ONLY")]
+    [InlineData(SqlDialect.Mssql, "SELECT id FROM t OFFSET 3 ROWS FETCH NEXT 10 ROWS ONLY")]
+    [InlineData(SqlDialect.Mssql, "SELECT id FROM t OFFSET 3 ROWS")]
+    [InlineData(SqlDialect.Mssql, "SELECT id FROM t ORDER BY id FETCH FIRST 10 ROWS ONLY")]
     public void OffsetFetchAndLimit_PreserveSyntaxAndShape(SqlDialect dialect, string sql)
     {
         var (statements, errors) = Parse(sql, dialect);

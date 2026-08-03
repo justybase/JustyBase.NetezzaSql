@@ -564,6 +564,14 @@ internal sealed class SymbolCollector
             }
         }
 
+        if (stmt.From is not null)
+        {
+            var fromIdx = FindTokenIndex(tokens, startIndex, endIndex, t => t.Kind == NzToken.From);
+            var cursor = fromIdx >= 0 ? fromIdx + 1 : startIndex;
+            foreach (var tr in stmt.From)
+                cursor = CollectTableReference(tr, tokens, cursor, endIndex, deleteScope, lineStarts, "DELETE");
+        }
+
         if (stmt.Where is not null)
             CollectExpression(stmt.Where, tokens, deleteScope, lineStarts);
     }

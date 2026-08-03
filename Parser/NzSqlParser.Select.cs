@@ -522,7 +522,7 @@ public partial class NzSqlParser
         return refs;
     }
 
-    protected TableReference ParseTableReference()
+    protected virtual TableReference ParseTableReference()
     {
         var source = ParseTableSource();
         List<JoinClause>? joins = null;
@@ -637,6 +637,7 @@ public partial class NzSqlParser
         }
 
         ParseTableSourceSuffix(ref tableAlias, ref tableAliasPosition);
+        TryParseTableHints();
 
         return new TableSource(tablePos, table, null, tableAlias, AliasPosition: tableAliasPosition);
     }
@@ -651,13 +652,22 @@ public partial class NzSqlParser
     }
 
     /// <summary>
+    /// Dialect hook: consumes dialect-specific hints that follow a plain table
+    /// source (e.g. T-SQL table hints <c>WITH (NOLOCK)</c>). Base parser ignores
+    /// them so a leftover <c>WITH</c> cannot cascade into CTE parsing errors.
+    /// </summary>
+    protected virtual void TryParseTableHints()
+    {
+    }
+
+    /// <summary>
     /// Guards against consuming START as a table alias when it opens a
     /// hierarchical START WITH clause (Oracle dialect).
     /// </summary>
     private bool IsStartWith() =>
         Peek().Kind == NzToken.Start && Peek(1).Kind == NzToken.With;
 
-    private JoinClause? TryParseJoinClause()
+    protected JoinClause? TryParseJoinClause()
     {
         var joinType = JoinType.Inner;
         bool natural = false;
@@ -720,7 +730,7 @@ public partial class NzSqlParser
 
     // ====== Table Name ======
 
-    protected (TableName Table, Token<NzToken> FirstToken) ParseTableName()
+    protected virtual (TableName Table, Token<NzToken> FirstToken) ParseTableName()
     {
         var parts = new List<string?>();
         var first = ExpectNameToken();
@@ -735,7 +745,7 @@ public partial class NzSqlParser
                 // Oracle does not support the empty segment form.
                 if (!SupportsEmptyQualifiedNameSegment)
                 {
-                    AddParserError("Empty qualified-name segment (..) is not supported in Oracle",
+                    AddParserError("Empty qualified-name segment (..) is not supported in this dialect",
                         Peek(), "PAR001");
                 }
                 parts.Add(null); // null = empty schema
@@ -767,7 +777,9 @@ public partial class NzSqlParser
     {
         var t = Peek();
         if (t.Kind is NzToken.Identifier or NzToken.QuotedIdentifier or NzToken.Public
-            or NzToken.Owner or NzToken.Hash or NzToken.Start)
+            or NzToken.Owner or NzToken.Hash or NzToken.Start
+            // Mssql-only tokens (never emitted by the other lexers).
+            or NzToken.MssqlVariable or NzToken.MssqlBracketedIdentifier)
         {
             return Advance();
         }

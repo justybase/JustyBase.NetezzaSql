@@ -272,6 +272,11 @@ internal class ScopeWalker
         _scope.EnterScope();
         if (stmt.Target is not null)
             _scope.AddTable(BuildTableInfo(stmt.Target, stmt.Alias));
+        if (stmt.From is not null)
+        {
+            foreach (var tr in stmt.From)
+                WalkTableReference(tr);
+        }
     }
 
     private void WalkMerge(MergeStatement stmt)

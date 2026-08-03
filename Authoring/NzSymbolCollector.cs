@@ -307,6 +307,13 @@ internal sealed class NzSymbolCollector
             }
         }
 
+        if (stmt.From is not null)
+        {
+            var cursor = startIndex;
+            foreach (var tr in stmt.From)
+                cursor = CollectTableReference(tr, tokens, cursor, endIndex, deleteScope);
+        }
+
         if (stmt.Where is not null)
             CollectExpression(stmt.Where, tokens, deleteScope);
     }

@@ -20,8 +20,12 @@ VS Code, a connection manager, or query execution.
 | Db2 dialect parser | `src/dialects/db2/sql/parser.ts` | `Db2SqlParser` partials; DGTT/ALIAS/NICKNAME/PROCEDURE; FINAL TABLE; PAR001 rejections | supported |
 | Db2 quality rules | `extensions/db2/src/sql/qualityRules.ts` | `Db2LintRules` (DB2001–DB2008) via dialect-only `QualityRuleRegistry` | supported |
 | Db2 SQL authoring | `extensions/db2/src/sql/authoring.ts` | `Db2SqlCatalog` through `ISqlAuthoringCatalog` | supported |
-| ANSI authoring base and dialect overlays | `src/sql/authoring/baseProfiles.ts` plus dialect authoring profiles | `AnsiSqlCatalog` composed with Netezza, Oracle and Db2 overlays; signatures are merged case-insensitively | supported |
-| Common MERGE grammar | shared SQL parser and dialect parser entry points | `MergeStatement` with matched update/delete and not-matched insert clauses in all three dialects | supported |
+| MSSQL dialect lexer | `src/dialects/mssql/sql/lexer.ts` | `MssqlLexer` (Mssql* tokens and bracketed identifiers registered before shared chain) | supported |
+| MSSQL dialect parser | `src/dialects/mssql/sql/parser.ts` | `MssqlSqlParser` partials; TOP / OUTPUT / CROSS\|OUTER APPLY / bracketed identifiers / @variables / GO batches; PAR001 rejections | supported |
+| MSSQL quality rules | `extensions/mssql/src/sql/qualityRules.ts` | `MssqlLintRules` (MSS001–MSS008) via dialect-only `QualityRuleRegistry` | supported |
+| MSSQL SQL authoring | `extensions/mssql/src/sql/authoring.ts` | `MssqlSqlCatalog` through `ISqlAuthoringCatalog` | supported |
+| ANSI authoring base and dialect overlays | `src/sql/authoring/baseProfiles.ts` plus dialect authoring profiles | `AnsiSqlCatalog` composed with Netezza, Oracle, Db2 and MSSQL overlays; signatures are merged case-insensitively | supported |
+| Common MERGE grammar | shared SQL parser and dialect parser entry points | `MergeStatement` with matched update/delete and not-matched insert clauses in all four dialects | supported |
 | ANSI OFFSET/FETCH | Oracle and Db2 select parsers; Netezza probe/fixtures | `OffsetFetchClause` preserves OFFSET-only, FIRST/NEXT, PERCENT, ONLY and WITH TIES; legacy `LimitClause` remains compatible | supported |
 | Dialect dispatch | — | `DialectRuntime` (`Tokenize`/`CreateParser`/`QualityRules`/`AuthoringCatalog`) | supported |
 | Query flow and CTE refactoring | `queryStructureAnalyzer.ts`, `flowAnalyzer.ts` | no public C# API | intentionally deferred |
@@ -93,3 +97,32 @@ offsets are preserved by the lexer and parser.
   without env/driver; fail-fast when `DB2_LIVE_TEST_REQUIRED=true`). Hosted in
   `tests/JustyBase.NetezzaSql.Db2LiveTests` (not part of solution `dotnet test`)
   so missing `db2app64`/clidriver cannot crash the shared IntegrationTests host.
+
+## MSSQL dialect mapping notes
+
+- The TS `src/dialects/mssql` project contains the lexer and parser; quality
+  rules and authoring live in `extensions/mssql/src/sql/`. C# mirrors that split
+  via `MssqlLexer` / `MssqlSqlParser` / `MssqlLintRules` / `MssqlSqlCatalog`,
+  composed through `DialectRuntime` and `SqlDialect.Mssql`.
+- T-SQL-only lexical forms (`TOP`, `OUTPUT`, `CROSS|OUTER APPLY`, `GO`,
+  `TRY`/`CATCH`, `PROC`, bracketed identifiers, `@`/`@@` variables) are
+  registered before the shared Netezza chain so they win over `Identifier` /
+  `@SET` / `LBracket-RBracket`. `N'...'` lexes as `Identifier` + `StringLiteral`,
+  matching the reference; `#temp`/`##temp` tables are intentionally not lexed.
+- `TOP` / `OUTPUT` / procedure bodies are opaque token ranges
+  (`TopTokens`, `OutputTokens`, `MssqlProcedureUnitStatement`), so deep T-SQL
+  (TRY-CATCH nesting, CLR, Service Broker) stays out of scope. Procedure bodies
+  keep `BEGIN TRY`/`END TRY`/`BEGIN CATCH`/`END CATCH` balanced so a unit is not
+  truncated at the first `END TRY`.
+- UPDATE/DELETE `OUTPUT ... FROM ... WHERE` joins are parsed structurally: the
+  `OUTPUT` range stops at `FROM`, and the join source is captured in
+  `UpdateStatement.From` / `DeleteStatement.From` (matching the reference).
+- T-SQL table hints (`WITH (NOLOCK)`, `WITH (INDEX (...))`) after a table source
+  are consumed as an opaque parenthesis range so the leftover `WITH` cannot
+  cascade into CTE parsing errors.
+- Netezza-only surfaces (LIMIT, `DB..TABLE`, GROOM, GENERATE, DISTRIBUTE ON)
+  are rejected with PAR001 and flagged by MSS004/MSS005/MSS007/MSS008.
+- Live proof: `eng/Run-MssqlLiveProof.ps1` against `MSSQL_LIVE_TEST_*`
+  (soft-skip without env; fail-fast when `MSSQL_LIVE_TEST_REQUIRED=true`).
+  Hosted in `tests/JustyBase.NetezzaSql.MssqlLiveTests` (not part of solution
+  `dotnet test`) using `Microsoft.Data.SqlClient`.

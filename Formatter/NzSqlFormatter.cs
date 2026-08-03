@@ -120,6 +120,9 @@ public sealed class NzSqlFormatter
             case Db2ProcedureUnitStatement db2Proc:
                 FormatOracleTokenRange(db2Proc.Tokens);
                 break;
+            case MssqlProcedureUnitStatement mssqlProc:
+                FormatOracleTokenRange(mssqlProc.Tokens);
+                break;
             case Db2DeclareGlobalTempTableStatement dgtt:
                 Write("DECLARE GLOBAL TEMPORARY TABLE ");
                 Write(FormatTableName(dgtt.Name));
@@ -531,6 +534,13 @@ public sealed class NzSqlFormatter
         {
             Write(" ");
             Write(stmt.Alias);
+        }
+
+        if (stmt.From is { Count: > 0 })
+        {
+            NewLine();
+            Write("FROM ");
+            FormatFrom(stmt.From);
         }
 
         if (stmt.Where is not null)

@@ -21,6 +21,11 @@ public static class SqlDialectCapabilitiesCatalog
             SupportsFetchFirst: true,
             SupportsAnsiOffsetFetch: true,
             SupportsLimit: false),
+        SqlDialect.Mssql => new(
+            SupportsMerge: true,
+            SupportsFetchFirst: true,
+            SupportsAnsiOffsetFetch: true,
+            SupportsLimit: false),
         _ => new(
             SupportsMerge: true,
             SupportsFetchFirst: true,

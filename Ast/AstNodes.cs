@@ -92,7 +92,11 @@ public record SelectStatement(
     IReadOnlyList<SelectStatement>? CompoundSelects,
     WithClause? With,
     bool HasInto = false,
-    OffsetFetchClause? OffsetFetch = null
+    OffsetFetchClause? OffsetFetch = null,
+    // Mssql: SELECT TOP (...) kept as an opaque offset-stable token range so
+    // the formatter can reproduce the original clause faithfully. Null for all
+    // other dialects.
+    IReadOnlyList<Token<NzToken>>? TopTokens = null
 ) : Statement(Position);
 
 public record InsertStatement(
@@ -101,7 +105,9 @@ public record InsertStatement(
     IReadOnlyList<string>? Columns,
     IReadOnlyList<IReadOnlyList<Expression>>? Values,
     SelectStatement? SourceQuery,
-    OracleReturningClause? Returning = null
+    OracleReturningClause? Returning = null,
+    // Mssql: OUTPUT clause as an opaque offset-stable token range.
+    IReadOnlyList<Token<NzToken>>? OutputTokens = null
 ) : Statement(Position);
 
 public record UpdateStatement(
@@ -111,7 +117,9 @@ public record UpdateStatement(
     IReadOnlyList<UpdateSetItem> SetItems,
     IReadOnlyList<TableReference>? From,
     Expression? Where,
-    OracleReturningClause? Returning = null
+    OracleReturningClause? Returning = null,
+    // Mssql: OUTPUT clause as an opaque offset-stable token range.
+    IReadOnlyList<Token<NzToken>>? OutputTokens = null
 ) : Statement(Position);
 
 public record DeleteStatement(
@@ -119,7 +127,11 @@ public record DeleteStatement(
     TableName Target,
     string? Alias,
     Expression? Where,
-    OracleReturningClause? Returning = null
+    OracleReturningClause? Returning = null,
+    // Mssql: OUTPUT clause as an opaque offset-stable token range.
+    IReadOnlyList<Token<NzToken>>? OutputTokens = null,
+    // Mssql: optional FROM join source after OUTPUT (DELETE t OUTPUT ... FROM s).
+    IReadOnlyList<TableReference>? From = null
 ) : Statement(Position);
 
 public record MergeStatement(
@@ -320,7 +332,15 @@ public record SelectItem(
 public record TableReference(
     SourcePosition Position,
     TableSource Source,
-    IReadOnlyList<JoinClause>? Joins
+    IReadOnlyList<JoinClause>? Joins,
+    // Mssql: CROSS/OUTER APPLY sources chained after the base table source.
+    IReadOnlyList<ApplyClause>? Applies = null
+) : AstNode(Position);
+
+public record ApplyClause(
+    SourcePosition Position,
+    bool Outer,
+    TableSource Source
 ) : AstNode(Position);
 
 public record TableSource(
@@ -795,6 +815,16 @@ public record Db2CreateNicknameStatement(
 ) : Statement(Position);
 
 public record Db2ProcedureUnitStatement(
+    SourcePosition Position,
+    TableName Name,
+    IReadOnlyList<Token<NzToken>> Tokens
+) : Statement(Position);
+
+// ====== Mssql dialect statements ======
+// Thin T-SQL procedure units keep offset-stable token ranges until a deep
+// T-SQL visitor lands (CLR / Service Broker / TRY-CATCH nesting stay opaque).
+
+public record MssqlProcedureUnitStatement(
     SourcePosition Position,
     TableName Name,
     IReadOnlyList<Token<NzToken>> Tokens

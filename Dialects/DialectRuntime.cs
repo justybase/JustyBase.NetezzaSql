@@ -15,11 +15,13 @@ public static class DialectRuntime
     private static readonly QualityRuleRegistry NetezzaRules = new(NzLintRules.AllRules);
     private static readonly QualityRuleRegistry OracleRules = new(OracleLintRules.AllRules);
     private static readonly QualityRuleRegistry Db2Rules = new(Db2LintRules.AllRules);
+    private static readonly QualityRuleRegistry MssqlRules = new(MssqlLintRules.AllRules);
 
     public static string DiagnosticSource(SqlDialect dialect) => dialect switch
     {
         SqlDialect.Oracle => "Oracle SQL",
         SqlDialect.Db2 => "Db2 SQL",
+        SqlDialect.Mssql => "MSSQL SQL",
         _ => "Netezza SQL",
     };
 
@@ -27,6 +29,7 @@ public static class DialectRuntime
     {
         SqlDialect.Oracle => OracleRules,
         SqlDialect.Db2 => Db2Rules,
+        SqlDialect.Mssql => MssqlRules,
         _ => NetezzaRules,
     };
 
@@ -34,6 +37,7 @@ public static class DialectRuntime
     {
         SqlDialect.Oracle => OracleSqlCatalog.Instance,
         SqlDialect.Db2 => Db2SqlCatalog.Instance,
+        SqlDialect.Mssql => MssqlSqlCatalog.Instance,
         _ => NetezzaSqlAuthoringCatalog.Instance,
     };
 
@@ -41,6 +45,7 @@ public static class DialectRuntime
     {
         SqlDialect.Oracle => OracleSqlCatalog.Instance,
         SqlDialect.Db2 => Db2SqlCatalog.Instance,
+        SqlDialect.Mssql => MssqlSqlCatalog.Instance,
         _ => null, // callers default to Netezza catalog
     };
 
@@ -48,6 +53,7 @@ public static class DialectRuntime
     {
         SqlDialect.Oracle => OracleLexer.Tokenize(sql),
         SqlDialect.Db2 => Db2Lexer.Tokenize(sql),
+        SqlDialect.Mssql => MssqlLexer.Tokenize(sql),
         _ => NzLexer.Tokenize(sql),
     };
 
@@ -55,6 +61,7 @@ public static class DialectRuntime
     {
         SqlDialect.Oracle => new OracleSqlParser(tokens),
         SqlDialect.Db2 => new Db2SqlParser(tokens),
+        SqlDialect.Mssql => new MssqlSqlParser(tokens),
         _ => new NzSqlParser(tokens),
     };
 
@@ -66,6 +73,9 @@ public static class DialectRuntime
             return SqlDialect.Oracle;
         if (value.Equals("db2", StringComparison.OrdinalIgnoreCase))
             return SqlDialect.Db2;
+        if (value.Equals("mssql", StringComparison.OrdinalIgnoreCase) ||
+            value.Equals("sqlserver", StringComparison.OrdinalIgnoreCase))
+            return SqlDialect.Mssql;
         return SqlDialect.Netezza;
     }
 }

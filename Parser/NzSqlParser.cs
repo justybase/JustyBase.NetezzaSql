@@ -114,7 +114,10 @@ public partial class NzSqlParser
         or NzToken.Owner or NzToken.Hash or NzToken.Start or NzToken.Out or NzToken.Inout
         or NzToken.Perform or NzToken.Reverse or NzToken.Warning or NzToken.Within
         // Db2-only tokens (never emitted by NzLexer / OracleLexer).
-        or NzToken.Db2Identity or NzToken.Db2Nickname;
+        or NzToken.Db2Identity or NzToken.Db2Nickname
+        // Mssql-only tokens (never emitted by the other lexers).
+        or NzToken.MssqlVariable or NzToken.MssqlBracketedIdentifier
+        or NzToken.MssqlTop or NzToken.MssqlOutput or NzToken.MssqlProc;
 
     protected bool IsSetOperationStart() => Peek().Kind is NzToken.Union or NzToken.Intersect or NzToken.Except or NzToken.MinusSet
         || (Peek().Kind == NzToken.Identifier &&

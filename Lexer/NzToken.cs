@@ -292,6 +292,21 @@ public enum NzToken
     Db2Nickname,                 // NICKNAME
     Db2Identity,                 // IDENTITY
 
+    // Mssql-specific tokens (produced only by MssqlLexer; registered before the
+    // shared chain). Order mirrors mssqlOnlyTokens in the reference lexer.ts.
+    MssqlTop,                  // TOP
+    MssqlOutput,               // OUTPUT
+    MssqlCrossApply,           // CROSS APPLY
+    MssqlOuterApply,           // OUTER APPLY
+    MssqlGo,                   // GO
+    MssqlTry,                  // TRY
+    MssqlCatch,                // CATCH
+    MssqlProc,                 // PROC
+    MssqlRecompile,            // RECOMPILE
+    MssqlEncryption,           // ENCRYPTION
+    MssqlVariable,             // @name or @@name
+    MssqlBracketedIdentifier,  // [name] or [na]]me]
+
     // Operators (sorted by length descending for tokenizer)
     NotEquals,        // <> or !=
     LessThanEquals,   // <=

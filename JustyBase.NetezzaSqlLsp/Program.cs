@@ -13,9 +13,9 @@ using System.Text.Json;
 Console.InputEncoding = System.Text.Encoding.UTF8;
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 
-// --dialect netezza|oracle|db2 selects the default SQL dialect; clients can
-// switch it at runtime with the justy/setDialect request.
-// Accepts both --dialect=oracle and --dialect oracle (likewise db2).
+// --dialect netezza|oracle|db2|mssql selects the default SQL dialect; clients
+// can switch it at runtime with the justy/setDialect request.
+// Accepts both --dialect=oracle and --dialect oracle (likewise db2/mssql).
 var dialect = LspDialectArgs.Parse(args);
 
 var input = Console.OpenStandardInput();
