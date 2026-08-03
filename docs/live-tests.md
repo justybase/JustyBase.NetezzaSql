@@ -37,3 +37,17 @@ The isolated `tests/JustyBase.NetezzaSql.MySqlLiveTests` project uses
 `MYSQL_LIVE_TEST_PASSWORD`; optional variables are `MYSQL_LIVE_TEST_PORT` and
 `MYSQL_LIVE_TEST_CONNECT_STRING`. Set `MYSQL_LIVE_TEST_REQUIRED=true` to make
 missing configuration or connection failures hard failures.
+
+## Live PostgreSQL parser proof (optional, local only)
+
+```powershell
+pwsh .\eng\Run-PostgreSqlLiveProof.ps1
+```
+
+The isolated `tests/JustyBase.NetezzaSql.PostgreSqlLiveTests` project uses
+`Npgsql` and `POSTGRES_LIVE_TEST_HOST`, `POSTGRES_LIVE_TEST_DATABASE`,
+`POSTGRES_LIVE_TEST_USER` and `POSTGRES_LIVE_TEST_PASSWORD`.
+`POSTGRES_LIVE_TEST_PORT` defaults to `5432`; `POSTGRES_LIVE_TEST_CONNECT_STRING`
+can replace the individual connection variables. Set
+`POSTGRES_LIVE_TEST_REQUIRED=true` to make missing configuration a failure.
+Passwords and connection-string values are never printed.

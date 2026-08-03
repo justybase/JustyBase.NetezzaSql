@@ -31,6 +31,11 @@ public static class SqlDialectCapabilitiesCatalog
             SupportsFetchFirst: false,
             SupportsAnsiOffsetFetch: false,
             SupportsLimit: true),
+        SqlDialect.PostgreSql => new(
+            SupportsMerge: true,
+            SupportsFetchFirst: true,
+            SupportsAnsiOffsetFetch: true,
+            SupportsLimit: true),
         _ => new(
             SupportsMerge: true,
             SupportsFetchFirst: true,

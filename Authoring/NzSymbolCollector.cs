@@ -110,6 +110,9 @@ internal sealed class NzSymbolCollector
 
         foreach (var item in stmt.SelectList)
             CollectExpression(item.Expression, tokens, selectScope);
+        if (stmt.DistinctOn is not null)
+            foreach (var expr in stmt.DistinctOn)
+                CollectExpression(expr, tokens, selectScope);
         if (stmt.Where is not null)
             CollectExpression(stmt.Where, tokens, selectScope);
         if (stmt.GroupBy is not null)
@@ -391,6 +394,10 @@ internal sealed class NzSymbolCollector
                 break;
             case CastFunctionExpression castFn:
                 CollectExpression(castFn.Expression, tokens, scope);
+                break;
+            case ArrayExpression array:
+                foreach (var item in array.Items)
+                    CollectExpression(item, tokens, scope);
                 break;
             case ExistsExpression exists:
                 CollectNestedSelect(exists.Subquery, tokens, expr.Position.Absolute, scope);

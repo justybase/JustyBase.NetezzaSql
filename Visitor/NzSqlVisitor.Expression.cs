@@ -17,6 +17,9 @@ public partial class NzSqlVisitor
             case CaseExpression ce: VisitCase(ce); break;
             case CastExpression c: Visit(c.Expression); CheckTypeLength(c.TargetType, c.Position); break;
             case CastFunctionExpression cf: Visit(cf.Expression); CheckTypeLength(cf.TargetType, cf.Position); break;
+            case ArrayExpression array:
+                foreach (var item in array.Items) Visit(item);
+                break;
             case ExistsExpression e: Visit(e.Subquery); break;
             case SubqueryExpression sq: Visit(sq.Query); break;
             case InExpression ie:

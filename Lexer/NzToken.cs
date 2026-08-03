@@ -307,6 +307,19 @@ public enum NzToken
     MssqlVariable,             // @name or @@name
     MssqlBracketedIdentifier,  // [name] or [na]]me]
 
+    // PostgreSQL-specific tokens (produced only by PostgreSqlLexer).
+    PostgreSqlUnsupportedNetezza,
+    PostgreSqlJsonTextPath,     // #>>
+    PostgreSqlJsonPath,         // #>
+    PostgreSqlJsonTextArrow,    // ->>
+    PostgreSqlJsonArrow,        // ->
+    PostgreSqlLateral,
+    PostgreSqlReturning,
+    PostgreSqlConflict,
+    PostgreSqlDo,
+    PostgreSqlNothing,
+    PostgreSqlArray,
+
     // Operators (sorted by length descending for tokenizer)
     NotEquals,        // <> or !=
     LessThanEquals,   // <=
@@ -355,4 +368,10 @@ public enum NzToken
 
     // MySQL-specific quoted identifiers (appended to preserve existing values)
     MySqlBacktickIdentifier,
+
+    // Short aliases retained for consumers that use generic operator names.
+    JsonTextPath = PostgreSqlJsonTextPath,
+    JsonPath = PostgreSqlJsonPath,
+    JsonTextArrow = PostgreSqlJsonTextArrow,
+    JsonArrow = PostgreSqlJsonArrow,
 }

@@ -4,7 +4,7 @@ namespace JustyBase.NetezzaSqlLsp;
 
 /// <summary>
 /// Parses LSP process startup arguments that select the default SQL dialect.
-/// Supports <c>--dialect=oracle|db2|mssql|mysql|netezza</c> and spaced forms.
+/// Supports <c>--dialect=oracle|db2|mssql|mysql|postgresql|netezza</c> and spaced forms.
 /// </summary>
 public static class LspDialectArgs
 {

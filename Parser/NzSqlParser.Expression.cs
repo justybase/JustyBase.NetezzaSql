@@ -186,6 +186,19 @@ public partial class NzSqlParser
                 var op = Advance();
                 left = new BinaryExpression(FromToken(op), BinaryOperator.Concat, left, ParseMultiplicative());
             }
+            else if (k is NzToken.PostgreSqlJsonArrow or NzToken.PostgreSqlJsonTextArrow
+                or NzToken.PostgreSqlJsonPath or NzToken.PostgreSqlJsonTextPath)
+            {
+                var op = Advance();
+                var jsonOperator = op.Kind switch
+                {
+                    NzToken.PostgreSqlJsonArrow => BinaryOperator.JsonArrow,
+                    NzToken.PostgreSqlJsonTextArrow => BinaryOperator.JsonTextArrow,
+                    NzToken.PostgreSqlJsonPath => BinaryOperator.JsonPath,
+                    _ => BinaryOperator.JsonTextPath,
+                };
+                left = new BinaryExpression(FromToken(op), jsonOperator, left, ParseMultiplicative());
+            }
             else break;
         }
         return left;

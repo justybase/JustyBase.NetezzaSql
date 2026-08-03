@@ -28,8 +28,11 @@ VS Code, a connection manager, or query execution.
 | MySQL 8 dialect parser | `src/dialects/mysql/sql/parser.ts` | `MySqlSqlParser`; two-part names, MySQL LIMIT forms, INSERT IGNORE, ON DUPLICATE KEY UPDATE and MySQL 8 DDL | supported |
 | MySQL 8 SQL authoring | `extensions/mysql/src/sql/authoring.ts` | `MySqlSqlCatalog` through `ISqlAuthoringCatalog` | supported |
 | MySQL quality rules | `extensions/mysql/src/sql/qualityRules.ts` | empty dialect-only rule registry | supported |
-| ANSI authoring base and dialect overlays | `src/sql/authoring/baseProfiles.ts` plus dialect authoring profiles | `AnsiSqlCatalog` composed with Netezza, Oracle, Db2, MSSQL and MySQL overlays; signatures are merged case-insensitively | supported |
-| Common MERGE grammar | shared SQL parser and dialect parser entry points | `MergeStatement` with matched update/delete and not-matched insert clauses in all four dialects | supported |
+| PostgreSQL dialect lexer | `src/dialects/postgresql/sql/lexer.ts` | `PostgreSqlLexer` (JSON operators, LATERAL, RETURNING, conflict/array tokens and unsupported Netezza token) | supported |
+| PostgreSQL dialect parser | `src/dialects/postgresql/sql/parser.ts` | `PostgreSqlSqlParser`; strict schema.table names, DISTINCT ON, LATERAL, arrays, JSON operators, casts, ON CONFLICT and RETURNING | supported |
+| PostgreSQL SQL authoring and quality rules | `extensions/postgresql/src/postgresqlSqlAuthoring.ts` | `PostgreSqlSqlCatalog` and empty `PostgreSqlLintRules` | supported |
+| ANSI authoring base and dialect overlays | `src/sql/authoring/baseProfiles.ts` plus dialect authoring profiles | `AnsiSqlCatalog` composed with Netezza, Oracle, Db2, MSSQL, MySQL and PostgreSQL overlays; signatures are merged case-insensitively | supported |
+| Common MERGE grammar | shared SQL parser and dialect parser entry points | `MergeStatement` with matched update/delete and not-matched insert clauses in all supported dialects | supported |
 | ANSI OFFSET/FETCH | Oracle and Db2 select parsers; Netezza probe/fixtures | `OffsetFetchClause` preserves OFFSET-only, FIRST/NEXT, PERCENT, ONLY and WITH TIES; legacy `LimitClause` remains compatible | supported |
 | Dialect dispatch | — | `DialectRuntime` (`Tokenize`/`CreateParser`/`QualityRules`/`AuthoringCatalog`) | supported |
 | Query flow and CTE refactoring | `queryStructureAnalyzer.ts`, `flowAnalyzer.ts` | no public C# API | intentionally deferred |
@@ -61,7 +64,8 @@ offsets are preserved by the lexer and parser.
 - Oracle quality rules and authoring live in `extensions/oracle/src/sql/`
   (not in `src/dialects/oracle`); they are composed per document in the C# LSP
   through `SqlDialect` (`Dialects/SqlDialect.cs`) with `--dialect` startup
-  argument or the `justy/setDialect` request (`netezza` | `oracle` | `db2`).
+  argument or the `justy/setDialect` request (`netezza` | `oracle` | `db2` |
+  `mssql` | `mysql` | `postgresql`).
 - q-quoted strings (`q'[...]'`) tokenize as `q` identifier + string literal in
   both the TS and C# lexers; embedded quote handling is preserved only in the
   linter's statement scanner (`OracleLintHelpers.StatementEnd`).

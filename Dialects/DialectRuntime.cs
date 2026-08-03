@@ -17,6 +17,7 @@ public static class DialectRuntime
     private static readonly QualityRuleRegistry Db2Rules = new(Db2LintRules.AllRules);
     private static readonly QualityRuleRegistry MssqlRules = new(MssqlLintRules.AllRules);
     private static readonly QualityRuleRegistry MySqlRules = new(MySqlLintRules.AllRules);
+    private static readonly QualityRuleRegistry PostgreSqlRules = new(PostgreSqlLintRules.AllRules);
 
     public static string DiagnosticSource(SqlDialect dialect) => dialect switch
     {
@@ -24,6 +25,7 @@ public static class DialectRuntime
         SqlDialect.Db2 => "Db2 SQL",
         SqlDialect.Mssql => "MSSQL SQL",
         SqlDialect.MySql => "MySQL SQL",
+        SqlDialect.PostgreSql => "PostgreSQL SQL",
         _ => "Netezza SQL",
     };
 
@@ -33,6 +35,7 @@ public static class DialectRuntime
         SqlDialect.Db2 => Db2Rules,
         SqlDialect.Mssql => MssqlRules,
         SqlDialect.MySql => MySqlRules,
+        SqlDialect.PostgreSql => PostgreSqlRules,
         _ => NetezzaRules,
     };
 
@@ -42,6 +45,7 @@ public static class DialectRuntime
         SqlDialect.Db2 => Db2SqlCatalog.Instance,
         SqlDialect.Mssql => MssqlSqlCatalog.Instance,
         SqlDialect.MySql => MySqlSqlCatalog.Instance,
+        SqlDialect.PostgreSql => PostgreSqlSqlCatalog.Instance,
         _ => NetezzaSqlAuthoringCatalog.Instance,
     };
 
@@ -51,6 +55,7 @@ public static class DialectRuntime
         SqlDialect.Db2 => Db2SqlCatalog.Instance,
         SqlDialect.Mssql => MssqlSqlCatalog.Instance,
         SqlDialect.MySql => MySqlSqlCatalog.Instance,
+        SqlDialect.PostgreSql => PostgreSqlSqlCatalog.Instance,
         _ => null, // callers default to Netezza catalog
     };
 
@@ -60,6 +65,7 @@ public static class DialectRuntime
         SqlDialect.Db2 => Db2Lexer.Tokenize(sql),
         SqlDialect.Mssql => MssqlLexer.Tokenize(sql),
         SqlDialect.MySql => MySqlLexer.Tokenize(sql),
+        SqlDialect.PostgreSql => PostgreSqlLexer.Tokenize(sql),
         _ => NzLexer.Tokenize(sql),
     };
 
@@ -69,6 +75,7 @@ public static class DialectRuntime
         SqlDialect.Db2 => new Db2SqlParser(tokens),
         SqlDialect.Mssql => new MssqlSqlParser(tokens),
         SqlDialect.MySql => new MySqlSqlParser(tokens),
+        SqlDialect.PostgreSql => new PostgreSqlSqlParser(tokens),
         _ => new NzSqlParser(tokens),
     };
 
@@ -85,6 +92,10 @@ public static class DialectRuntime
             return SqlDialect.Mssql;
         if (value.Equals("mysql", StringComparison.OrdinalIgnoreCase))
             return SqlDialect.MySql;
+        if (value.Equals("postgresql", StringComparison.OrdinalIgnoreCase) ||
+            value.Equals("postgres", StringComparison.OrdinalIgnoreCase) ||
+            value.Equals("pg", StringComparison.OrdinalIgnoreCase))
+            return SqlDialect.PostgreSql;
         return SqlDialect.Netezza;
     }
 }

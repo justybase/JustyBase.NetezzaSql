@@ -178,6 +178,16 @@ public sealed class NzSqlFormatter
             else if (stmt.Modifier.All)
                 Write(" ALL");
         }
+        if (stmt.DistinctOn is { Count: > 0 })
+        {
+            Write(" ON (");
+            for (var i = 0; i < stmt.DistinctOn.Count; i++)
+            {
+                if (i > 0) Write(", ");
+                FormatExpression(stmt.DistinctOn[i]);
+            }
+            Write(")");
+        }
         Write(" ");
         FormatSelectList(stmt.SelectList);
 
@@ -384,6 +394,20 @@ public sealed class NzSqlFormatter
 
     private void FormatTableSource(TableSource src)
     {
+        if (src.Lateral)
+            Write("LATERAL ");
+
+        if (src.TableFunction is not null)
+        {
+            FormatExpression(src.TableFunction);
+            if (src.Alias is not null)
+            {
+                Write(" AS ");
+                Write(src.Alias);
+            }
+            return;
+        }
+
         if (src.FunctionSource)
         {
             Write("TABLE WITH FINAL");
@@ -488,11 +512,15 @@ public sealed class NzSqlFormatter
             FormatSelectCore(stmt.SourceQuery);
         }
 
+        if (stmt.OnConflict is not null)
+            FormatPostgreSqlOnConflict(stmt.OnConflict);
+
         if (stmt.MySqlOnDuplicateKeyUpdateTokens is { Count: > 0 })
         {
             Write(" ON DUPLICATE KEY UPDATE ");
             Write(FormatOpaqueTokens(stmt.MySqlOnDuplicateKeyUpdateTokens));
         }
+        FormatReturning(stmt.Returning);
     }
 
     private void FormatUpdate(UpdateStatement stmt)
@@ -526,6 +554,7 @@ public sealed class NzSqlFormatter
             Write("WHERE ");
             FormatExpression(stmt.Where);
         }
+        FormatReturning(stmt.Returning);
     }
 
     private void FormatUpdateSetItem(UpdateSetItem item)
@@ -563,6 +592,73 @@ public sealed class NzSqlFormatter
             NewLine();
             Write("WHERE ");
             FormatExpression(stmt.Where);
+        }
+        FormatReturning(stmt.Returning);
+    }
+
+    private void FormatPostgreSqlOnConflict(PostgreSqlOnConflictClause clause)
+    {
+        NewLine();
+        Write("ON CONFLICT");
+        if (clause.ConstraintName is not null)
+        {
+            Write(" ON CONSTRAINT ");
+            Write(clause.ConstraintName);
+        }
+        else if (clause.ConflictColumns is { Count: > 0 })
+        {
+            Write(" (");
+            Write(string.Join(", ", clause.ConflictColumns));
+            Write(")");
+        }
+        if (clause.DoNothing)
+        {
+            Write(" DO NOTHING");
+            return;
+        }
+        Write(" DO UPDATE SET ");
+        if (clause.UpdateItems is { Count: > 0 })
+        {
+            for (var i = 0; i < clause.UpdateItems.Count; i++)
+            {
+                if (i > 0) Write(", ");
+                FormatUpdateSetItem(clause.UpdateItems[i]);
+            }
+        }
+        if (clause.Where is not null)
+        {
+            Write(" WHERE ");
+            FormatExpression(clause.Where);
+        }
+    }
+
+    private void FormatReturning(ReturningClause? returning)
+    {
+        if (returning is null) return;
+        NewLine();
+        Write("RETURNING ");
+        if (returning.Items is { Count: > 0 })
+        {
+            for (var i = 0; i < returning.Items.Count; i++)
+            {
+                if (i > 0) Write(", ");
+                var item = returning.Items[i];
+                FormatExpression(item.Expression);
+                if (item.Alias is not null)
+                {
+                    Write(" AS ");
+                    Write(item.Alias);
+                }
+            }
+        }
+        else
+        {
+            Write(string.Join(", ", returning.Columns));
+        }
+        if (returning.IntoVariables is { Count: > 0 })
+        {
+            Write(" INTO ");
+            Write(string.Join(", ", returning.IntoVariables));
         }
     }
 
@@ -1365,6 +1461,15 @@ public sealed class NzSqlFormatter
                 Write(" ");
                 FormatExpression(binary.Right);
                 break;
+            case ArrayExpression array:
+                Write("ARRAY[");
+                for (var i = 0; i < array.Items.Count; i++)
+                {
+                    if (i > 0) Write(", ");
+                    FormatExpression(array.Items[i]);
+                }
+                Write("]");
+                break;
             case UnaryExpression unary:
                 Write(UnaryOpString(unary.Operator));
                 Write(" ");
@@ -1860,6 +1965,10 @@ public sealed class NzSqlFormatter
         BinaryOperator.Modulo => "%",
         BinaryOperator.Caret => "^",
         BinaryOperator.Concat => "||",
+        BinaryOperator.JsonArrow => "->",
+        BinaryOperator.JsonTextArrow => "->>",
+        BinaryOperator.JsonPath => "#>",
+        BinaryOperator.JsonTextPath => "#>>",
         _ => "?"
     };
 

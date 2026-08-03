@@ -38,6 +38,10 @@ public partial class NzSqlVisitor
         }
 
         // Visit SELECT items
+        if (stmt.DistinctOn is not null)
+            foreach (var expression in stmt.DistinctOn)
+                Visit(expression);
+
         var outputColumns = new List<string>();
         var savedInSelect = _inSelectList;
         var savedAliases = new HashSet<string>(_selectListAliasesSoFar, StringComparer.OrdinalIgnoreCase);
@@ -295,7 +299,7 @@ public partial class NzSqlVisitor
             }
         }
 
-        if (source.FunctionSource && source.Alias is not null)
+        if ((source.FunctionSource || source.TableFunction is not null) && source.Alias is not null)
         {
             var funcInfo = new TableInfo(source.Alias, IsCte: false, IsTempTable: false);
             _scope.AddTable(funcInfo);

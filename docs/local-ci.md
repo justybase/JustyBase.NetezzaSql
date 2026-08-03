@@ -50,6 +50,7 @@ pwsh .\eng\Run-OracleLiveProof.ps1
 pwsh .\eng\Run-Db2LiveProof.ps1
 pwsh .\eng\Run-MssqlLiveProof.ps1
 pwsh .\eng\Run-MySqlLiveProof.ps1
+pwsh .\eng\Run-PostgreSqlLiveProof.ps1
 ```
 
 Db2 live tests live in `tests/JustyBase.NetezzaSql.Db2LiveTests` (not in the solution
@@ -59,6 +60,8 @@ against `MSSQL_LIVE_TEST_*`.
 MySQL live tests live in `tests/JustyBase.NetezzaSql.MySqlLiveTests` using
 `MySqlConnector` against `MYSQL_LIVE_TEST_*`; they are isolated from the
 solution-wide test set.
+PostgreSQL live tests live in `tests/JustyBase.NetezzaSql.PostgreSqlLiveTests`
+using `Npgsql` against `POSTGRES_LIVE_TEST_*`; they are likewise isolated.
 
 ## Common failures
 

@@ -96,7 +96,8 @@ public record SelectStatement(
     // Mssql: SELECT TOP (...) kept as an opaque offset-stable token range so
     // the formatter can reproduce the original clause faithfully. Null for all
     // other dialects.
-    IReadOnlyList<Token<NzToken>>? TopTokens = null
+    IReadOnlyList<Token<NzToken>>? TopTokens = null,
+    IReadOnlyList<Expression>? DistinctOn = null
 ) : Statement(Position);
 
 public record InsertStatement(
@@ -105,11 +106,12 @@ public record InsertStatement(
     IReadOnlyList<string>? Columns,
     IReadOnlyList<IReadOnlyList<Expression>>? Values,
     SelectStatement? SourceQuery,
-    OracleReturningClause? Returning = null,
+    ReturningClause? Returning = null,
     // Mssql: OUTPUT clause as an opaque offset-stable token range.
     IReadOnlyList<Token<NzToken>>? OutputTokens = null,
     bool MySqlIgnore = false,
-    IReadOnlyList<Token<NzToken>>? MySqlOnDuplicateKeyUpdateTokens = null
+    IReadOnlyList<Token<NzToken>>? MySqlOnDuplicateKeyUpdateTokens = null,
+    PostgreSqlOnConflictClause? OnConflict = null
 ) : Statement(Position);
 
 public record UpdateStatement(
@@ -119,7 +121,7 @@ public record UpdateStatement(
     IReadOnlyList<UpdateSetItem> SetItems,
     IReadOnlyList<TableReference>? From,
     Expression? Where,
-    OracleReturningClause? Returning = null,
+    ReturningClause? Returning = null,
     // Mssql: OUTPUT clause as an opaque offset-stable token range.
     IReadOnlyList<Token<NzToken>>? OutputTokens = null
 ) : Statement(Position);
@@ -129,7 +131,7 @@ public record DeleteStatement(
     TableName Target,
     string? Alias,
     Expression? Where,
-    OracleReturningClause? Returning = null,
+    ReturningClause? Returning = null,
     // Mssql: OUTPUT clause as an opaque offset-stable token range.
     IReadOnlyList<Token<NzToken>>? OutputTokens = null,
     // Mssql: optional FROM join source after OUTPUT (DELETE t OUTPUT ... FROM s).
@@ -352,7 +354,9 @@ public record TableSource(
     SelectStatement? Subquery,
     string? Alias,
     bool FunctionSource = false,
-    SourcePosition? AliasPosition = null
+    SourcePosition? AliasPosition = null,
+    bool Lateral = false,
+    FunctionCall? TableFunction = null
 ) : AstNode(Position);
 
 public record TableName(
@@ -631,7 +635,8 @@ public enum BinaryOperator
     Between, NotBetween,
     Is, IsNot,
     Plus, Minus, Multiply, Divide, Modulo, Caret,
-    Concat
+    Concat,
+    JsonArrow, JsonTextArrow, JsonPath, JsonTextPath
 }
 
 public record UnaryExpression(
@@ -700,6 +705,11 @@ public record CastFunctionExpression(
     SourcePosition Position,
     Expression Expression,
     DataTypeInfo TargetType
+) : Expression(Position);
+
+public record ArrayExpression(
+    SourcePosition Position,
+    IReadOnlyList<Expression> Items
 ) : Expression(Position);
 
 public record SequenceValueExpression(
@@ -796,10 +806,32 @@ public record OracleProgramUnitStatement(
     IReadOnlyList<Token<NzToken>> Tokens
 ) : Statement(Position);
 
+public record ReturningItem(
+    SourcePosition Position,
+    Expression Expression,
+    string? Alias = null
+) : AstNode(Position);
+
+public record ReturningClause(
+    SourcePosition Position,
+    IReadOnlyList<string> Columns,
+    IReadOnlyList<string>? IntoVariables = null,
+    IReadOnlyList<ReturningItem>? Items = null
+) : AstNode(Position);
+
 public record OracleReturningClause(
     SourcePosition Position,
     IReadOnlyList<string> Columns,
     IReadOnlyList<string> IntoVariables
+) : ReturningClause(Position, Columns, IntoVariables);
+
+public record PostgreSqlOnConflictClause(
+    SourcePosition Position,
+    IReadOnlyList<string>? ConflictColumns,
+    bool DoNothing,
+    IReadOnlyList<UpdateSetItem>? UpdateItems = null,
+    Expression? Where = null,
+    string? ConstraintName = null
 ) : AstNode(Position);
 
 // ====== Db2 dialect statements ======
