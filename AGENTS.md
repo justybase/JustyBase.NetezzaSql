@@ -2,18 +2,9 @@
 
 ## Project Structure & Module Organization
 
-This repository contains .NET 10 class libraries for Netezza SQL tooling and shared JustyBase app core:
+This repository contains .NET 10 libraries for Netezza SQL tooling and shared JustyBase application services. `JustyBase.NetezzaSqlParser.csproj` is the main parser package; its code is grouped by concern in `Lexer/`, `Parser/`, `Ast/`, `Visitor/`, `Formatter/`, `Linter/`, `Completion/`, `Authoring/`, and `Caching/`.
 
-- `JustyBase.NetezzaSqlParser.csproj` is the main parser package. Its source is organized by responsibility: `Lexer/`, `Parser/`, `Ast/`, `Visitor/`, `Formatter/`, `Linter/`, `Completion/`, `Authoring/`, and `Caching/`.
-- `JustyBase.NetezzaDdl/` contains the DDL-generation library and its `Models/` input types.
-- `JustyBase.NetezzaCatalogSql/` provides catalog SQL and procedure-type helpers.
-- `JustyBase.Netezza/` is the UI-agnostic integration layer (schema snapshot models, parser schema adapter, DDL input factory, DI).
-- `JustyBase.Core/` is the shared app core (risk, scripting dialect, execution contracts, schema cache ports, history/vars, grid stats, credentials/DB ports).
-- `JustyBase.ImportExport/` is the shared import/export engine (Netezza pipe/CSV import, tabular export).
-- `JustyBase.NetezzaSqlLsp/` contains the standalone NativeAOT LSP executable built on the parser package.
-- `tests/JustyBase.NetezzaSql.Db2LiveTests/` is an optional live Db2 proof project (clidriver); run via `eng/Run-Db2LiveProof.ps1`, not solution-wide `dotnet test`.
-
-Keep related partial-class files together (for example, `Parser/NzSqlParser.*.cs`). Do not place build output from `bin/` or `obj/` under source control.
+Supporting libraries are `JustyBase.NetezzaDdl/` (DDL generation), `JustyBase.NetezzaCatalogSql/` (catalog SQL helpers), `JustyBase.Netezza/` (integration layer), `JustyBase.Core/` (shared contracts and services), and `JustyBase.ImportExport/` (tabular import/export). The NativeAOT language server is in `JustyBase.NetezzaSqlLsp/`. Tests are under `tests/`; live-driver proof projects are intentionally isolated from the normal test run.
 
 ## Build, Test, and Development Commands
 
@@ -22,22 +13,20 @@ Run commands from the repository root:
 ```powershell
 dotnet build .\JustyBase.NetezzaSqlParser.csproj
 dotnet build .\JustyBase.NetezzaDdl\JustyBase.NetezzaDdl.csproj
-dotnet build .\JustyBase.NetezzaCatalogSql\JustyBase.NetezzaCatalogSql.csproj
-dotnet build .\JustyBase.Netezza\JustyBase.Netezza.csproj
 dotnet test
 pwsh .\eng\Verify-Local.ps1
 ```
 
-The first commands compile each library; `dotnet test` discovers and runs tests when a test project or solution is present. **`Verify-Local.ps1`** runs build, tests, coverage gates, and `git diff --check` — use it before pushing to `master` (see [docs/local-ci.md](docs/local-ci.md)).
+Build individual projects while developing. `dotnet test` discovers standard test projects. `Verify-Local.ps1` runs the local CI checks, including builds, tests, coverage gates, and `git diff --check`; run it before pushing to `master`.
 
 ## Coding Style & Naming Conventions
 
-Follow the existing C# style: four-space indentation, file-scoped namespaces where already used, nullable reference types enabled, and implicit usings enabled. Use PascalCase for public types, members, and filenames; use camelCase for parameters and local variables. Name feature-specific files after their owning type, such as `NzSqlVisitor.Select.cs` or `NzSqlParser.Expression.cs`. Keep lexer, parser, AST, and visitor responsibilities separated.
+Follow the established C# style: four-space indentation, nullable reference types, and implicit usings. Use PascalCase for public types, members, and filenames; use camelCase for parameters and locals. Keep responsibilities separated between lexer, parser, AST, and visitor code. Put partial classes together and name feature files after their owner, for example `Parser/NzSqlParser.Expression.cs` or `Visitor/NzSqlVisitor.Select.cs`.
 
 ## Testing Guidelines
 
-Unit and conformance tests are in `tests/JustyBase.NetezzaSql.Tests`; integration-layer tests are in `tests/JustyBase.Netezza.Tests`; driver-backed live checks are isolated in `tests/JustyBase.NetezzaSql.IntegrationTests`. Shared core production-vs-scaffold status is documented in `docs/shared-core-status.md`. Add focused tests named by behavior, for example `ParseSelect_WithWhereClause_ReturnsFilterNode`. Cover valid SQL, malformed input, and edge cases for parser, formatter, linter, catalog SQL, DDL, import/export, or integration-layer changes. Run `pwsh .\eng\Verify-Local.ps1` before pushing to `master`. Live type-inference import round-trips (when `NZ_DEV_*` is set) use `pwsh .\eng\Run-LiveImportProof.ps1` — local only, not GitHub Actions; see [docs/live-import-roundtrip.md](docs/live-import-roundtrip.md).
+Add focused unit or conformance tests in `tests/JustyBase.NetezzaSql.Tests` and integration-layer tests in `tests/JustyBase.Netezza.Tests`. Name tests by behavior, such as `ParseSelect_WithWhereClause_ReturnsFilterNode`. Cover valid input, malformed input, and boundary cases. Do not add `bin/` or `obj/` output to source control.
 
 ## Commit & Pull Request Guidelines
 
-Git history is not available in this checkout, so no repository-specific commit convention can be derived. Use short, imperative commit subjects, such as `Add external table option mapping`. Keep commits focused. Pull requests should explain the behavior change, identify affected library projects, link relevant issues, and include test results. Include before/after SQL examples when parser, formatter, completion, or DDL output changes.
+Use short, imperative commit subjects, such as `Add external table option mapping`. Keep commits narrowly scoped. Pull requests should describe the behavior change, identify affected projects, link related issues, and report test results. Include before/after SQL when parser, formatter, completion, or DDL output changes.
