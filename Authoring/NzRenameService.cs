@@ -1,11 +1,12 @@
 using JustyBase.NetezzaSqlParser.Lexer;
+using JustyBase.NetezzaSqlParser.Dialects;
 using Superpower.Model;
 
 namespace JustyBase.NetezzaSqlParser.Authoring;
 
 public static class NzRenameService
 {
-    public static SqlRenameInfo? GetRenameInfo(string text, int offset)
+    public static SqlRenameInfo? GetRenameInfo(string text, int offset, SqlDialect dialect = SqlDialect.Netezza)
     {
         if (string.IsNullOrEmpty(text))
             return null;
@@ -14,7 +15,7 @@ public static class NzRenameService
 
         try
         {
-            var tokens = NzLexer.Tokenize(text).ToArray();
+            var tokens = DialectRuntime.Tokenize(text, dialect).ToArray();
             if (tokens.Length == 0)
                 return null;
 
@@ -33,11 +34,11 @@ public static class NzRenameService
             if (cursorToken is null)
                 return null;
 
-            if (cursorToken.Value.Kind != NzToken.Identifier && cursorToken.Value.Kind != NzToken.QuotedIdentifier)
+            if (cursorToken.Value.Kind is not (NzToken.Identifier or NzToken.QuotedIdentifier or NzToken.MySqlBacktickIdentifier))
                 return null;
 
             var symbolName = StripQuotes(cursorToken.Value.ToStringValue());
-            var index = NzSymbolCollector.Collect(text);
+            var index = NzSymbolCollector.Collect(text, dialect);
             var occurrence = index.FindOccurrenceAt(offset);
             if (occurrence is null)
                 return null;
@@ -78,14 +79,14 @@ public static class NzRenameService
             if (first.StartAbsolute >= 0 && first.EndAbsolute <= text.Length)
             {
                 var originalText = text[first.StartAbsolute..first.EndAbsolute];
-                originalIsQuoted = originalText.Length > 0 && originalText[0] == '"';
+                originalIsQuoted = originalText.Length > 0 && (originalText[0] is '"' or '`');
             }
         }
 
         if (originalIsQuoted)
         {
             // Accept any non-empty name that can be auto-quoted (no internal ")
-            if (string.IsNullOrWhiteSpace(newName) || newName.Contains('"'))
+            if (string.IsNullOrWhiteSpace(newName) || newName.Contains('"') || newName.Contains('`'))
                 return text;
         }
         else if (!IsValidIdentifier(newName))
@@ -116,9 +117,9 @@ public static class NzRenameService
         if (string.IsNullOrWhiteSpace(name))
             return false;
 
-        if (name[0] == '"')
+        if (name[0] is '"' or '`')
         {
-            if (name.Length < 2 || name[^1] != '"')
+            if (name.Length < 2 || name[^1] != name[0])
                 return false;
 
             for (int i = 1; i < name.Length - 1; i++)
@@ -144,9 +145,10 @@ public static class NzRenameService
 
     private static string PreserveCasing(string original, string newName)
     {
-        if (original.Length > 0 && original[0] == '"')
+        if (original.Length > 0 && (original[0] is '"' or '`'))
         {
-            return newName.Contains('"') ? newName : $"\"{newName}\"";
+            var quote = original[0];
+            return newName.Contains(quote) ? newName : $"{quote}{newName}{quote}";
         }
 
         if (original == original.ToUpperInvariant())
@@ -165,6 +167,8 @@ public static class NzRenameService
     {
         if (value.Length >= 2 && value[0] == '"' && value[^1] == '"')
             return value[1..^1];
+        if (value.Length >= 2 && value[0] == '`' && value[^1] == '`')
+            return value[1..^1].Replace("``", "`", StringComparison.Ordinal);
         return value;
     }
 }

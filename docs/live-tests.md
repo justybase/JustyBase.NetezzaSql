@@ -25,3 +25,15 @@ pwsh .\eng\Run-LiveImportProof.ps1
 ```
 
 Pipe round-trips still need a working Windows named-pipe server on the client. If the driver/topology rejects the pipe (for example a named-pipe error), the test soft-skips unless `NZ_REQUIRE_PIPE=1` is set.
+
+## Live MySQL 8 parser proof (optional, local only)
+
+```powershell
+pwsh .\eng\Run-MySqlLiveProof.ps1
+```
+
+The isolated `tests/JustyBase.NetezzaSql.MySqlLiveTests` project uses
+`MYSQL_LIVE_TEST_HOST`, `MYSQL_LIVE_TEST_DATABASE`, `MYSQL_LIVE_TEST_USER` and
+`MYSQL_LIVE_TEST_PASSWORD`; optional variables are `MYSQL_LIVE_TEST_PORT` and
+`MYSQL_LIVE_TEST_CONNECT_STRING`. Set `MYSQL_LIVE_TEST_REQUIRED=true` to make
+missing configuration or connection failures hard failures.

@@ -11,9 +11,10 @@ namespace JustyBase.NetezzaSqlParser.Parser;
 /// </summary>
 public partial class NzSqlParser
 {
+    protected List<Superpower.Model.Token<NzToken>>? CurrentDialectColumnTokens { get; private set; }
     // ====== CREATE Statement Dispatcher ======
 
-    private Statement? ParseCreate()
+    protected virtual Statement? ParseCreate()
     {
         var createTok = Expect(NzToken.Create);
 
@@ -61,7 +62,7 @@ public partial class NzSqlParser
 
     // ====== CREATE TABLE ======
 
-    private CreateTableStatement ParseCreateTable(Token<NzToken> createTok, bool orReplace)
+    protected virtual CreateTableStatement ParseCreateTable(Token<NzToken> createTok, bool orReplace)
     {
         bool temporary = false;
         bool global = false;
@@ -130,9 +131,10 @@ public partial class NzSqlParser
         }
 
         var (distribute, organize) = ParseTableStorageClauses();
+        var dialectOptions = ParseDialectTableOptions();
 
         return new CreateTableStatement(FromToken(createTok), table, ifNotExists, temporary, global,
-            columns, constraints, asSelect, distribute, organize);
+            columns, constraints, asSelect, distribute, organize, dialectOptions);
     }
 
     /// <summary>
@@ -143,6 +145,9 @@ public partial class NzSqlParser
     {
         return (ParseDistributeClause(), ParseOrganizeClause());
     }
+
+    /// <summary>Consumes dialect-specific options after a CREATE TABLE body.</summary>
+    protected virtual IReadOnlyList<Superpower.Model.Token<NzToken>>? ParseDialectTableOptions() => null;
 
     private ColumnDefList ParseColumnDefinitionList()
     {
@@ -203,6 +208,7 @@ public partial class NzSqlParser
         IReadOnlyList<ColumnConstraint>? constraints = null;
         var consList = new List<ColumnConstraint>();
 
+        CurrentDialectColumnTokens = [];
         while (IsColumnConstraintStart() || IsDialectColumnClauseStart())
         {
             if (TryParseDialectColumnClause())
@@ -243,7 +249,9 @@ public partial class NzSqlParser
         }
 
         if (consList.Count > 0) constraints = consList;
-        return new ColumnDefinition(colPos, colName, dataType, notNull, defaultValue, constraints);
+        var dialectTokens = CurrentDialectColumnTokens.Count == 0 ? null : CurrentDialectColumnTokens.ToArray();
+        CurrentDialectColumnTokens = null;
+        return new ColumnDefinition(colPos, colName, dataType, notNull, defaultValue, constraints, dialectTokens);
     }
 
     /// <summary>

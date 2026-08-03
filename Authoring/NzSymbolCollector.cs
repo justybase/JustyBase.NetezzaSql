@@ -1,6 +1,7 @@
 using JustyBase.NetezzaSqlParser.Lexer;
 using JustyBase.NetezzaSqlParser.Parser;
 using JustyBase.NetezzaSqlParser.Ast;
+using JustyBase.NetezzaSqlParser.Dialects;
 using Superpower.Model;
 
 namespace JustyBase.NetezzaSqlParser.Authoring;
@@ -20,14 +21,14 @@ internal sealed class NzSymbolCollector
         public ScopeFrame(ScopeFrame? parent) => Parent = parent;
     }
 
-    public static SymbolIndex Collect(string text)
+    public static SymbolIndex Collect(string text, SqlDialect dialect = SqlDialect.Netezza)
     {
         var collector = new NzSymbolCollector();
-        collector.Analyze(text);
+        collector.Analyze(text, dialect);
         return new SymbolIndex(collector._occurrences, collector._definitionById);
     }
 
-    private void Analyze(string text)
+    private void Analyze(string text, SqlDialect dialect)
     {
         if (string.IsNullOrEmpty(text))
             return;
@@ -35,7 +36,7 @@ internal sealed class NzSymbolCollector
         Token<NzToken>[] tokens;
         try
         {
-            tokens = NzLexer.Tokenize(text).ToArray();
+            tokens = DialectRuntime.Tokenize(text, dialect).ToArray();
         }
         catch
         {
@@ -57,7 +58,7 @@ internal sealed class NzSymbolCollector
                 break;
 
             var remaining = tokens.Skip(currentTokenIndex).ToArray();
-            var subParser = new NzSqlParser(remaining);
+            var subParser = DialectRuntime.CreateParser(remaining, dialect);
             var stmt = subParser.Parse();
             if (stmt is null || subParser.Position <= 0)
                 break;
@@ -620,7 +621,7 @@ internal sealed class NzSymbolCollector
         string.Equals(NormalizedTokenText(token), name, StringComparison.OrdinalIgnoreCase);
 
     private static bool IsIdentifierToken(Token<NzToken> token) =>
-        token.Kind is NzToken.Identifier or NzToken.QuotedIdentifier;
+        token.Kind is NzToken.Identifier or NzToken.QuotedIdentifier or NzToken.MySqlBacktickIdentifier;
 
     private static string NormalizedTokenText(Token<NzToken> token)
     {

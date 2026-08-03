@@ -107,7 +107,9 @@ public record InsertStatement(
     SelectStatement? SourceQuery,
     OracleReturningClause? Returning = null,
     // Mssql: OUTPUT clause as an opaque offset-stable token range.
-    IReadOnlyList<Token<NzToken>>? OutputTokens = null
+    IReadOnlyList<Token<NzToken>>? OutputTokens = null,
+    bool MySqlIgnore = false,
+    IReadOnlyList<Token<NzToken>>? MySqlOnDuplicateKeyUpdateTokens = null
 ) : Statement(Position);
 
 public record UpdateStatement(
@@ -174,7 +176,8 @@ public record CreateTableStatement(
     IReadOnlyList<TableConstraint>? Constraints,
     SelectStatement? AsSelect,
     DistributeClause? Distribute,
-    OrganizeClause? Organize
+    OrganizeClause? Organize,
+    IReadOnlyList<Token<NzToken>>? MySqlTableOptionTokens = null
 ) : Statement(Position);
 
 public record CreateViewStatement(
@@ -355,7 +358,11 @@ public record TableSource(
 public record TableName(
     string Name,
     string? Schema = null,
-    string? Database = null
+    string? Database = null,
+    bool MySqlDatabaseQualified = false,
+    char? NameQuote = null,
+    char? SchemaQuote = null,
+    char? DatabaseQuote = null
 );
 
 public record JoinClause(
@@ -382,7 +389,8 @@ public record OrderByItem(
 public enum LimitClauseSyntax
 {
     Limit,
-    Fetch
+    Fetch,
+    MySqlComma
 }
 
 public record LimitClause(
@@ -437,7 +445,8 @@ public record ColumnDefinition(
     DataTypeInfo Type,
     bool NotNull,
     Expression? DefaultValue,
-    IReadOnlyList<ColumnConstraint>? Constraints
+    IReadOnlyList<ColumnConstraint>? Constraints,
+    IReadOnlyList<Token<NzToken>>? MySqlAttributeTokens = null
 ) : AstNode(Position);
 
 public record DataTypeInfo(

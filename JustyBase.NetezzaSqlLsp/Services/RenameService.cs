@@ -4,7 +4,7 @@ using LspRange = JustyBase.NetezzaSqlLsp.Protocol.Range;
 
 namespace JustyBase.NetezzaSqlLsp.Services;
 
-internal static class RenameService
+public static class RenameService
 {
     public static PrepareRenameResult? PrepareRename(string text, int line, int character, SqlDialect dialect = SqlDialect.Netezza)
     {
@@ -58,7 +58,9 @@ internal static class RenameService
                 var start = LspTextUtilities.OffsetToPosition(refOcc.StartAbsolute, lineStarts);
                 var end = LspTextUtilities.OffsetToPosition(refOcc.EndAbsolute, lineStarts);
                 var range = new LspRange(start, end);
-                textEdits.Add(new TextEdit(range, newName));
+                var originalText = text[refOcc.StartAbsolute..refOcc.EndAbsolute];
+                textEdits.Add(new TextEdit(range,
+                    LspTextUtilities.FormatRenameReplacement(originalText, newName)));
             }
 
             var changes = new Dictionary<string, TextEdit[]> { [uri] = textEdits.ToArray() };

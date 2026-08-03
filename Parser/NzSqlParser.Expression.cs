@@ -721,9 +721,9 @@ public partial class NzSqlParser
         return new CastExpression(FromToken(c), expr, type);
     }
 
-    protected DataTypeInfo ParseDataType()
+    protected virtual DataTypeInfo ParseDataType()
     {
-        var first = Peek().Kind == NzToken.QuotedIdentifier
+        var first = Peek().Kind is NzToken.QuotedIdentifier or NzToken.MySqlBacktickIdentifier
             ? Advance()
             : Expect(NzToken.Identifier);
         var firstVal = StripQuotes(first.ToStringValue());
@@ -759,7 +759,8 @@ public partial class NzSqlParser
             {
                 if (Peek().Kind == NzToken.NumberLiteral)
                     argList.Add(Advance().ToStringValue());
-                else if (Peek().Kind == NzToken.Identifier || Peek().Kind == NzToken.Any)
+                else if (Peek().Kind is NzToken.Identifier or NzToken.Any or NzToken.MySqlBacktickIdentifier
+                         or NzToken.StringLiteral)
                     argList.Add(Advance().ToStringValue());
                 else break;
                 if (Peek().Kind == NzToken.Comma) { Advance(); continue; }

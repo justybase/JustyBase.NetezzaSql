@@ -1,4 +1,5 @@
 using JustyBase.NetezzaSqlParser.Ast;
+using JustyBase.NetezzaSqlParser.Dialects;
 using JustyBase.NetezzaSqlParser.Lexer;
 using JustyBase.NetezzaSqlParser.Parser;
 using JustyBase.NetezzaSqlParser.Visitor;
@@ -20,10 +21,12 @@ namespace JustyBase.NetezzaSqlParser.Completion;
 public class CompletionScopeProvider
 {
     private readonly ISchemaProvider? _schema;
+    private readonly SqlDialect _dialect;
 
-    public CompletionScopeProvider(ISchemaProvider? schema = null)
+    public CompletionScopeProvider(ISchemaProvider? schema = null, SqlDialect dialect = SqlDialect.Netezza)
     {
         _schema = schema;
+        _dialect = dialect;
     }
 
     /// <summary>Attempt to parse SQL and build completion scope. Null on failure or parser errors.</summary>
@@ -32,7 +35,7 @@ public class CompletionScopeProvider
         var tokens = Tokenize(sql);
         if (tokens is null) return null;
 
-        var parser = new NzSqlParser(tokens);
+        var parser = DialectRuntime.CreateParser(tokens, _dialect);
         var stmt = parser.Parse();
         if (stmt is null) return null;
 
@@ -47,9 +50,9 @@ public class CompletionScopeProvider
         return builder;
     }
 
-    private static Token<NzToken>[]? Tokenize(string sql)
+    private Token<NzToken>[]? Tokenize(string sql)
     {
-        try { return NzLexer.Tokenize(sql).ToArray(); }
+        try { return DialectRuntime.Tokenize(sql, _dialect).ToArray(); }
         catch { return null; }
     }
 }

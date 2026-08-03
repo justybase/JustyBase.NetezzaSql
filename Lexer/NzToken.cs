@@ -352,4 +352,7 @@ public enum NzToken
 
     // Whitespace
     WhiteSpace,
+
+    // MySQL-specific quoted identifiers (appended to preserve existing values)
+    MySqlBacktickIdentifier,
 }

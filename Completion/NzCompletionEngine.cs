@@ -81,7 +81,7 @@ public class NzCompletionEngine
 
         var fullTokens = TokenizePrefix(sql) ?? Array.Empty<Token<NzToken>>();
         _lastFullTokens = fullTokens;
-        var astScope = new CompletionScopeProvider(_schema).TryBuild(sql);
+        var astScope = new CompletionScopeProvider(_schema, _dialect).TryBuild(sql);
 
         _lastScopeCollector = new TokenScopeCollector(_schema);
         _lastScopeCollector.Collect(fullTokens, sql.Length);

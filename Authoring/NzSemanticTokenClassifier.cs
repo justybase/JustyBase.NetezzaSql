@@ -13,7 +13,7 @@ namespace JustyBase.NetezzaSqlParser.Authoring;
 /// </summary>
 public sealed class NzSemanticTokenClassifier
 {
-    private static readonly Regex LineComment = new(@"--[^\n]*", RegexOptions.Compiled);
+    private static readonly Regex LineComment = new(@"--[^\n]*|#[^\n]*", RegexOptions.Compiled);
     private static readonly Regex BlockComment = new(@"/\*[\s\S]*?\*/", RegexOptions.Compiled);
 
     private readonly ISchemaProvider? _schema;
@@ -191,7 +191,7 @@ public sealed class NzSemanticTokenClassifier
             if (kind == SemanticTokenKind.Operator)
                 continue;
 
-            if (token.Kind is NzToken.Identifier or NzToken.QuotedIdentifier)
+            if (token.Kind is NzToken.Identifier or NzToken.QuotedIdentifier or NzToken.MySqlBacktickIdentifier)
             {
                 var normalizedName = token.ToStringValue();
                 switch (kind)
@@ -259,6 +259,8 @@ public sealed class NzSemanticTokenClassifier
                 return (SemanticTokenKind.Variable, SemanticTokenModifiers.None);
             case NzToken.QuotedIdentifier:
                 return (SemanticTokenKind.String, SemanticTokenModifiers.None);
+            case NzToken.MySqlBacktickIdentifier:
+                return ClassifyIdentifier(token, allTokens, index, scopeCollector, aliasNames, tableNames, cachedRoleNames, schema);
             case NzToken.Identifier:
                 return ClassifyIdentifier(token, allTokens, index, scopeCollector, aliasNames, tableNames, cachedRoleNames, schema);
             default:

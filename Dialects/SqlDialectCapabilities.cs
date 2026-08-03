@@ -26,6 +26,11 @@ public static class SqlDialectCapabilitiesCatalog
             SupportsFetchFirst: true,
             SupportsAnsiOffsetFetch: true,
             SupportsLimit: false),
+        SqlDialect.MySql => new(
+            SupportsMerge: false,
+            SupportsFetchFirst: false,
+            SupportsAnsiOffsetFetch: false,
+            SupportsLimit: true),
         _ => new(
             SupportsMerge: true,
             SupportsFetchFirst: true,

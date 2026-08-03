@@ -117,6 +117,7 @@ public partial class NzSqlParser
         or NzToken.Db2Identity or NzToken.Db2Nickname
         // Mssql-only tokens (never emitted by the other lexers).
         or NzToken.MssqlVariable or NzToken.MssqlBracketedIdentifier
+        or NzToken.MySqlBacktickIdentifier
         or NzToken.MssqlTop or NzToken.MssqlOutput or NzToken.MssqlProc;
 
     protected bool IsSetOperationStart() => Peek().Kind is NzToken.Union or NzToken.Intersect or NzToken.Except or NzToken.MinusSet

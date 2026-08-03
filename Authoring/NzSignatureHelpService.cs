@@ -143,7 +143,8 @@ public static class NzSignatureHelpService
     }
 
     private static bool IsFunctionNameToken(NzToken kind) =>
-        kind is NzToken.Identifier or NzToken.QuotedIdentifier or NzToken.OracleQualifiedFunction;
+        kind is NzToken.Identifier or NzToken.QuotedIdentifier or NzToken.MySqlBacktickIdentifier or NzToken.If
+            or NzToken.OracleQualifiedFunction;
 
     private static string ShortFunctionName(string name)
     {

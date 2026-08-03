@@ -24,7 +24,11 @@ VS Code, a connection manager, or query execution.
 | MSSQL dialect parser | `src/dialects/mssql/sql/parser.ts` | `MssqlSqlParser` partials; TOP / OUTPUT / CROSS\|OUTER APPLY / bracketed identifiers / @variables / GO batches; PAR001 rejections | supported |
 | MSSQL quality rules | `extensions/mssql/src/sql/qualityRules.ts` | `MssqlLintRules` (MSS001–MSS008) via dialect-only `QualityRuleRegistry` | supported |
 | MSSQL SQL authoring | `extensions/mssql/src/sql/authoring.ts` | `MssqlSqlCatalog` through `ISqlAuthoringCatalog` | supported |
-| ANSI authoring base and dialect overlays | `src/sql/authoring/baseProfiles.ts` plus dialect authoring profiles | `AnsiSqlCatalog` composed with Netezza, Oracle, Db2 and MSSQL overlays; signatures are merged case-insensitively | supported |
+| MySQL 8 dialect lexer | `src/dialects/mysql/sql/lexer.ts` | `MySqlLexer` with backtick identifiers and `#` comments | supported |
+| MySQL 8 dialect parser | `src/dialects/mysql/sql/parser.ts` | `MySqlSqlParser`; two-part names, MySQL LIMIT forms, INSERT IGNORE, ON DUPLICATE KEY UPDATE and MySQL 8 DDL | supported |
+| MySQL 8 SQL authoring | `extensions/mysql/src/sql/authoring.ts` | `MySqlSqlCatalog` through `ISqlAuthoringCatalog` | supported |
+| MySQL quality rules | `extensions/mysql/src/sql/qualityRules.ts` | empty dialect-only rule registry | supported |
+| ANSI authoring base and dialect overlays | `src/sql/authoring/baseProfiles.ts` plus dialect authoring profiles | `AnsiSqlCatalog` composed with Netezza, Oracle, Db2, MSSQL and MySQL overlays; signatures are merged case-insensitively | supported |
 | Common MERGE grammar | shared SQL parser and dialect parser entry points | `MergeStatement` with matched update/delete and not-matched insert clauses in all four dialects | supported |
 | ANSI OFFSET/FETCH | Oracle and Db2 select parsers; Netezza probe/fixtures | `OffsetFetchClause` preserves OFFSET-only, FIRST/NEXT, PERCENT, ONLY and WITH TIES; legacy `LimitClause` remains compatible | supported |
 | Dialect dispatch | — | `DialectRuntime` (`Tokenize`/`CreateParser`/`QualityRules`/`AuthoringCatalog`) | supported |

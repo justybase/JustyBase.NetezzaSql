@@ -6,7 +6,7 @@ The solution ships six NuGet libraries plus a standalone LSP executable:
 
 | Project | Purpose |
 | --- | --- |
-| `JustyBase.NetezzaSqlParser` | Lexer, recursive-descent parser, AST, formatter, linter, completion, and editor-authoring services. Primary target is Netezza SQL / NZPLSQL; Oracle and Db2 dialects are also supported. |
+| `JustyBase.NetezzaSqlParser` | Lexer, recursive-descent parser, AST, formatter, linter, completion, and editor-authoring services. Primary target is Netezza SQL / NZPLSQL; Oracle, Db2, MSSQL and MySQL 8 dialects are also supported. |
 | `JustyBase.NetezzaDdl` | Netezza DDL text builders, identifier/literal helpers, import/maintenance SQL, and external-table option mapping. |
 | `JustyBase.NetezzaCatalogSql` | Reusable SQL statements for reading Netezza catalog metadata. |
 | `JustyBase.Netezza` | UI-agnostic metadata models, schema adapter for the parser, and DDL input mapping. |
@@ -16,7 +16,7 @@ The solution ships six NuGet libraries plus a standalone LSP executable:
 
 ## Status
 
-This project is in active development and currently targets `net10.0`. Netezza SQL and NZPLSQL remain the primary grammar and tooling focus. Oracle and Db2 dialects share the same lexer/parser/formatter/lint/completion/hover surfaces via `SqlDialect` (see [docs/node-parity.md](docs/node-parity.md)). The libraries are not a database driver and do not open connections or execute SQL by themselves. Shared app-core packages (`JustyBase.Core`, `JustyBase.ImportExport`) hold host-agnostic risk/import/export/scripting surfaces; see [docs/shared-core-status.md](docs/shared-core-status.md) for production vs scaffold.
+This project is in active development and currently targets `net10.0`. Netezza SQL and NZPLSQL remain the primary grammar and tooling focus. Oracle, Db2, MSSQL and MySQL 8 dialects share the same lexer/parser/formatter/lint/completion/hover surfaces via `SqlDialect` (see [docs/node-parity.md](docs/node-parity.md)). The libraries are not a database driver and do not open connections or execute SQL by themselves. Shared app-core packages (`JustyBase.Core`, `JustyBase.ImportExport`) hold host-agnostic risk/import/export/scripting surfaces; see [docs/shared-core-status.md](docs/shared-core-status.md) for production vs scaffold.
 
 The public API and supported grammar may evolve before the first stable `1.0.0` release. Prefer tagged GitHub releases when consuming packages.
 
@@ -104,7 +104,7 @@ The test suite covers parser and linter conformance, malformed SQL, runtime beha
 Optional database-backed smoke tests:
 
 - Netezza: [docs/live-tests.md](docs/live-tests.md) and `pwsh .\eng\Run-LiveImportProof.ps1`
-- Oracle / Db2 parser proof (local only): `pwsh .\eng\Run-OracleLiveProof.ps1` and `pwsh .\eng\Run-Db2LiveProof.ps1` — see [docs/local-ci.md](docs/local-ci.md)
+- Oracle / Db2 / MSSQL / MySQL parser proof (local only) — see [docs/local-ci.md](docs/local-ci.md)
 
 ## Create NuGet packages
 
@@ -139,7 +139,7 @@ The sample uses in-memory metadata and does not connect to a Netezza database.
 
 ## Compatibility and limitations
 
-- Netezza-specific SQL and NZPLSQL syntax is the primary compatibility target; Oracle and Db2 dialects are supported on the shared authoring stack.
+- Netezza-specific SQL and NZPLSQL syntax is the primary compatibility target; Oracle, Db2, MSSQL and MySQL 8 dialects are supported on the shared authoring stack.
 - Parser support is intentionally broader than the formatter's canonical output for some command-tail statements.
 - Catalog SQL is generated as text; callers remain responsible for connection management, permissions, and execution.
 - The libraries do not validate that generated SQL is accepted by a particular Netezza appliance version.
@@ -147,7 +147,7 @@ The sample uses in-memory metadata and does not connect to a Netezza database.
 
 See [docs/compatibility.md](docs/compatibility.md) for the supported surface and [CONTRIBUTING.md](CONTRIBUTING.md) for development guidance.
 
-The Node.js-to-C# behavioral boundary (including Oracle/Db2 dialect mapping) is maintained in [docs/node-parity.md](docs/node-parity.md).
+The Node.js-to-C# behavioral boundary (including Oracle/Db2/MSSQL/MySQL dialect mapping) is maintained in [docs/node-parity.md](docs/node-parity.md).
 
 ## License
 

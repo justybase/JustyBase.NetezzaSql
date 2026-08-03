@@ -234,33 +234,7 @@ public partial class NzSqlParser
         }
 
         if (Peek().Kind == NzToken.Limit)
-        {
-            var limitTok = Advance(); // LIMIT
-            var limitVal = 0;
-            if (Peek().Kind != NzToken.NumberLiteral)
-            {
-                _errors.Add(new ValidationError("Expected number after LIMIT", "error",
-                    SourcePosition.FromToken(limitTok), "PARSE001"));
-            }
-            else
-            {
-                var num = Expect(NzToken.NumberLiteral);
-                limitVal = int.Parse(num.ToStringValue());
-            }
-
-            int? offsetVal = null;
-            if (Peek().Kind == NzToken.Offset)
-            {
-                Advance();
-                if (Peek().Kind == NzToken.NumberLiteral)
-                {
-                    var offNum = Expect(NzToken.NumberLiteral);
-                    offsetVal = int.Parse(offNum.ToStringValue());
-                }
-            }
-
-            limit = new LimitClause(FromToken(limitTok), limitVal, offsetVal);
-        }
+            limit = ParseLimitClause();
 
         // Detect misplaced clause keywords after LIMIT (e.g. LIMIT 10 WHERE ...)
         if (limit is not null && Peek().Kind is NzToken.Where or NzToken.GroupBy or NzToken.Having or NzToken.OrderBy)
@@ -315,6 +289,32 @@ public partial class NzSqlParser
         var result = new SelectStatement(FromToken(sel), distinct ? new SelectModifier(true, false) : null, items, from, where, groupBy, having,
             orderBy, limit, setOps.Count > 0 ? setOps : null, compoundSelects.Count > 0 ? compoundSelects : null, with, hasInto);
         return result with { OffsetFetch = offsetFetch };
+    }
+
+    protected virtual LimitClause ParseLimitClause()
+    {
+        var limitTok = Advance();
+        var limitVal = 0;
+        if (Peek().Kind != NzToken.NumberLiteral)
+        {
+            AddParserError("Expected number after LIMIT", limitTok, "PARSE001");
+        }
+        else
+        {
+            limitVal = int.Parse(Advance().ToStringValue());
+        }
+
+        int? offsetVal = null;
+        if (Peek().Kind == NzToken.Offset)
+        {
+            Advance();
+            if (Peek().Kind == NzToken.NumberLiteral)
+                offsetVal = int.Parse(Advance().ToStringValue());
+            else
+                AddParserError("Expected number after LIMIT OFFSET", Peek(), "PARSE001");
+        }
+
+        return new LimitClause(FromToken(limitTok), limitVal, offsetVal);
     }
 
     /// <summary>
@@ -487,6 +487,8 @@ public partial class NzSqlParser
     {
         if (value.Length >= 2 && value[0] == '"' && value[^1] == '"')
             return value[1..^1];
+        if (value.Length >= 2 && value[0] == '`' && value[^1] == '`')
+            return value[1..^1].Replace("``", "`", StringComparison.Ordinal);
         return value;
     }
 
@@ -779,7 +781,8 @@ public partial class NzSqlParser
         if (t.Kind is NzToken.Identifier or NzToken.QuotedIdentifier or NzToken.Public
             or NzToken.Owner or NzToken.Hash or NzToken.Start
             // Mssql-only tokens (never emitted by the other lexers).
-            or NzToken.MssqlVariable or NzToken.MssqlBracketedIdentifier)
+            or NzToken.MssqlVariable or NzToken.MssqlBracketedIdentifier
+            or NzToken.MySqlBacktickIdentifier)
         {
             return Advance();
         }

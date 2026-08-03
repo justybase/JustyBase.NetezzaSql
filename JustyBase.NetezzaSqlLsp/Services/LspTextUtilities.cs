@@ -81,12 +81,28 @@ internal static class LspTextUtilities
     {
         if (value.Length >= 2 && value[0] == '"' && value[^1] == '"')
             return value[1..^1];
+        if (value.Length >= 2 && value[0] == '`' && value[^1] == '`')
+            return value[1..^1].Replace("``", "`", StringComparison.Ordinal);
         return value;
     }
 
     public static bool IsIdentifierToken(Token<NzToken> token) =>
-        token.Kind is NzToken.Identifier or NzToken.QuotedIdentifier;
+        token.Kind is NzToken.Identifier or NzToken.QuotedIdentifier or NzToken.MySqlBacktickIdentifier;
 
     public static string NormalizedTokenText(Token<NzToken> token) =>
         StripQuotes(token.ToStringValue());
+
+    public static string FormatRenameReplacement(string originalText, string newName)
+    {
+        if (originalText.Length < 2 || originalText[0] != originalText[^1]
+            || originalText[0] is not ('`' or '"'))
+            return newName;
+
+        var quote = originalText[0];
+        if (newName.Length >= 2 && newName[0] == quote && newName[^1] == quote)
+            return newName;
+
+        var delimiter = quote.ToString();
+        return $"{delimiter}{newName.Replace(delimiter, delimiter + delimiter, StringComparison.Ordinal)}{delimiter}";
+    }
 }

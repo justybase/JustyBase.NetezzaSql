@@ -248,11 +248,20 @@ public sealed class NzSqlFormatter
             else
             {
                 Write("LIMIT ");
-                Write(stmt.Limit.Limit.ToString());
-                if (stmt.Limit.Offset is not null)
+                if (stmt.Limit.Syntax == LimitClauseSyntax.MySqlComma && stmt.Limit.Offset is not null)
                 {
-                    Write(" OFFSET ");
                     Write(stmt.Limit.Offset.Value.ToString());
+                    Write(", ");
+                    Write(stmt.Limit.Limit.ToString());
+                }
+                else
+                {
+                    Write(stmt.Limit.Limit.ToString());
+                    if (stmt.Limit.Offset is not null)
+                    {
+                        Write(" OFFSET ");
+                        Write(stmt.Limit.Offset.Value.ToString());
+                    }
                 }
             }
         }
@@ -441,7 +450,7 @@ public sealed class NzSqlFormatter
 
     private void FormatInsert(InsertStatement stmt)
     {
-        Write("INSERT INTO ");
+        Write(stmt.MySqlIgnore ? "INSERT IGNORE INTO " : "INSERT INTO ");
         Write(FormatTableName(stmt.Target));
 
         if (stmt.Columns is { Count: > 0 })
@@ -477,6 +486,12 @@ public sealed class NzSqlFormatter
         {
             Write(" ");
             FormatSelectCore(stmt.SourceQuery);
+        }
+
+        if (stmt.MySqlOnDuplicateKeyUpdateTokens is { Count: > 0 })
+        {
+            Write(" ON DUPLICATE KEY UPDATE ");
+            Write(FormatOpaqueTokens(stmt.MySqlOnDuplicateKeyUpdateTokens));
         }
     }
 
@@ -729,6 +744,12 @@ public sealed class NzSqlFormatter
                 }
                 Write(")");
             }
+        }
+
+        if (stmt.MySqlTableOptionTokens is { Count: > 0 })
+        {
+            NewLine();
+            Write(FormatOpaqueTokens(stmt.MySqlTableOptionTokens));
         }
     }
 
@@ -1640,6 +1661,25 @@ public sealed class NzSqlFormatter
                     break;
             }
         }
+
+        if (columnDefinition.MySqlAttributeTokens is { Count: > 0 })
+        {
+            Write(" ");
+            Write(FormatOpaqueTokens(columnDefinition.MySqlAttributeTokens));
+        }
+    }
+
+    private static string FormatOpaqueTokens(IReadOnlyList<Token<NzToken>> tokens)
+    {
+        var sb = new StringBuilder();
+        foreach (var token in tokens)
+        {
+            var text = token.ToStringValue();
+            if (sb.Length > 0 && text is not "," and not ")" and not ";" && sb[^1] != '(')
+                sb.Append(' ');
+            sb.Append(text);
+        }
+        return sb.ToString();
     }
 
     private void FormatColumnConstraint(ColumnConstraint constraint)
@@ -1769,13 +1809,28 @@ public sealed class NzSqlFormatter
 
     private static string FormatTableName(TableName table)
     {
+        var name = FormatTableIdentifier(table.Name, table.NameQuote);
+        var schema = table.Schema is null ? null : FormatTableIdentifier(table.Schema, table.SchemaQuote);
+        var database = table.Database is null ? null : FormatTableIdentifier(table.Database, table.DatabaseQuote);
+
+        if (table.MySqlDatabaseQualified && database is not null && schema is null)
+            return $"{database}.{name}";
         if (table.Database is not null && table.Schema is not null)
-            return $"{table.Database}.{table.Schema}.{table.Name}";
+            return $"{database}.{schema}.{name}";
         if (table.Database is not null)
-            return $"{table.Database}..{table.Name}";
+            return $"{database}..{name}";
         if (table.Schema is not null)
-            return $"{table.Schema}.{table.Name}";
-        return table.Name;
+            return $"{schema}.{name}";
+        return name;
+    }
+
+    private static string FormatTableIdentifier(string value, char? quote)
+    {
+        if (quote is null)
+            return value;
+
+        var delimiter = quote.Value.ToString();
+        return $"{delimiter}{value.Replace(delimiter, delimiter + delimiter, StringComparison.Ordinal)}{delimiter}";
     }
 
     private static string OpString(BinaryOperator op) => op switch

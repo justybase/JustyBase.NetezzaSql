@@ -18,6 +18,7 @@ public sealed class AnsiDialectConformanceTests
             (OracleSqlCatalog.Instance, OracleSqlCatalog.Instance.FormatterProfile),
             (Db2SqlCatalog.Instance, Db2SqlCatalog.Instance.FormatterProfile),
             (MssqlSqlCatalog.Instance, MssqlSqlCatalog.Instance.FormatterProfile),
+            (MySqlSqlCatalog.Instance, MySqlSqlCatalog.Instance.FormatterProfile),
         };
 
         foreach (var (catalog, formatter) in catalogs)
@@ -42,6 +43,7 @@ public sealed class AnsiDialectConformanceTests
         var oracle = SqlDialectCapabilitiesCatalog.For(SqlDialect.Oracle);
         var db2 = SqlDialectCapabilitiesCatalog.For(SqlDialect.Db2);
         var mssql = SqlDialectCapabilitiesCatalog.For(SqlDialect.Mssql);
+        var mysql = SqlDialectCapabilitiesCatalog.For(SqlDialect.MySql);
 
         Assert.All(new[] { netezza, oracle, db2, mssql }, capabilities =>
         {
@@ -53,6 +55,10 @@ public sealed class AnsiDialectConformanceTests
         Assert.False(oracle.SupportsLimit);
         Assert.False(db2.SupportsLimit);
         Assert.False(mssql.SupportsLimit);
+        Assert.False(mysql.SupportsMerge);
+        Assert.False(mysql.SupportsFetchFirst);
+        Assert.False(mysql.SupportsAnsiOffsetFetch);
+        Assert.True(mysql.SupportsLimit);
     }
 
     [Theory]

@@ -169,7 +169,7 @@ public static class NzHoverService
             return $"**{full}()**";
         }
 
-        if (token.Kind != NzToken.Identifier && token.Kind != NzToken.QuotedIdentifier)
+        if (token.Kind is not (NzToken.Identifier or NzToken.QuotedIdentifier or NzToken.MySqlBacktickIdentifier))
         {
             string? keywordDoc = token.Kind switch
             {

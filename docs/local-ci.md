@@ -49,12 +49,16 @@ Do not wire this into GitHub Actions. Details: [live-import-roundtrip.md](live-i
 pwsh .\eng\Run-OracleLiveProof.ps1
 pwsh .\eng\Run-Db2LiveProof.ps1
 pwsh .\eng\Run-MssqlLiveProof.ps1
+pwsh .\eng\Run-MySqlLiveProof.ps1
 ```
 
 Db2 live tests live in `tests/JustyBase.NetezzaSql.Db2LiveTests` (not in the solution
 test set) so a missing IBM clidriver cannot crash `Verify-Local`. MSSQL live tests
 live in `tests/JustyBase.NetezzaSql.MssqlLiveTests` using `Microsoft.Data.SqlClient`
 against `MSSQL_LIVE_TEST_*`.
+MySQL live tests live in `tests/JustyBase.NetezzaSql.MySqlLiveTests` using
+`MySqlConnector` against `MYSQL_LIVE_TEST_*`; they are isolated from the
+solution-wide test set.
 
 ## Common failures
 
