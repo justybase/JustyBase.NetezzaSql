@@ -14,6 +14,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\JustyBase.NetezzaSqlParser.csproj" />
+    <!-- Shared word-list contract + headless service (ISqlDbWordListProvider seam). -->
+    <ProjectReference Include="..\JustyBase.Core\JustyBase.Core.csproj" />
   </ItemGroup>
 
 </Project>

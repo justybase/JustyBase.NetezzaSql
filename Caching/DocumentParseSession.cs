@@ -1,9 +1,5 @@
 using JustyBase.NetezzaSqlParser.Ast;
 using JustyBase.NetezzaSqlParser.Dialects;
-using JustyBase.NetezzaSqlParser.Lexer;
-using JustyBase.NetezzaSqlParser.Parser;
-using Superpower.Model;
-using Superpower;
 
 namespace JustyBase.NetezzaSqlParser.Caching;
 

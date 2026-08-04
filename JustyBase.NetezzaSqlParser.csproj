@@ -15,6 +15,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Shared host-agnostic contracts (word-list seam). Keeps Core out of this
+         assembly via the Compile Remove below; packed as a JustyBase.Core
+         package dependency. -->
+    <ProjectReference Include="JustyBase.Core\JustyBase.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Compile Remove="JustyBase.Netezza\**\*.cs" />
     <Compile Remove="JustyBase.NetezzaCatalogSql\**\*.cs" />
     <Compile Remove="JustyBase.NetezzaDdl\**\*.cs" />

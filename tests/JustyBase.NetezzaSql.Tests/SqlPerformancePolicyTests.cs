@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using JustyBase.Core.Diagnostics;
 using JustyBase.NetezzaSqlParser.Authoring;
 using JustyBase.NetezzaSqlParser.Caching;
 using JustyBase.NetezzaSqlParser.Linter;
@@ -164,6 +165,60 @@ public sealed class SqlPerformancePolicyTests
         Assert.True(SqlTypingPerfProbe.IsSlow("editor.highlight", 50));
         Assert.True(SqlTypingPerfProbe.IsSlow("editor.doc_change", 80));
         Assert.True(SqlTypingPerfProbe.IsSlow("editor.ext_lint", 100));
+    }
+
+    [Fact]
+    public void SqlTypingPerfProbe_LargeScriptThresholds_MatchSqlPerformancePolicy()
+    {
+        // Core cannot depend on the parser library, so the probe mirrors the
+        // large-script gate. This parity test catches silent drift.
+        Assert.Equal(SqlPerformancePolicy.LargeScriptLineThreshold, SqlTypingPerfProbe.LargeScriptLineThreshold);
+        Assert.Equal(SqlPerformancePolicy.LargeScriptCharThreshold, SqlTypingPerfProbe.LargeScriptCharThreshold);
+    }
+}
+
+public sealed class SqlTypingPerfProbeSurfaceTests
+{
+    [Fact]
+    public void ForcedEnabled_ExercisesAllApiSurfaceWithoutThrowing()
+    {
+        // Force the singleton on without env vars so the probe never touches disk.
+        SqlTypingPerfProbe.Instance.Enabled = true;
+        try
+        {
+            SqlTypingPerfProbe.Instance.MarkDocChange("doc", 100, 3, changedChars: 5);
+            SqlTypingPerfProbe.Instance.MarkDocChange("doc", 120, 4);
+            using (SqlTypingPerfProbe.Instance.Measure(
+                       "editor.highlight",
+                       "lex",
+                       "doc",
+                       120,
+                       4,
+                       changedChars: 5,
+                       meta: "surface-test"))
+            {
+            }
+
+            SqlTypingPerfProbe.Instance.Emit(
+                "editor.ext_lint",
+                "end",
+                30,
+                "doc",
+                120,
+                4,
+                changedChars: 5,
+                meta: "surface-test");
+
+            // No-op with null duration and disabled-adjacent paths.
+            Assert.False(SqlTypingPerfProbe.IsSlow("editor.highlight", null));
+            SqlTypingPerfProbe.Instance.WriteSessionSummary();
+
+            Assert.True(SqlTypingPerfProbe.Instance.Enabled);
+        }
+        finally
+        {
+            SqlTypingPerfProbe.Instance.Enabled = false;
+        }
     }
 }
 

@@ -39,9 +39,9 @@ public sealed class MySqlDialectLspTests
     }
 
     [Fact]
-    public void CompletionHoverAndSignatureUseMySqlCatalog()
+    public async Task CompletionHoverAndSignatureUseMySqlCatalog()
     {
-        var completions = CompletionService.GetCompletions("SELECT ", 0, 7, null, SqlDialect.MySql);
+        var completions = await CompletionService.GetCompletions("SELECT ", 0, 7, null, SqlDialect.MySql);
         var hover = HoverService.GetHover("SELECT JSON FROM t", 0, 10, null, SqlDialect.MySql);
         var signatures = SignatureHelpService.GetSignatureHelp("SELECT IF(", 0, 10, SqlDialect.MySql);
 

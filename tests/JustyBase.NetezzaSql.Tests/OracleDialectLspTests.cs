@@ -143,9 +143,9 @@ public sealed class OracleDialectLspTests
     // ====== Completion + hover + signature catalogs ======
 
     [Fact]
-    public void Completion_OracleDialect_OffersOracleFunctions()
+    public async Task Completion_OracleDialect_OffersOracleFunctions()
     {
-        var completions = CompletionService.GetCompletions("SELECT ", 0, 7, null, SqlDialect.Oracle);
+        var completions = await CompletionService.GetCompletions("SELECT ", 0, 7, null, SqlDialect.Oracle);
 
         Assert.NotNull(completions.Items);
         Assert.Contains(completions.Items!, i => i.Label == "NVL");

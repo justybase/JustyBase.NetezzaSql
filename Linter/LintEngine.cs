@@ -3,8 +3,6 @@ using JustyBase.NetezzaSqlParser.Ast;
 using JustyBase.NetezzaSqlParser.Authoring;
 using JustyBase.NetezzaSqlParser.Caching;
 using JustyBase.NetezzaSqlParser.Dialects;
-using JustyBase.NetezzaSqlParser.Lexer;
-using JustyBase.NetezzaSqlParser.Parser;
 using JustyBase.NetezzaSqlParser.Visitor;
 using System.Text.RegularExpressions;
 

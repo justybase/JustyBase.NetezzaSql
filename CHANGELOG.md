@@ -2,7 +2,21 @@
 
 All notable changes to this project will be documented here.
 
-## Unreleased
+## 0.4.1
+
+- Move `SqlTypingPerfProbe` into the new `JustyBase.Core.Diagnostics` namespace so UI hosts
+  (Avalonia editor, Legacy FCTB) share one typing-performance probe.
+- Add the shared SQL word-list contract to `JustyBase.Core`: `ISqlDbWordListProvider`,
+  `SqlWordListRequest` (with `FromText` fragment scan), `SqlWordListItem`, and
+  `SqlWordListService` — the headless seam for host DB-backed completion fallback.
+- Parser library: add `EngineSqlWordListRequestBuilder`, which slices the caret context via
+  `SqlAutocompleteWindow` and runs `NzCompletionEngine` scope hints (aliases/CTE/temp tables)
+  to build a `SqlWordListRequest`; `JustyBase.NetezzaSqlParser` now depends on the
+  `JustyBase.Core` package.
+- LSP: `CompletionService.GetCompletions` is now `async` and accepts an optional
+  `ISqlDbWordListProvider` whose items are merged (dedupe by label) with engine items;
+  `Program.cs` awaits the new API.
+- Document the shared authoring core status and word-list seam in `docs/authoring-shared-core.md`.
 
 ## 0.4.0
 

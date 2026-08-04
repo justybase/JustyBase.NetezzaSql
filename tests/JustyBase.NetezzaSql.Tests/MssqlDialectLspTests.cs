@@ -70,9 +70,9 @@ public sealed class MssqlDialectLspTests
     }
 
     [Fact]
-    public void Completion_MssqlDialect_OffersMssqlFunctions()
+    public async Task Completion_MssqlDialect_OffersMssqlFunctions()
     {
-        var completions = CompletionService.GetCompletions("SELECT ", 0, 7, null, SqlDialect.Mssql);
+        var completions = await CompletionService.GetCompletions("SELECT ", 0, 7, null, SqlDialect.Mssql);
         Assert.NotNull(completions.Items);
         Assert.Contains(completions.Items!, i => i.Label.Equals("ISNULL", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(completions.Items!, i => i.Label.Equals("GETDATE", StringComparison.OrdinalIgnoreCase));

@@ -1,4 +1,3 @@
-using Superpower.Model;
 using JustyBase.NetezzaSqlParser.Lexer;
 using JustyBase.NetezzaSqlParser.Ast;
 

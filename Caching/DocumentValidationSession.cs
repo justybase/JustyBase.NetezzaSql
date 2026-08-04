@@ -1,6 +1,4 @@
-using JustyBase.NetezzaSqlParser.Ast;
 using JustyBase.NetezzaSqlParser.Linter;
-using JustyBase.NetezzaSqlParser.Visitor;
 
 namespace JustyBase.NetezzaSqlParser.Caching;
 

@@ -1,4 +1,3 @@
-using JustyBase.NetezzaSqlParser.Ast;
 using JustyBase.NetezzaSqlParser.Dialects;
 
 namespace JustyBase.NetezzaSqlParser.Caching;
