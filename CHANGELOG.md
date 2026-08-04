@@ -4,6 +4,11 @@ All notable changes to this project will be documented here.
 
 ## Unreleased
 
+## 0.4.0
+
+- Add SQL authoring support for Microsoft SQL Server, MySQL 8, and PostgreSQL.
+- Extend dialect-aware lexing, parsing, formatting, linting, completion, and catalog support.
+
 ## 0.3.0
 
 - First production release of the shared JustyBase Netezza SQL libraries.
