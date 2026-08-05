@@ -80,14 +80,15 @@ public sealed class ImportExportExtendedTests
             [
                 ["true", "1", "1.5", "2020-01-01", "hello"],
                 ["false", "2", "2.0", "2020-02-01", "world"]
-            ]);
+            ],
+            inferBoolean: true);
 
         Assert.Equal("BOOLEAN", columns[0].NetezzaType);
-        Assert.Equal("INTEGER", columns[1].NetezzaType);
-        Assert.Equal("NUMERIC(38,10)", columns[2].NetezzaType);
-        Assert.Equal("DATETIME", columns[3].NetezzaType);
-        // max("hello","world")=5 → ceil(6) → 10
-        Assert.Equal("NVARCHAR(10)", columns[4].NetezzaType);
+        Assert.Equal("BIGINT", columns[1].NetezzaType);
+        Assert.Equal("NUMERIC(16,1)", columns[2].NetezzaType);
+        Assert.Equal("DATE", columns[3].NetezzaType);
+        // max("hello","world")=5 → max(5+5,20) → 20
+        Assert.Equal("NVARCHAR(20)", columns[4].NetezzaType);
         Assert.False(columns[0].IsNullable);
     }
 
@@ -108,7 +109,7 @@ public sealed class ImportExportExtendedTests
     [Fact]
     public void DatabaseTypeChooser_Infer_Column1_alpha_tokens_prefer_nvarchar_with_sized_length()
     {
-        // ADASD(5), FDSFDSF(7), FSDGDGFD(8) → max 8 → ceil(9.6)=10 → NVARCHAR(10)
+        // ADASD(5), FDSFDSF(7), FSDGDGFD(8) → max 8 → max(8+5,20) → NVARCHAR(20)
         var columns = DatabaseTypeChooser.Infer(
             ["COLUMN_1"],
             [
@@ -118,14 +119,14 @@ public sealed class ImportExportExtendedTests
             ]);
 
         Assert.Equal("COLUMN_1", columns[0].Name);
-        Assert.Equal("NVARCHAR(10)", columns[0].NetezzaType);
+        Assert.Equal("NVARCHAR(20)", columns[0].NetezzaType);
         Assert.False(columns[0].IsNullable);
     }
 
     [Fact]
     public void DatabaseTypeChooser_Infer_Column1_with_leading_zeros_and_negative_is_nvarchar()
     {
-        // 001/002/-5 → max 3 → NVARCHAR(10); must not become INTEGER
+        // 001/002/-5 → NVARCHAR(20); leading zeros stay textual per vscode semantics
         var columns = DatabaseTypeChooser.Infer(
             ["COLUMN_1"],
             [
@@ -135,7 +136,7 @@ public sealed class ImportExportExtendedTests
             ]);
 
         Assert.Equal("COLUMN_1", columns[0].Name);
-        Assert.Equal("NVARCHAR(10)", columns[0].NetezzaType);
+        Assert.Equal("NVARCHAR(20)", columns[0].NetezzaType);
         Assert.False(columns[0].IsNullable);
     }
 
@@ -148,12 +149,12 @@ public sealed class ImportExportExtendedTests
         => Assert.Equal(expected, DatabaseTypeChooser.SizeTextLength(maxLength));
 
     [Theory]
-    [InlineData(new[] { "001" }, "NVARCHAR(10)")]
-    [InlineData(new[] { "00" }, "NVARCHAR(10)")]
-    [InlineData(new[] { "-05" }, "NVARCHAR(10)")]
-    [InlineData(new[] { "+012" }, "NVARCHAR(10)")]
-    [InlineData(new[] { "0", "-5", "42" }, "INTEGER")]
-    [InlineData(new[] { "0.5", "1.0" }, "NUMERIC(38,10)")]
+    [InlineData(new[] { "001" }, "NVARCHAR(20)")]
+    [InlineData(new[] { "00" }, "NVARCHAR(20)")]
+    [InlineData(new[] { "-05" }, "NVARCHAR(20)")]
+    [InlineData(new[] { "+012" }, "NVARCHAR(20)")]
+    [InlineData(new[] { "0", "-5", "42" }, "NVARCHAR(20)")]
+    [InlineData(new[] { "0.5", "1.0" }, "NUMERIC(16,1)")]
     public void DatabaseTypeChooser_Infer_leading_zero_rules(string[] values, string expectedType)
     {
         var rows = values.Select(v => (IReadOnlyList<string?>)[v]).ToArray();
@@ -162,8 +163,9 @@ public sealed class ImportExportExtendedTests
     }
 
     [Fact]
-    public void DatabaseTypeChooser_Infer_plain_zero_and_negative_remain_integer()
+    public void DatabaseTypeChooser_Infer_negative_integers_fall_back_to_nvarchar()
     {
+        // vscode semantics: the BIGINT/NUMERIC regexes only match digits, so "-5" → NVARCHAR.
         var columns = DatabaseTypeChooser.Infer(
             ["n"],
             [
@@ -172,7 +174,7 @@ public sealed class ImportExportExtendedTests
                 ["42"]
             ]);
 
-        Assert.Equal("INTEGER", columns[0].NetezzaType);
+        Assert.Equal("NVARCHAR(20)", columns[0].NetezzaType);
     }
 
     [Fact]
@@ -185,7 +187,7 @@ public sealed class ImportExportExtendedTests
                 ["1.0"]
             ]);
 
-        Assert.Equal("NUMERIC(38,10)", columns[0].NetezzaType);
+        Assert.Equal("NUMERIC(16,1)", columns[0].NetezzaType);
     }
 
     [Fact]
