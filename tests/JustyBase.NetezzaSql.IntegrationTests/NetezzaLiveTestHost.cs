@@ -82,29 +82,37 @@ internal static class NetezzaLiveTestHost
                 Execute(connection, sql);
                 return true;
             }
-            catch (Exception error) when (IsPipeTopologyError(error))
+            catch (Exception error) when (IsRetryableLiveError(error))
             {
-                if (RequirePipe())
-                    throw;
-                // The XferTable pipe handshake is flaky on some topologies ("Error opening
-                // file" when the server cannot reach the client pipe); retry once before
-                // deciding the topology is unsupported.
-                if (attempt < 2)
+                if (attempt >= 2)
                 {
-                    Console.WriteLine($"Live pipe handshake retry (attempt {attempt}): {error.Message.Trim()}");
-                    await Task.Delay(2_000).ConfigureAwait(false);
-                    continue;
+                    if (RequirePipe() || IsTransportError(error))
+                        throw;
+                    Console.WriteLine($"Live pipe test soft-skipped (set NZ_REQUIRE_PIPE=1 to fail): {error.Message.Trim()}");
+                    return false;
                 }
-                Console.WriteLine($"Live pipe test soft-skipped (set NZ_REQUIRE_PIPE=1 to fail): {error.Message.Trim()}");
-                return false;
+
+                // The XferTable pipe handshake and the connection transport are flaky on some
+                // topologies ("Error opening file" / read timeouts when the server cannot reach
+                // the client or is momentarily busy); retry once before deciding.
+                Console.WriteLine($"Live test retry (attempt {attempt}): {error.Message.Trim()}");
+                await Task.Delay(2_000).ConfigureAwait(false);
             }
         }
     }
+
+    public static bool IsRetryableLiveError(Exception error)
+        => IsPipeTopologyError(error) || IsTransportError(error);
 
     public static bool IsPipeTopologyError(Exception error)
         => error.Message.Contains("Relative path not allowed", StringComparison.OrdinalIgnoreCase)
            || error.Message.Contains("named pipe", StringComparison.OrdinalIgnoreCase)
            || error.Message.Contains("Error opening file", StringComparison.OrdinalIgnoreCase);
+
+    public static bool IsTransportError(Exception error)
+        => error.Message.Contains("Unable to read data from the transport connection", StringComparison.OrdinalIgnoreCase)
+           || error is IOException
+           || error.InnerException is System.Net.Sockets.SocketException;
 
     public static bool RequirePipe()
         => string.Equals(Environment.GetEnvironmentVariable("NZ_REQUIRE_PIPE"), "1", StringComparison.OrdinalIgnoreCase)
