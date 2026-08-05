@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented here.
 
+## 0.5.1
+
+- Fix typed named-pipe import of numeric columns: values are written without a forced
+  six-decimal fraction, so they no longer exceed the scale of NUMERIC(p,s) columns
+  inferred by the vscode type chooser (e.g. `NUMERIC(16,2)` rejected `10.500000`).
+- Fix typed named-pipe import of date-overridden columns: midnight `DateTime` values are
+  emitted in date-only form (`YYYY-MM-DD`), which Netezza `DATE` columns accept.
+- Add unit coverage for the pipe numeric/date formats.
+
 ## 0.5.0
 
 - Import/export consolidation (phases 1.2–2.2): the shared import/export engines now live in
