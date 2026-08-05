@@ -75,23 +75,36 @@ internal static class NetezzaLiveTestHost
 
     public static async Task<bool> TryExecuteInsert(NzConnection connection, string sql)
     {
-        try
+        for (int attempt = 1; ; attempt++)
         {
-            Execute(connection, sql);
-            return true;
-        }
-        catch (Exception error) when (IsPipeTopologyError(error))
-        {
-            if (RequirePipe())
-                throw;
-            Console.WriteLine($"Live pipe test soft-skipped (set NZ_REQUIRE_PIPE=1 to fail): {error.Message.Trim()}");
-            return false;
+            try
+            {
+                Execute(connection, sql);
+                return true;
+            }
+            catch (Exception error) when (IsPipeTopologyError(error))
+            {
+                if (RequirePipe())
+                    throw;
+                // The XferTable pipe handshake is flaky on some topologies ("Error opening
+                // file" when the server cannot reach the client pipe); retry once before
+                // deciding the topology is unsupported.
+                if (attempt < 2)
+                {
+                    Console.WriteLine($"Live pipe handshake retry (attempt {attempt}): {error.Message.Trim()}");
+                    await Task.Delay(2_000).ConfigureAwait(false);
+                    continue;
+                }
+                Console.WriteLine($"Live pipe test soft-skipped (set NZ_REQUIRE_PIPE=1 to fail): {error.Message.Trim()}");
+                return false;
+            }
         }
     }
 
     public static bool IsPipeTopologyError(Exception error)
         => error.Message.Contains("Relative path not allowed", StringComparison.OrdinalIgnoreCase)
-           || error.Message.Contains("named pipe", StringComparison.OrdinalIgnoreCase);
+           || error.Message.Contains("named pipe", StringComparison.OrdinalIgnoreCase)
+           || error.Message.Contains("Error opening file", StringComparison.OrdinalIgnoreCase);
 
     public static bool RequirePipe()
         => string.Equals(Environment.GetEnvironmentVariable("NZ_REQUIRE_PIPE"), "1", StringComparison.OrdinalIgnoreCase)

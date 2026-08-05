@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented here.
 
+## 0.5.2
+
+- Live test host: treat the driver's `Error opening file` XferTable message as a pipe-topology
+  error and retry the EXTERNAL insert handshake once before soft-skipping, so intermittent
+  server-to-client pipe connectivity no longer fails `Verify-Local` runs.
+
 ## 0.5.1
 
 - Fix typed named-pipe import of numeric columns: values are written without a forced
