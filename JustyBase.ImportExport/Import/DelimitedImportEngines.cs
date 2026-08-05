@@ -4,7 +4,7 @@ using JustyBase.NetezzaDdl;
 
 namespace JustyBase.ImportExport.Import;
 
-public sealed record ImportProgress(long RowsRead, long RowsWritten, long RowsSkipped, string? Error = null);
+public sealed record PipeImportProgress(long RowsRead, long RowsWritten, long RowsSkipped, string? Error = null);
 
 public sealed record CsvImportOptions(
     char Delimiter = ',',
@@ -49,7 +49,7 @@ public static class DelimitedRowEncoder
 
 public sealed class NetezzaImportEngine
 {
-    public async Task<IReadOnlyList<ImportProgress>> WriteTypedRowsAsync(
+    public async Task<IReadOnlyList<PipeImportProgress>> WriteTypedRowsAsync(
         IAsyncEnumerable<IReadOnlyList<object?>> rows,
         TextWriter destination,
         char delimiter = '\t',
@@ -58,7 +58,7 @@ public sealed class NetezzaImportEngine
     {
         ArgumentNullException.ThrowIfNull(rows);
         ArgumentNullException.ThrowIfNull(destination);
-        var progress = new List<ImportProgress>();
+        var progress = new List<PipeImportProgress>();
         long read = 0;
         long written = 0;
 
@@ -69,10 +69,10 @@ public sealed class NetezzaImportEngine
             await destination.WriteLineAsync(DelimitedRowEncoder.Encode(row, delimiter, nullValue)).ConfigureAwait(false);
             written++;
             if (written % 1000 == 0)
-                progress.Add(new ImportProgress(read, written, 0));
+                progress.Add(new PipeImportProgress(read, written, 0));
         }
 
-        progress.Add(new ImportProgress(read, written, 0));
+        progress.Add(new PipeImportProgress(read, written, 0));
         return progress;
     }
 
