@@ -161,7 +161,8 @@ internal static class LiveImportRoundTripRunner
             return eBool == aBool;
         }
 
-        if (inferredType.Equals("INTEGER", StringComparison.OrdinalIgnoreCase)
+        if ((inferredType.Equals("INTEGER", StringComparison.OrdinalIgnoreCase)
+                || inferredType.Equals("BIGINT", StringComparison.OrdinalIgnoreCase))
             && long.TryParse(expected, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out long eInt)
             && long.TryParse(actual, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out long aInt))
             return eInt == aInt;

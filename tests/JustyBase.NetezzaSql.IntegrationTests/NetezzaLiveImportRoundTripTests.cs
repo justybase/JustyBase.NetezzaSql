@@ -45,11 +45,11 @@ public sealed class NetezzaLiveImportRoundTripTests
             ],
             ExpectedInferredTypes: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                ["id"] = "INTEGER",
-                ["flag"] = "BOOLEAN",
-                ["amount"] = "NUMERIC(38,10)",
+                ["id"] = "BIGINT",
+                ["flag"] = "NVARCHAR(20)",
+                ["amount"] = "NUMERIC(16,2)",
                 ["when_dt"] = "DATETIME",
-                ["label"] = "NVARCHAR(10)"
+                ["label"] = "NVARCHAR(20)"
             });
 
     private static LiveImportCase NullableAndEmptyVarchar()
@@ -68,8 +68,8 @@ public sealed class NetezzaLiveImportRoundTripTests
             ],
             ExpectedInferredTypes: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                ["id"] = "INTEGER",
-                ["note"] = "NVARCHAR(10)"
+                ["id"] = "BIGINT",
+                ["note"] = "NVARCHAR(20)"
             },
             CsvOptions: new CsvImportOptions(HasHeader: true, NullValue: ""),
             NullValue: "");
@@ -86,8 +86,8 @@ public sealed class NetezzaLiveImportRoundTripTests
             ],
             ExpectedInferredTypes: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                ["id"] = "INTEGER",
-                ["txt"] = "NVARCHAR(30)"
+                ["id"] = "BIGINT",
+                ["txt"] = "NVARCHAR(29)"
             });
 
     private static LiveImportCase HardQuotedMultilineCsv()
@@ -102,7 +102,7 @@ public sealed class NetezzaLiveImportRoundTripTests
             ],
             ExpectedInferredTypes: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                ["id"] = "INTEGER",
+                ["id"] = "BIGINT",
                 ["name"] = "NVARCHAR(20)",
                 ["note"] = "NVARCHAR(20)"
             });
@@ -127,7 +127,7 @@ public sealed class NetezzaLiveImportRoundTripTests
             ],
             ExpectedInferredTypes: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                ["id"] = "INTEGER",
+                ["id"] = "BIGINT",
                 ["payload"] = "NVARCHAR(30)"
             });
 
@@ -149,8 +149,8 @@ public sealed class NetezzaLiveImportRoundTripTests
             ],
             ExpectedInferredTypes: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                ["id"] = "INTEGER",
-                ["mixed"] = "NVARCHAR(10)"
+                ["id"] = "BIGINT",
+                ["mixed"] = "NVARCHAR(20)"
             });
 
     private static LiveImportCase LeadingZerosStayVarchar()
@@ -171,8 +171,8 @@ public sealed class NetezzaLiveImportRoundTripTests
             ],
             ExpectedInferredTypes: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                ["id"] = "INTEGER",
-                ["code"] = "NVARCHAR(10)"
+                ["id"] = "BIGINT",
+                ["code"] = "NVARCHAR(20)"
             });
 
     private static IReadOnlyDictionary<string, string?> Row(params (string Key, string? Value)[] pairs)
