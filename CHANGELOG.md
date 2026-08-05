@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented here.
 
+## 0.5.0
+
+- Import/export consolidation (phases 1.2–2.2): the shared import/export engines now live in
+  `JustyBase.ImportExport`; both hosts (Avalonia, WinForms) keep only UI adapters.
+- Add `JustyBase.ImportExport.Export.ExportEncodingResolver` (unified encoding/newline
+  resolution; superset of the previously duplicated per-host helpers) and
+  `JsonExportWriter` (row = JSON string array; source-generated context).
+- Add `CsvRowReader` (Sylvan-backed, Brotli/Gzip/Zstd) with pure `CsvCellTypeResolver`
+  (`CsvCell`/`CsvCellKind`), including `TreatAllColumnsAsText` and Pesel/Regon-as-text.
+- Add the streaming `ImportTypeAnalyzer` with `ImportColumnKind`/`DetectedImportColumnType`,
+  `ImportHeaderNormalizer`, and `ImportTypeInferenceUtils` (vscode `importHeaderUtils.ts` /
+  `importTypeInferenceUtils.ts` ports).
+- Add the vscode type-inference contracts: `DatabaseColumnTypeChooser`,
+  `DatabaseImportDataType`, `DatabaseImportTypeMapper`, `NetezzaColumnTypeChooser`, and
+  retarget the batch `DatabaseTypeChooser.Infer` onto the chooser algorithm — this is a
+  **behavioral change**: integers infer as `BIGINT`, decimals as `NUMERIC(p,s)` sized from
+  the data, and booleans only with `inferBoolean: true`.
+- Document the consolidation boundary and phase status in `docs/import-export-consolidation.md`.
+- Tooling: `Verify-Local.ps1` now clears `artifacts/packages` before packing, and
+  `Test-PackageConsumer.ps1` prefers the most recently packed nupkg per package id.
+
 ## 0.4.1
 
 - Move `SqlTypingPerfProbe` into the new `JustyBase.Core.Diagnostics` namespace so UI hosts
