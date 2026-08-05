@@ -11,7 +11,8 @@ $packages = Get-ChildItem -Path $PackageDirectory -Filter '*.nupkg' | Where-Obje
 $required = 'JustyBase.NetezzaSqlParser', 'JustyBase.NetezzaDdl', 'JustyBase.NetezzaCatalogSql', 'JustyBase.Netezza', 'JustyBase.Core', 'JustyBase.ImportExport'
 $versions = @{}
 foreach ($id in $required) {
-    $package = $packages | Where-Object { $_.Name -match "^$([regex]::Escape($id))\.(.+)\.nupkg$" } | Select-Object -First 1
+    # artifacts/packages accumulates nupkgs across runs; prefer the most recently packed version.
+    $package = $packages | Where-Object { $_.Name -match "^$([regex]::Escape($id))\.(.+)\.nupkg$" } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
     if ($null -eq $package) { throw "Package $id was not found in $PackageDirectory." }
     $versions[$id] = [regex]::Match($package.Name, "^$([regex]::Escape($id))\.(.+)\.nupkg$").Groups[1].Value
 }

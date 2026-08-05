@@ -30,6 +30,7 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'vulnerable package check failed.' }
 
         $packageDir = Join-Path $repoRoot 'artifacts/packages'
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $packageDir
         New-Item -ItemType Directory -Force -Path $packageDir | Out-Null
         Write-Host '==> dotnet pack' -ForegroundColor Cyan
         dotnet pack .\JustyBase.NetezzaSqlParser.csproj --no-build -c $Configuration -o $packageDir
