@@ -1,6 +1,7 @@
 using JustyBase.ImportExport.Export;
 using JustyBase.ImportExport.Import;
 using JustyBase.NetezzaDdl;
+using System.Text;
 
 namespace JustyBase.NetezzaSql.Tests;
 
@@ -117,5 +118,69 @@ public sealed class ImportExportCoreTests
         Assert.Contains("REMOTESOURCE 'dotnet'", sql, StringComparison.Ordinal);
         Assert.Contains("USING", sql, StringComparison.OrdinalIgnoreCase);
         Assert.EndsWith(";", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EncodingResolver_aliases_resolve_to_expected_encodings()
+    {
+        Assert.Same(Encoding.UTF8, ExportEncodingResolver.Resolve(null));
+        Assert.Same(Encoding.UTF8, ExportEncodingResolver.Resolve(""));
+        Assert.Same(Encoding.UTF8, ExportEncodingResolver.Resolve("utf-8"));
+        Assert.Same(Encoding.UTF8, ExportEncodingResolver.Resolve("UTF8"));
+        Assert.Same(Encoding.Latin1, ExportEncodingResolver.Resolve("latin1"));
+        Assert.Same(Encoding.Unicode, ExportEncodingResolver.Resolve("utf-16"));
+        Assert.Same(Encoding.UTF32, ExportEncodingResolver.Resolve("UTF-32"));
+    }
+
+    [Fact]
+    public void EncodingResolver_codepage_and_name_support_matches_legacy_behavior()
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        Assert.Equal(Encoding.GetEncoding(1252), ExportEncodingResolver.Resolve("1252"));
+        Assert.Equal(Encoding.GetEncoding("windows-1250"), ExportEncodingResolver.Resolve("windows-1250"));
+        Assert.Same(Encoding.UTF8, ExportEncodingResolver.Resolve("   utf-8   "));
+    }
+
+    [Fact]
+    public void EncodingResolver_utf8_bom_variant_has_no_preamble()
+    {
+        var encoding = ExportEncodingResolver.Resolve("utf8_bm");
+        Assert.Empty(encoding.GetPreamble());
+    }
+
+    [Fact]
+    public void EncodingResolver_newline_escapes_are_translated()
+    {
+        Assert.Equal(Environment.NewLine, ExportEncodingResolver.ResolveNewLine(null));
+        Assert.Equal(Environment.NewLine, ExportEncodingResolver.ResolveNewLine(""));
+        Assert.Equal("\r\n", ExportEncodingResolver.ResolveNewLine("\\r\\n"));
+        Assert.Equal("\n", ExportEncodingResolver.ResolveNewLine("\\n"));
+    }
+
+    [Fact]
+    public void JsonExportWriter_writes_row_arrays_and_null_for_dbnulls()
+    {
+        using var reader = new StubDataReader(
+            [("id", typeof(int)), ("name", typeof(string))],
+            [1, "Ada"],
+            [2, null]);
+
+        using var writer = new StringWriter();
+        long count = JsonExportWriter.WriteFromDataReader(writer, reader);
+
+        Assert.Equal(2, count);
+        Assert.Equal("[[\"1\",\"Ada\"],[\"2\",null]]", writer.ToString());
+    }
+
+    [Fact]
+    public void JsonExportWriter_empty_reader_writes_empty_array()
+    {
+        using var reader = new StubDataReader([("id", typeof(int))]);
+        using var writer = new StringWriter();
+
+        long count = JsonExportWriter.WriteFromDataReader(writer, reader);
+
+        Assert.Equal(0, count);
+        Assert.Equal("[]", writer.ToString());
     }
 }
