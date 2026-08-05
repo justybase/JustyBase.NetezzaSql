@@ -248,25 +248,50 @@ public static class NetezzaPipeImportExecutor
                 writer.Write(reader.GetInt64(ordinal));
                 break;
             case TypeCode.Single:
-                _ = reader.GetFloat(ordinal).TryFormat(spanBuffer, out int w1, "F6", NumberWithDot);
-                writer.Write(spanBuffer[..w1]);
+                writer.Write(FormatNumeric(reader.GetFloat(ordinal), spanBuffer));
                 break;
             case TypeCode.Double:
-                _ = reader.GetDouble(ordinal).TryFormat(spanBuffer, out int w2, "F6", NumberWithDot);
-                writer.Write(spanBuffer[..w2]);
+                writer.Write(FormatNumeric(reader.GetDouble(ordinal), spanBuffer));
                 break;
             case TypeCode.Decimal:
-                _ = reader.GetDecimal(ordinal).TryFormat(spanBuffer, out int w3, "F6", NumberWithDot);
-                writer.Write(spanBuffer[..w3]);
+                writer.Write(FormatNumeric(reader.GetDecimal(ordinal), spanBuffer));
                 break;
             case TypeCode.DateTime:
-                _ = reader.GetDateTime(ordinal).TryFormat(spanBuffer, out int w4, "yyyy-MM-dd HH:mm:ss");
-                writer.Write(spanBuffer[..w4]);
+                writer.Write(FormatDateTime(reader.GetDateTime(ordinal), spanBuffer));
                 break;
             case TypeCode.String:
                 writer.Write(Sanitize(reader.GetString(ordinal), valuesToEscape, escapedEscape, delimiter, escapedDelimiter, escapedNewLine));
                 break;
         }
+    }
+
+    /// <summary>
+    /// Formats a numeric value without forced decimals or exponent notation. A fixed F6
+    /// format exceeded the scale of NUMERIC(p,s) columns inferred by the shared type
+    /// chooser (e.g. NUMERIC(16,2) rejects "10.500000").
+    /// </summary>
+    internal static string FormatNumeric(float value, Span<char> buffer)
+        => FormatNumericCore(value.TryFormat(buffer, out int written, "0.###############################", NumberWithDot), buffer, written);
+
+    internal static string FormatNumeric(double value, Span<char> buffer)
+        => FormatNumericCore(value.TryFormat(buffer, out int written, "0.###############################", NumberWithDot), buffer, written);
+
+    internal static string FormatNumeric(decimal value, Span<char> buffer)
+        => FormatNumericCore(value.TryFormat(buffer, out int written, "0.###############################", NumberWithDot), buffer, written);
+
+    private static string FormatNumericCore(bool ok, Span<char> buffer, int written)
+        => ok ? buffer[..written].ToString() : string.Empty;
+
+    /// <summary>
+    /// Midnight values carry no time information; emitting the date-only form keeps them
+    /// loadable into DATE columns (a timestamp string is rejected by Netezza DATE).
+    /// </summary>
+    internal static string FormatDateTime(DateTime value, Span<char> buffer)
+    {
+        bool ok = value.TimeOfDay == TimeSpan.Zero
+            ? value.TryFormat(buffer, out int written, "yyyy-MM-dd")
+            : value.TryFormat(buffer, out written, "yyyy-MM-dd HH:mm:ss");
+        return ok ? buffer[..written].ToString() : string.Empty;
     }
 
     public static string Sanitize(

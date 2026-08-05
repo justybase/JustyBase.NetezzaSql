@@ -8,6 +8,26 @@ namespace JustyBase.NetezzaSql.Tests;
 public sealed class ImportExportCoreTests
 {
     [Fact]
+    public void PipeNumericFormat_avoids_forced_decimals_and_exponent_notation()
+    {
+        Span<char> buffer = stackalloc char[64];
+        Assert.Equal("10.5", NetezzaPipeImportExecutor.FormatNumeric(10.5m, buffer));
+        Assert.Equal("20.75", NetezzaPipeImportExecutor.FormatNumeric(20.75m, buffer));
+        Assert.Equal("0", NetezzaPipeImportExecutor.FormatNumeric(0m, buffer));
+        Assert.Equal("1.5", NetezzaPipeImportExecutor.FormatNumeric(1.5d, buffer));
+        Assert.Equal("1.25", NetezzaPipeImportExecutor.FormatNumeric(1.25f, buffer));
+        Assert.DoesNotContain("E", NetezzaPipeImportExecutor.FormatNumeric(0.0000001d, buffer), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void PipeDateTimeFormat_midnight_emits_date_only()
+    {
+        Span<char> buffer = stackalloc char[64];
+        Assert.Equal("2024-01-15", NetezzaPipeImportExecutor.FormatDateTime(new DateTime(2024, 1, 15), buffer));
+        Assert.Equal("2024-01-15 10:30:00", NetezzaPipeImportExecutor.FormatDateTime(new DateTime(2024, 1, 15, 10, 30, 0), buffer));
+    }
+
+    [Fact]
     public void UsingBuilder_contains_shared_typed_and_fast_options()
     {
         string sql = NetezzaImportSql.BuildUsingClause(new NetezzaImportUsingOptions
