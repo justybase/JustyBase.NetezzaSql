@@ -12,6 +12,8 @@
   <ItemGroup>
     <ProjectReference Include="..\JustyBase.NetezzaDdl\JustyBase.NetezzaDdl.csproj" />
     <PackageReference Include="Parquet.Net" Version="6.0.3" />
+    <PackageReference Include="Sylvan.Data.Csv" Version="1.4.4" />
+    <PackageReference Include="ZstdSharp.Port" Version="0.8.8" />
     <None Include="..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
   <ItemGroup>
