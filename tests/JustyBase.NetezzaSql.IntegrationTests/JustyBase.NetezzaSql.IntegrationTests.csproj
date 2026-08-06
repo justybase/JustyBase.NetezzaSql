@@ -24,6 +24,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\JustyBase.NetezzaCatalogSql\JustyBase.NetezzaCatalogSql.csproj" />
     <ProjectReference Include="..\..\JustyBase.NetezzaDdl\JustyBase.NetezzaDdl.csproj" />
+    <ProjectReference Include="..\..\JustyBase.Netezza\JustyBase.Netezza.csproj" />
     <ProjectReference Include="..\..\JustyBase.Core\JustyBase.Core.csproj" />
     <ProjectReference Include="..\..\JustyBase.ImportExport\JustyBase.ImportExport.csproj" />
     <ProjectReference Include="..\..\JustyBase.NetezzaSqlParser.csproj" />

@@ -75,4 +75,53 @@ public sealed class NetezzaSchemaProviderAdapterTests
         Assert.NotNull(table);
         Assert.Empty(table!.Columns!);
     }
+
+    [Fact]
+    public void Apply_ProjectsOnlyTableLikeObjects()
+    {
+        var provider = new InMemorySchemaProvider();
+
+        NetezzaSchemaProviderAdapter.Apply(
+            provider,
+            new NetezzaSchemaSnapshot(
+            [
+                new NetezzaSchemaTable("T1", "PUBLIC", "DB", Kind: NetezzaObjectKind.Table),
+                new NetezzaSchemaTable("V1", "PUBLIC", "DB", Kind: NetezzaObjectKind.View),
+                new NetezzaSchemaTable("EXT1", "PUBLIC", "DB", Kind: NetezzaObjectKind.ExternalTable),
+                new NetezzaSchemaTable("SYN1", "PUBLIC", "DB", Kind: NetezzaObjectKind.Synonym),
+                new NetezzaSchemaTable("P1", "PUBLIC", "DB", Kind: NetezzaObjectKind.Procedure),
+                new NetezzaSchemaTable("F1", "PUBLIC", "DB", Kind: NetezzaObjectKind.Function),
+                new NetezzaSchemaTable("SEQ1", "PUBLIC", "DB", Kind: NetezzaObjectKind.Sequence),
+                new NetezzaSchemaTable("AGG1", "PUBLIC", "DB", Kind: NetezzaObjectKind.Aggregate),
+            ]));
+
+        Assert.True(provider.TableExists("DB", "PUBLIC", "T1"));
+        Assert.True(provider.TableExists("DB", "PUBLIC", "V1"));
+        Assert.True(provider.TableExists("DB", "PUBLIC", "EXT1"));
+        Assert.True(provider.TableExists("DB", "PUBLIC", "SYN1"));
+        Assert.False(provider.TableExists("DB", "PUBLIC", "P1"));
+        Assert.False(provider.TableExists("DB", "PUBLIC", "F1"));
+        Assert.False(provider.TableExists("DB", "PUBLIC", "SEQ1"));
+        Assert.False(provider.TableExists("DB", "PUBLIC", "AGG1"));
+    }
+
+    [Fact]
+    public void Apply_ExternalAndSynonymObjectsCarryKindFlags()
+    {
+        var provider = new InMemorySchemaProvider();
+
+        NetezzaSchemaProviderAdapter.Apply(
+            provider,
+            new NetezzaSchemaSnapshot(
+            [
+                new NetezzaSchemaTable("EXT1", "PUBLIC", "DB", Kind: NetezzaObjectKind.ExternalTable),
+                new NetezzaSchemaTable("SYN1", "PUBLIC", "DB", Kind: NetezzaObjectKind.Synonym),
+                new NetezzaSchemaTable("V1", "PUBLIC", "DB", Kind: NetezzaObjectKind.View),
+            ]));
+
+        Assert.True(provider.GetTable("DB", "PUBLIC", "EXT1")!.IsExternal);
+        Assert.False(provider.GetTable("DB", "PUBLIC", "EXT1")!.IsView);
+        Assert.False(provider.GetTable("DB", "PUBLIC", "SYN1")!.IsExternal);
+        Assert.True(provider.GetTable("DB", "PUBLIC", "V1")!.IsView);
+    }
 }
