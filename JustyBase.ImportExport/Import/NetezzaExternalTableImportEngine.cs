@@ -1,5 +1,6 @@
 using JustyBase.NetezzaDdl;
 using System.Data.Common;
+using System.Diagnostics;
 using System.Text;
 
 namespace JustyBase.ImportExport.Import;
@@ -13,6 +14,9 @@ public sealed class NetezzaExternalTableImportEngine : IImportEngine
 {
     private const char DefaultColumnSeparator = '\t';
     private const char DefaultEscapeChar = '\\';
+
+    /// <summary>How long to wait for the driver to flush the load log after the INSERT returns.</summary>
+    private static readonly TimeSpan LoadLogTimeout = TimeSpan.FromSeconds(5);
 
     public async Task ExecuteAsync(
         DbConnection connection,
@@ -46,6 +50,12 @@ public sealed class NetezzaExternalTableImportEngine : IImportEngine
         string[] headersWithDataType = job.ReturnHeadersWithDataTypes(DatabaseKind.Netezza);
         bool isLineReader = job is IXmlImportJob;
 
+        // The pipe streams a DATE column date-only and a TIMESTAMP column always with the full
+        // time part — both formats must match the destination column declared in headersWithDataType.
+        bool[]? dateOnlyColumns = job.Columns is { Count: > 0 } columns
+            ? BuildDateOnlyColumns(columns)
+            : null;
+
         // Cancelled when the database step fails before the driver ever connected to the
         // pipe — otherwise the pipe waiter would block forever (no client, no data).
         using var pipeCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -57,6 +67,7 @@ public sealed class NetezzaExternalTableImportEngine : IImportEngine
             delimiter: columnSeparator,
             encoding: pipeEncoding,
             rowsCount: job.RowsCount,
+            dateOnlyColumns: dateOnlyColumns,
             cancellationToken: pipeCts.Token);
 
         await Task.Delay(50).ConfigureAwait(false);
@@ -101,9 +112,23 @@ public sealed class NetezzaExternalTableImportEngine : IImportEngine
 
                 if (!string.IsNullOrWhiteSpace(options.TempLogDirectory))
                 {
-                    var badFilePath = Directory.EnumerateFiles(options.TempLogDirectory, $"{targetTableName}*.nzbad").FirstOrDefault();
-                    if (badFilePath is not null)
-                        progress?.Invoke($"[ERROR] {badFilePath} created");
+                    // The driver flushes the load log (.nzlog/.nzbad) to LOGDIR when the load ends.
+                    // A load can "complete" with every row rejected (e.g. a format mismatch), so the
+                    // log must be consulted instead of trusting the INSERT alone. Surface a clear
+                    // message whenever bad records exist or nothing was loaded.
+                    LoadDiagnostics? diagnostics = ReadLoadDiagnostics(options.TempLogDirectory, targetTableName);
+                    if (diagnostics is not null && (diagnostics.BadRecords > 0 || diagnostics.LoadedRecords == 0))
+                    {
+                        progress?.Invoke(diagnostics.BadRecords > 0
+                            ? $"[ERROR] Netezza rejected {diagnostics.BadRecords:N0} row(s) for '{targetTableName}' (loaded {diagnostics.LoadedRecords:N0}); see {diagnostics.LogFilePath}"
+                            : $"[ERROR] Netezza loaded 0 rows for '{targetTableName}'; see {diagnostics.LogFilePath}");
+                    }
+                    else
+                    {
+                        var badFilePath = Directory.EnumerateFiles(options.TempLogDirectory, $"{targetTableName}*.nzbad").FirstOrDefault();
+                        if (badFilePath is not null)
+                            progress?.Invoke($"[ERROR] {badFilePath} created");
+                    }
                 }
             }).ConfigureAwait(false);
         }
@@ -126,5 +151,84 @@ public sealed class NetezzaExternalTableImportEngine : IImportEngine
         }
 
         await pipeServer.ConfigureAwait(false);
+    }
+
+    private static bool[] BuildDateOnlyColumns(IReadOnlyList<IImportColumn> columns)
+    {
+        var result = new bool[columns.Count];
+        for (int i = 0; i < columns.Count; i++)
+        {
+            result[i] = columns[i].Kind == ImportColumnKind.Date;
+        }
+
+        return result;
+    }
+
+    /// <summary>Summary of a Netezza external-load run, parsed from the driver's .nzlog file.</summary>
+    private sealed record LoadDiagnostics(string LogFilePath, long BadRecords, long LoadedRecords);
+
+    private static LoadDiagnostics? ReadLoadDiagnostics(string logDirectory, string tableName)
+    {
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        while (stopwatch.ElapsedMilliseconds < LoadLogTimeout.TotalMilliseconds)
+        {
+            string? logFilePath = Directory.EnumerateFiles(logDirectory, $"{tableName}*.nzlog").FirstOrDefault();
+            if (logFilePath is not null)
+            {
+                try
+                {
+                    return ParseLoadDiagnostics(logFilePath);
+                }
+                catch (IOException)
+                {
+                    // The driver may still be flushing the log — retry briefly.
+                }
+            }
+
+            Thread.Sleep(100);
+        }
+
+        return null;
+    }
+
+    private static LoadDiagnostics? ParseLoadDiagnostics(string logFilePath)
+    {
+        long badRecords = -1;
+        long loadedRecords = -1;
+        foreach (string line in File.ReadLines(logFilePath))
+        {
+            string trimmed = line.Trim();
+            if (badRecords < 0 && TryReadStat(trimmed, "number of bad records:", out long badValue))
+            {
+                badRecords = badValue;
+            }
+            else if (loadedRecords < 0 && TryReadStat(trimmed, "number of records loaded:", out long loadedValue))
+            {
+                loadedRecords = loadedValue;
+            }
+
+            if (badRecords >= 0 && loadedRecords >= 0)
+            {
+                break;
+            }
+        }
+
+        if (badRecords < 0 && loadedRecords < 0)
+        {
+            return null;
+        }
+
+        return new LoadDiagnostics(logFilePath, Math.Max(0, badRecords), Math.Max(0, loadedRecords));
+    }
+
+    private static bool TryReadStat(string line, string prefix, out long value)
+    {
+        value = 0;
+        if (!line.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return long.TryParse(line.AsSpan(prefix.Length).Trim(), out value);
     }
 }

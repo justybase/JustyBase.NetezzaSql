@@ -28,6 +28,22 @@ public sealed class ImportExportCoreTests
     }
 
     [Fact]
+    public void PipeDateTimeFormatFull_always_emits_timestamp_including_midnight()
+    {
+        Span<char> buffer = stackalloc char[64];
+        Assert.Equal("2024-01-15 00:00:00", NetezzaPipeImportExecutor.FormatDateTimeFull(new DateTime(2024, 1, 15), buffer));
+        Assert.Equal("2024-01-15 10:30:00", NetezzaPipeImportExecutor.FormatDateTimeFull(new DateTime(2024, 1, 15, 10, 30, 0), buffer));
+    }
+
+    [Fact]
+    public void PipeDateFormat_emits_date_only()
+    {
+        Span<char> buffer = stackalloc char[64];
+        Assert.Equal("2024-01-15", NetezzaPipeImportExecutor.FormatDate(new DateTime(2024, 1, 15), buffer));
+        Assert.Equal("2024-01-15", NetezzaPipeImportExecutor.FormatDate(new DateTime(2024, 1, 15, 10, 30, 0), buffer));
+    }
+
+    [Fact]
     public void UsingBuilder_contains_shared_typed_and_fast_options()
     {
         string sql = NetezzaImportSql.BuildUsingClause(new NetezzaImportUsingOptions

@@ -32,6 +32,23 @@ public static class NetezzaPipeImportExecutor
     /// Starts a background named-pipe server that streams typed <see cref="IDataReader"/> rows
     /// with EXTERNAL-safe escaping (Avalonia SoT behavior).
     /// </summary>
+    /// <param name="reader">Reader whose rows are streamed over the pipe.</param>
+    /// <param name="pipeName">Named-pipe server name.</param>
+    /// <param name="progress">Optional progress callback (rows-loaded percentages).</param>
+    /// <param name="preparedStringsMode">When <c>true</c>, values are emitted as pre-sanitized strings.</param>
+    /// <param name="delimiter">Field delimiter emitted between columns.</param>
+    /// <param name="encoding">Encoding of the pipe stream.</param>
+    /// <param name="rowsCount">Expected row count, used for progress percentages.</param>
+    /// <param name="dateOnlyColumns">
+    /// Optional per-column flag telling whether a DateTime column is a DATE column. A DATE column
+    /// is streamed as <c>yyyy-MM-dd</c> (Netezza rejects a timestamp string in a DATE column); a
+    /// TIMESTAMP column is always streamed as <c>yyyy-MM-dd HH:mm:ss</c> — including midnight
+    /// values, which Netezza otherwise rejects as "date but no time". When <c>null</c>, the legacy
+    /// value-based heuristic is used (midnight values become date-only).
+    /// </param>
+    /// <param name="rowProgress">Optional per-row progress callback.</param>
+    /// <param name="progressEvery">Rows between <paramref name="rowProgress"/>/progress callbacks.</param>
+    /// <param name="cancellationToken">Cancellation for the pipe wait and streaming.</param>
     public static Task ServeDataReaderAsync(
         IDataReader reader,
         string pipeName,
@@ -40,6 +57,7 @@ public static class NetezzaPipeImportExecutor
         char delimiter = DefaultDelimiter,
         Encoding? encoding = null,
         long rowsCount = -1,
+        IReadOnlyList<bool>? dateOnlyColumns = null,
         Action<long>? rowProgress = null,
         long progressEvery = 10_000,
         CancellationToken cancellationToken = default)
@@ -91,7 +109,7 @@ public static class NetezzaPipeImportExecutor
                     if (!preparedStringsMode && typeCodes is not null)
                     {
                         if (!reader.IsDBNull(i))
-                            WriteTypedValue(writer, reader, i, typeCodes[i], spanBuffer, valuesToEscape, escapedEscape, delimiter, escapedDelimiter, escapedNewLine);
+                            WriteTypedValue(writer, reader, i, typeCodes[i], spanBuffer, valuesToEscape, escapedEscape, delimiter, escapedDelimiter, escapedNewLine, dateOnlyColumns);
                     }
                     else
                     {
@@ -231,7 +249,8 @@ public static class NetezzaPipeImportExecutor
         string escapedEscape,
         char delimiter,
         string escapedDelimiter,
-        string escapedNewLine)
+        string escapedNewLine,
+        IReadOnlyList<bool>? dateOnlyColumns = null)
     {
         switch (typeCode)
         {
@@ -259,7 +278,21 @@ public static class NetezzaPipeImportExecutor
                 writer.Write(FormatNumeric(reader.GetDecimal(ordinal), spanBuffer));
                 break;
             case TypeCode.DateTime:
-                writer.Write(FormatDateTime(reader.GetDateTime(ordinal), spanBuffer));
+                DateTime dateTimeValue = reader.GetDateTime(ordinal);
+                if (dateOnlyColumns is not null && ordinal < dateOnlyColumns.Count)
+                {
+                    // The column kind is known: DATE columns are streamed date-only (a timestamp
+                    // string is rejected by a Netezza DATE), TIMESTAMP columns always carry the
+                    // time part (a date-only string is rejected as "date but no time").
+                    writer.Write(dateOnlyColumns[ordinal]
+                        ? FormatDate(dateTimeValue, spanBuffer)
+                        : FormatDateTimeFull(dateTimeValue, spanBuffer));
+                }
+                else
+                {
+                    writer.Write(FormatDateTime(dateTimeValue, spanBuffer));
+                }
+
                 break;
             case TypeCode.String:
                 writer.Write(Sanitize(reader.GetString(ordinal), valuesToEscape, escapedEscape, delimiter, escapedDelimiter, escapedNewLine));
@@ -285,14 +318,35 @@ public static class NetezzaPipeImportExecutor
         => ok ? buffer[..written].ToString() : string.Empty;
 
     /// <summary>
-    /// Midnight values carry no time information; emitting the date-only form keeps them
-    /// loadable into DATE columns (a timestamp string is rejected by Netezza DATE).
+    /// Legacy value-based formatter used when the per-column kind is unknown: midnight values carry
+    /// no time information, so the date-only form keeps them loadable into DATE columns. Callers that
+    /// know the column kind use <see cref="FormatDate"/> (DATE) or <see cref="FormatDateTimeFull"/>
+    /// (TIMESTAMP, always includes the time part) instead.
     /// </summary>
     internal static string FormatDateTime(DateTime value, Span<char> buffer)
     {
         bool ok = value.TimeOfDay == TimeSpan.Zero
             ? value.TryFormat(buffer, out int written, "yyyy-MM-dd")
             : value.TryFormat(buffer, out written, "yyyy-MM-dd HH:mm:ss");
+        return ok ? buffer[..written].ToString() : string.Empty;
+    }
+
+    /// <summary>
+    /// Date-only form (<c>yyyy-MM-dd</c>) for Netezza DATE columns, which reject a timestamp string.
+    /// </summary>
+    internal static string FormatDate(DateTime value, Span<char> buffer)
+    {
+        bool ok = value.TryFormat(buffer, out int written, "yyyy-MM-dd");
+        return ok ? buffer[..written].ToString() : string.Empty;
+    }
+
+    /// <summary>
+    /// Full timestamp form (<c>yyyy-MM-dd HH:mm:ss</c>) for Netezza TIMESTAMP columns. Always emits
+    /// the time part — including midnight values, which Netezza otherwise rejects as "date but no time".
+    /// </summary>
+    internal static string FormatDateTimeFull(DateTime value, Span<char> buffer)
+    {
+        bool ok = value.TryFormat(buffer, out int written, "yyyy-MM-dd HH:mm:ss");
         return ok ? buffer[..written].ToString() : string.Empty;
     }
 

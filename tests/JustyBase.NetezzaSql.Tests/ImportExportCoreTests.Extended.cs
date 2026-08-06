@@ -294,6 +294,56 @@ public sealed class ImportExportExtendedTests
     }
 
     [Fact]
+    public async Task PipeExecutor_TimeStampMidnight_emits_full_timestamp()
+    {
+        string pipe = NetezzaPipeImportExecutor.CreatePipeName("ut");
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var dataReader = new StubDataReader(
+            [("when", typeof(DateTime))],
+            [new DateTime(2024, 1, 15)]);
+
+        Task serve = NetezzaPipeImportExecutor.ServeDataReaderAsync(
+            dataReader,
+            pipe,
+            dateOnlyColumns: [false],
+            cancellationToken: cts.Token);
+        await Task.Delay(50, cts.Token);
+        using var client = new NamedPipeClientStream(".", pipe, PipeDirection.In);
+        await client.ConnectAsync(5000, cts.Token);
+        using var reader = new StreamReader(client, Encoding.UTF8);
+        string all = await reader.ReadToEndAsync(cts.Token);
+        await serve.WaitAsync(cts.Token);
+
+        Assert.Contains("2024-01-15 00:00:00", all, StringComparison.Ordinal);
+        Assert.DoesNotContain("2024-01-15\n", all, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PipeExecutor_DateColumn_emits_date_only()
+    {
+        string pipe = NetezzaPipeImportExecutor.CreatePipeName("ut");
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var dataReader = new StubDataReader(
+            [("d", typeof(DateTime))],
+            [new DateTime(2024, 1, 15, 10, 30, 0)]);
+
+        Task serve = NetezzaPipeImportExecutor.ServeDataReaderAsync(
+            dataReader,
+            pipe,
+            dateOnlyColumns: [true],
+            cancellationToken: cts.Token);
+        await Task.Delay(50, cts.Token);
+        using var client = new NamedPipeClientStream(".", pipe, PipeDirection.In);
+        await client.ConnectAsync(5000, cts.Token);
+        using var reader = new StreamReader(client, Encoding.UTF8);
+        string all = await reader.ReadToEndAsync(cts.Token);
+        await serve.WaitAsync(cts.Token);
+
+        Assert.Contains("2024-01-15\n", all, StringComparison.Ordinal);
+        Assert.DoesNotContain("2024-01-15 10:30:00", all, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Sanitize_returns_unchanged_when_no_special_chars()
     {
         var values = System.Buffers.SearchValues.Create(['\\', '\t', '\n', '\r']);
