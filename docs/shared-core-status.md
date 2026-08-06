@@ -15,7 +15,7 @@ This document tracks which `JustyBase.Core` / `JustyBase.ImportExport` surfaces 
 | Schema cache | **Scaffold (deferred)** | TTL string snapshots do not replace host schema repositories |
 | Schema context menu SQL templates | **Production (partial)** | Core `SchemaContextMenuCatalog` is shared SQL SoT (`Ids.*`, `Format`). Avalonia/Legacy keep richer UI trees and host-only actions |
 | History / snippets / session vars persistence | **Scaffold (deferred)** | In-memory Core API only; hosts keep file/DB persistence |
-| Grid `CellStatsCalculator` | **Production (Avalonia)** | Typed numeric **selection** stats. Legacy grid **Summaries** are column aggregates — not the same feature; deferred until a selection-stats UI exists |
+| Grid `CellStatsCalculator` | **Production (Avalonia + Legacy)** | Typed numeric **selection** stats shown in the window bottom bar (80 ms debounce). Avalonia `ResultGridStatsService` and Legacy `CustomDataGridView` both call the shared calculator. Legacy grid **Summaries** remain a separate column-aggregate feature (whole-column SUM/AVG/COUNT row) |
 | `DatabaseTypeChooser` | **Two APIs (documented)** | ImportExport `Infer(names, sampleRows)` is batch-only. Avalonia Common.Tools streaming chooser remains SoT for Excel/CSV UI until parity audit |
 | Credentials / DualCredentialStore | **Scaffold (deferred)** | Ports only — does **not** migrate JBAG↔JBCG |
 | Multi-DB ports | **Scaffold (deferred)** | Interfaces only |
@@ -34,4 +34,3 @@ This document tracks which `JustyBase.Core` / `JustyBase.ImportExport` surfaces 
 - Core `SchemaCache` as a replacement for host schema repositories
 - History / snippets / credential file formats
 - Unifying Avalonia streaming `DatabaseTypeChooser` with ImportExport `Infer` without parity tests
-- Wiring Core `CellStatsCalculator` into Legacy unless a selection-stats UI path is added
