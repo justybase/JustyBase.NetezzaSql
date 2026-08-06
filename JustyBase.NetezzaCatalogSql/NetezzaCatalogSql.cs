@@ -176,7 +176,7 @@ public static partial class NetezzaCatalogSql
             INNER JOIN {database}.._V_OBJECT_DATA D ON X.OBJID = D.OBJID
             WHERE X.TYPE IN ('TABLE','VIEW','EXTERNAL TABLE','SEQUENCE','SYSTEM VIEW','SYSTEM TABLE')
                 AND X.OBJID NOT IN (4,5)
-                AND UPPER(D.SCHEMA) = '{schemaLiteral}'
+                AND UPPER(CASE WHEN D.SCHEMA IS NULL OR D.SCHEMA = '' THEN 'ADMIN' ELSE D.SCHEMA END) = '{schemaLiteral}'
                 AND UPPER(D.OBJNAME) = '{tableLiteral}'
                 AND D.DBNAME = '{dbLiteral}'
             ORDER BY X.OBJID, X.ATTNUM

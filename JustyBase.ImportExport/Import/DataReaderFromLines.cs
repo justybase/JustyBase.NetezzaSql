@@ -18,7 +18,7 @@ public sealed class DataReaderFromLines(OneCellValue[][] linesX, IReadOnlyList<I
     private string GetOriginalValue(int index)
         => CurrentRow[index].OriginalValue ?? throw new InvalidDataException($"Cell {index} in row {_currentRowNum} has no value.");
 
-    public object this[int i] => _linesX[i];
+    public object this[int i] => CurrentRow[i];
 
     public object this[string name] => throw new NotImplementedException();
 

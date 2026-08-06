@@ -99,6 +99,111 @@ internal sealed class TestTypedReader : IDataReader
     public bool NextResult() => throw new NotImplementedException();
 }
 
+/// <summary>Fake non-CSV source (mirrors the Excel host adapter): header row then data rows, single sheet.</summary>
+internal sealed class TestExcelImportSource : IImportSource
+{
+    private readonly string[][] _rows;
+
+    public TestExcelImportSource(string[] header, string[][] data)
+    {
+        Header = header;
+        _rows = data;
+    }
+
+    public string? FilePath => "fake.xlsx";
+    public bool IsCsvSource => false;
+    public bool IsExclusiveOpen => false;
+    public string? ActualSheetName { get; set; }
+    public bool TreatAllColumnsAsText { get; set; }
+    public int FieldCount => Header.Length;
+    public string[] Header { get; }
+
+    public IReadOnlyList<string> GetSheetNames() => ["Sheet1"];
+    public string? GetName(int column) => Header[column];
+
+    public bool Read()
+    {
+        _index++;
+        return _index <= _rows.Length; // index 0 = header row (consumed by the header skip)
+    }
+
+    private int _index = -1;
+
+    public string? GetCellText(int column)
+    {
+        int dataIndex = _index - 1;
+        if (dataIndex < 0 || dataIndex >= _rows.Length)
+        {
+            return null;
+        }
+        return _rows[dataIndex][column];
+    }
+
+    public int GetRawLength(int column) => GetCellText(column)?.Length ?? 0;
+    public double ReadProgress => 0;
+
+    public IDataReader CreateTypedReader(IReadOnlyList<ImportColumnKind> kinds, IReadOnlyList<string> normalizedHeaders)
+        => new TestExcelTypedReader(this, kinds, normalizedHeaders);
+
+    public void Dispose() { }
+}
+
+/// <summary>Typed reader over the fake Excel source, honoring the selected kinds (Integer for the validation test).</summary>
+internal sealed class TestExcelTypedReader : IDataReader
+{
+    private readonly TestExcelImportSource _source;
+    private readonly IReadOnlyList<ImportColumnKind> _kinds;
+    private readonly IReadOnlyList<string> _headers;
+
+    public TestExcelTypedReader(TestExcelImportSource source, IReadOnlyList<ImportColumnKind> kinds, IReadOnlyList<string> headers)
+    {
+        _source = source;
+        _kinds = kinds;
+        _headers = headers;
+    }
+
+    public int FieldCount => _kinds.Count;
+
+    public bool Read() => _source.Read();
+
+    public object GetValue(int i) => _kinds[i] switch
+    {
+        ImportColumnKind.Integer => long.Parse(_source.GetCellText(i) ?? string.Empty),
+        _ => _source.GetCellText(i) ?? string.Empty
+    };
+
+    public string GetName(int i) => _headers[i];
+    public string GetString(int i) => _source.GetCellText(i) ?? string.Empty;
+    public object this[int i] => GetValue(i);
+    public bool IsDBNull(int i) => _source.GetCellText(i) is null;
+    public bool GetBoolean(int i) => throw new NotImplementedException();
+    public byte GetByte(int i) => throw new NotImplementedException();
+    public long GetBytes(int i, long fieldOffset, byte[]? buffer, int bufferoffset, int length) => throw new NotImplementedException();
+    public char GetChar(int i) => throw new NotImplementedException();
+    public long GetChars(int i, long fieldoffset, char[]? buffer, int bufferoffset, int length) => throw new NotImplementedException();
+    public IDataReader GetData(int i) => throw new NotImplementedException();
+    public string GetDataTypeName(int i) => throw new NotImplementedException();
+    public DateTime GetDateTime(int i) => throw new NotImplementedException();
+    public decimal GetDecimal(int i) => throw new NotImplementedException();
+    public double GetDouble(int i) => throw new NotImplementedException();
+    public Type GetFieldType(int i) => _kinds[i] == ImportColumnKind.Integer ? typeof(long) : typeof(string);
+    public float GetFloat(int i) => throw new NotImplementedException();
+    public Guid GetGuid(int i) => throw new NotImplementedException();
+    public short GetInt16(int i) => throw new NotImplementedException();
+    public int GetInt32(int i) => throw new NotImplementedException();
+    public long GetInt64(int i) => long.Parse(_source.GetCellText(i) ?? string.Empty);
+    public int GetOrdinal(string name) => throw new NotImplementedException();
+    public DataTable? GetSchemaTable() => null;
+    public int GetValues(object[] values) => throw new NotImplementedException();
+    public bool NextResult() => throw new NotImplementedException();
+    public int Depth => throw new NotImplementedException();
+    public bool IsClosed => false;
+    public int RecordsAffected => throw new NotImplementedException();
+    public void Close() { }
+    public void Dispose() { }
+    public object this[string name] => throw new NotImplementedException();
+}
+
 public sealed class TestSourceFactory : IImportSourceFactory
 {
     public IImportSource OpenSource(string filePath, Encoding? encoding) => new TestCsvImportSource(filePath);
@@ -217,6 +322,80 @@ public sealed class TabularImportScannerTests
             sc.DisposeSource();
             File.Delete(path);
         }
+    }
+
+    [Fact]
+    public async Task Scan_NonCsv_PopulatesPreviewAndRowsCount()
+    {
+        var source = new TestExcelImportSource(
+            ["id", "name"],
+            [["1", "alpha"], ["2", "beta"], ["3", "gamma"], ["4", "delta"]]);
+
+        TabularImportScanner sc = new(new TestNonCsvSourceFactory(source))
+        {
+            FilePath = source.FilePath,
+        };
+
+        try
+        {
+            sc.OpenSource();
+            Assert.Equal(["Sheet1"], sc.SheetNames);
+
+            SheetScanResult result = (await sc.ScanSheetAsync(sc.SheetNames[0]))!;
+
+            Assert.NotNull(result);
+            Assert.Equal(4, result.RowsCount);
+            Assert.Equal(4, result.PreviewRows.Count);
+            Assert.Equal("alpha", result.PreviewRows[0][1]);
+            Assert.Equal("delta", result.PreviewRows[3][1]);
+            Assert.Equal(ImportColumnKind.Integer, result.DetectedTypes[0].Kind);
+        }
+        finally
+        {
+            sc.DisposeSource();
+        }
+    }
+
+    [Fact]
+    public async Task Validate_NonCsv_ReopensLiveSourceAfterFreshValidation()
+    {
+        var source = new TestExcelImportSource(
+            ["code"],
+            [["1"], ["2"]]);
+
+        var factory = new TestNonCsvSourceFactory(source);
+        TabularImportScanner sc = new(factory)
+        {
+            FilePath = source.FilePath,
+        };
+
+        try
+        {
+            Assert.True(sc.OpenSource());
+            string sheet = sc.SheetNames[0];
+            SheetScanResult scan = (await sc.ScanSheetAsync(sheet))!;
+            var plan = new SheetPlan(sheet,
+                new IImportColumn[] { new ImportColumn("CODE", ImportColumnKind.Integer) }, scan.PreviewRows, scan.RowsCount);
+
+            IReadOnlyList<ImportValidationError> errors = await sc.ValidateSelectedSheetsAsync([sheet], _ => plan);
+
+            Assert.Empty(errors);
+            Assert.True(sc.OpenSource()); // live reader restored after validation
+        }
+        finally
+        {
+            sc.DisposeSource();
+        }
+    }
+
+    private sealed class TestNonCsvSourceFactory : IImportSourceFactory
+    {
+        private readonly TestExcelImportSource _source;
+
+        public TestNonCsvSourceFactory(TestExcelImportSource source) => _source = source;
+
+        public IImportSource OpenSource(string filePath, Encoding? encoding) => _source;
+        public bool IsExclusiveOpen(string filePath) => false;
     }
 
     [Theory]

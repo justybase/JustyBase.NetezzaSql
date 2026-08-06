@@ -170,18 +170,53 @@ public sealed class TabularImportScanner
             }
         }
 
-        return await Task.Run(
-            () =>
+        // Non-exclusive xlsx readers open the file with a restrictive FileShare, so the live
+        // reader cannot coexist with a fresh validation reader. Release the live reader before
+        // opening the fresh one and restore it afterwards (matching the exclusive choreography)
+        // so a later scan or import always sees a usable live source.
+        bool reopenLive = !_liveSource.IsCsvSource;
+        if (reopenLive)
+        {
+            await _detectionGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        try
+        {
+            if (reopenLive)
             {
-                using IImportSource validationSource = _factory.OpenSource(FilePath!, SourceEncoding);
-                return ValidateWithSource(validationSource, selected, planFor);
-            },
-            cancellationToken).ConfigureAwait(false);
+                DisposeSource();
+            }
+
+            return await Task.Run(
+                () =>
+                {
+                    using IImportSource validationSource = _factory.OpenSource(FilePath!, SourceEncoding);
+                    return ValidateWithSource(validationSource, selected, planFor);
+                },
+                cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (reopenLive)
+            {
+                try
+                {
+                    OpenSource();
+                }
+                catch (IOException)
+                {
+                    // Restore keeps SheetNames for a scan; "create jobs" opens its own reader.
+                }
+
+                _detectionGate.Release();
+            }
+        }
     }
 
     /// <summary>
-    /// Builds the streaming import jobs for the selected sheets, mirroring the host's single-pass
-    /// reader choreography (Excel reuses the live reader, CSV reopens a fresh source per sheet).
+    /// Builds the streaming import jobs for the selected sheets. Non-exclusive sources (CSV and
+    /// xlsx) reopen a fresh reader per sheet so import never consumes an exhausted live reader;
+    /// exclusive sources (xlsb) reuse the live reader, which the scanner reopens after validation.
     /// </summary>
     public async IAsyncEnumerable<IImportJob> CreateJobs(
         IReadOnlyList<string> selectedSheets,
@@ -197,9 +232,18 @@ public sealed class TabularImportScanner
             yield break;
         }
 
-        // Excel jobs stream from the live reader (positioned per sheet via ActualSheetName),
-        // matching the host single-pass choreography; CSV jobs reopen a fresh source per sheet.
-        bool reuseLive = live.IsCsvSource == false;
+        // Non-exclusive sources reopen a fresh reader per sheet so import never consumes an
+        // exhausted live reader. Only exclusive sources (xlsb) reuse the live reader, which the
+        // scanner reopens after validation. The host xlsx reader opens the file with a restrictive
+        // FileShare, so the live reader must be closed before the first fresh reader is opened.
+        bool reuseLive = live.IsExclusiveOpen;
+        bool liveClosed = false;
+        if (!reuseLive && !live.IsCsvSource)
+        {
+            DisposeSource();
+            liveClosed = true;
+        }
+
         IImportSource? freshSource = null;
         try
         {
@@ -210,7 +254,7 @@ public sealed class TabularImportScanner
                 IImportSource source;
                 if (reuseLive)
                 {
-                    source = live;
+                    source = live!;
                 }
                 else
                 {
@@ -233,10 +277,11 @@ public sealed class TabularImportScanner
         finally
         {
             freshSource?.Dispose();
-            if (live.IsCsvSource)
+            if (liveClosed || (live is not null && live.IsCsvSource))
             {
                 // CSV jobs stream from fresh per-sheet sources; the initial live reader is
-                // exhausted by the scan and is replaced by the last fresh source.
+                // exhausted by the scan and is replaced by the last fresh source. Non-exclusive
+                // non-CSV (xlsx) sources were already closed before opening the fresh readers.
                 DisposeSource();
             }
         }
@@ -328,8 +373,10 @@ public sealed class TabularImportScanner
         }
         else
         {
+            rowsCount = 0;
             while (source.Read())
             {
+                rowsCount++;
                 for (int columnIndex = 0; columnIndex < columnCount; columnIndex++)
                 {
                     rawValueLengths[columnIndex] = Math.Max(rawValueLengths[columnIndex], source.GetRawLength(columnIndex));
@@ -339,8 +386,20 @@ public sealed class TabularImportScanner
                     {
                         analyzer.AddValue(columnIndex, cell, treatAllColumnsAsText: treatAllColumnsAsText);
                     }
+
+                    if (rowsCount <= PreviewRowCount)
+                    {
+                        if (columnIndex == 0)
+                        {
+                            previewRows.Add(new string[columnCount]);
+                        }
+
+                        previewRows[(int)rowsCount - 1][columnIndex] = cell ?? string.Empty;
+                    }
                 }
             }
+
+            rowsCount = rowsCount > 0 ? rowsCount : -1;
         }
 
         long elapsedMs = Stopwatch.GetElapsedTime(timestampBeforeLongLoop).Milliseconds;

@@ -39,11 +39,21 @@ public sealed class NetezzaSchemaCache
         lock (_sync)
         {
             if (_byConnection.TryGetValue(connection, out var databases)
-                && databases.TryGetValue(database, out var entry)
-                && DateTimeOffset.UtcNow - entry.LoadedAt <= _ttl)
+                && databases.TryGetValue(database, out var entry))
             {
-                snapshot = entry.Snapshot;
-                return true;
+                if (DateTimeOffset.UtcNow - entry.LoadedAt <= _ttl)
+                {
+                    snapshot = entry.Snapshot;
+                    return true;
+                }
+
+                // Expired — evict on access so stale entries do not accumulate forever.
+                databases.Remove(database);
+                _generation++;
+                if (databases.Count == 0)
+                {
+                    _byConnection.Remove(connection);
+                }
             }
 
             snapshot = NetezzaSchemaSnapshot.Empty;
@@ -101,6 +111,7 @@ public sealed class NetezzaSchemaCache
     {
         var now = DateTimeOffset.UtcNow;
         var result = new List<(string Database, NetezzaSchemaSnapshot Snapshot)>();
+        var expired = new List<string>();
 
         lock (_sync)
         {
@@ -113,10 +124,27 @@ public sealed class NetezzaSchemaCache
             {
                 if (now - entry.LoadedAt > _ttl)
                 {
+                    expired.Add(database);
                     continue;
                 }
 
                 result.Add((database, entry.Snapshot));
+            }
+
+            // Evict expired entries on access so they do not accumulate indefinitely.
+            if (expired.Count > 0)
+            {
+                foreach (string database in expired)
+                {
+                    databases.Remove(database);
+                }
+
+                if (databases.Count == 0)
+                {
+                    _byConnection.Remove(connection);
+                }
+
+                _generation++;
             }
         }
 

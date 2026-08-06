@@ -56,10 +56,12 @@ public static class NetezzaPipeImportExecutor
         string escapedNewLine = escape + "\n";
         var valuesToEscape = SearchValues.Create([DefaultEscapeChar, delimiter, '\n', '\r']);
 
-        return Task.Run(() =>
+        return Task.Run(async () =>
         {
             using var server = new NamedPipeServerStream(pipeName);
-            server.WaitForConnection();
+            // Cancellable wait: a failed host INSERT may abort the pipe before the
+            // driver ever connects; the synchronous WaitForConnection would block forever.
+            await server.WaitForConnectionAsync(cancellationToken).ConfigureAwait(false);
             using var writer = new StreamWriter(server, encoding, 65_536);
 
             object[] header = new object[reader.FieldCount];

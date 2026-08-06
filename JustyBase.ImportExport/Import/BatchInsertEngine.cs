@@ -101,6 +101,15 @@ public sealed class BatchInsertEngine(int batchSize = 1000) : IImportEngine
 
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(rowCount);
 
+        // Conservative, dialect-neutral identifier policy: bare [A-Za-z_][A-Za-z0-9_]* names
+        // (optionally schema-qualified with dots) or fully double-quoted identifiers are
+        // accepted verbatim; anything else is rejected instead of injected into SQL.
+        ValidateSqlIdentifier(targetTableName, nameof(targetTableName));
+        foreach (var column in columns)
+        {
+            ValidateSqlIdentifier(column.Name, nameof(columns));
+        }
+
         var sb = new StringBuilder("INSERT INTO ").Append(targetTableName).Append(" (");
         sb.Append(string.Join(", ", columns.Select(static c => c.Name)));
         sb.Append(") VALUES ");
@@ -128,5 +137,41 @@ public sealed class BatchInsertEngine(int batchSize = 1000) : IImportEngine
         }
 
         return sb.ToString();
+    }
+
+    private static void ValidateSqlIdentifier(string identifier, string parameterName)
+    {
+        if (string.IsNullOrWhiteSpace(identifier))
+        {
+            throw new ArgumentException("An SQL identifier is required.", parameterName);
+        }
+
+        foreach (string part in identifier.Split('.'))
+        {
+            if (part.Length == 0)
+            {
+                throw new ArgumentException($"Identifier '{identifier}' contains an empty part.", parameterName);
+            }
+
+            if (part.StartsWith('"'))
+            {
+                // Fully double-quoted identifiers ("" escapes embedded quotes) are kept
+                // verbatim — the dialect decides case semantics.
+                if (part.Length < 2 || !part.EndsWith('"'))
+                {
+                    throw new ArgumentException($"Identifier '{identifier}' has an unbalanced quote.", parameterName);
+                }
+
+                continue;
+            }
+
+            if (char.IsDigit(part[0])
+                || part.Any(static c => !char.IsLetterOrDigit(c) && c != '_'))
+            {
+                throw new ArgumentException(
+                    $"Identifier '{identifier}' is not a valid SQL identifier; use quotes for names with special characters.",
+                    parameterName);
+            }
+        }
     }
 }

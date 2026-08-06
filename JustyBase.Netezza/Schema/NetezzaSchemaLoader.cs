@@ -134,8 +134,9 @@ public static class NetezzaSchemaLoader
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                results.Add((database.Name, new NetezzaSchemaSnapshot([], IsPartial: true, LoadedAt: DateTimeOffset.UtcNow)));
-                break;
+                // Cancellation aborts the whole batch — never hand back a partial snapshot
+                // that looks like a successful completion (matches LoadDatabasesAsync).
+                throw;
             }
             catch (Exception) {
                 if (options.FailOnDatabaseError)

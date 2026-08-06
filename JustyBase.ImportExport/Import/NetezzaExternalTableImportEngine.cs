@@ -46,6 +46,9 @@ public sealed class NetezzaExternalTableImportEngine : IImportEngine
         string[] headersWithDataType = job.ReturnHeadersWithDataTypes(DatabaseKind.Netezza);
         bool isLineReader = job is IXmlImportJob;
 
+        // Cancelled when the database step fails before the driver ever connected to the
+        // pipe — otherwise the pipe waiter would block forever (no client, no data).
+        using var pipeCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var pipeServer = NetezzaPipeImportExecutor.ServeDataReaderAsync(
             job.AsReader,
             serverName,
@@ -53,15 +56,16 @@ public sealed class NetezzaExternalTableImportEngine : IImportEngine
             preparedStringsMode: isLineReader,
             delimiter: columnSeparator,
             encoding: pipeEncoding,
-            rowsCount: job.RowsCount);
+            rowsCount: job.RowsCount,
+            cancellationToken: pipeCts.Token);
 
         await Task.Delay(50).ConfigureAwait(false);
         progress?.Invoke("transfer to database started");
-        await Task.Run(() =>
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            try
+            await Task.Run(() =>
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 using var cmd = connection.CreateCommand();
                 bool intoExisting = options.TargetColumnNames is { Count: > 0 };
                 if (!intoExisting)
@@ -95,15 +99,31 @@ public sealed class NetezzaExternalTableImportEngine : IImportEngine
                     insertTargetColumns: intoExisting ? options.TargetColumnNames : null);
                 cmd.ExecuteNonQuery();
 
-                var badFilePath = Directory.EnumerateFiles(options.TempLogDirectory ?? string.Empty, $"{targetTableName}*.nzbad").FirstOrDefault();
-                if (badFilePath is not null)
-                    progress?.Invoke($"[ERROR] {badFilePath} created");
-            }
-            catch (Exception ex)
+                if (!string.IsNullOrWhiteSpace(options.TempLogDirectory))
+                {
+                    var badFilePath = Directory.EnumerateFiles(options.TempLogDirectory, $"{targetTableName}*.nzbad").FirstOrDefault();
+                    if (badFilePath is not null)
+                        progress?.Invoke($"[ERROR] {badFilePath} created");
+                }
+            }).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            progress?.Invoke($"[ERROR] {ex.Message}");
+            // Abort the pipe so ServeDataReaderAsync does not stay blocked on
+            // WaitForConnection if the failure happened before the driver connected.
+            pipeCts.Cancel();
+            try
             {
-                progress?.Invoke($"[ERROR] {ex.Message}");
+                await pipeServer.ConfigureAwait(false);
             }
-        }).ConfigureAwait(false);
+            catch
+            {
+                // pipe aborted on purpose — the database failure is the real error.
+            }
+
+            throw;
+        }
 
         await pipeServer.ConfigureAwait(false);
     }

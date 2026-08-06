@@ -46,7 +46,11 @@ public static class NetezzaImportSql
             throw new ArgumentException("Target and pipe columns must be non-empty and of equal length.", nameof(targetColumns));
         }
 
-        return $"INSERT INTO {NetezzaNameHelper.QuoteNameIfNeeded(tableName)} ({string.Join(',', targetColumns)}) " +
+        // Destination columns are host/user-controlled — quote them like the table name.
+        // Pipe column definitions ("name TYPE") are left verbatim: they come from the
+        // scanned source and carry type information, so quoting would need name/type
+        // splitting that the EXTERNAL parser may not accept.
+        return $"INSERT INTO {NetezzaNameHelper.QuoteNameIfNeeded(tableName)} ({string.Join(',', targetColumns.Select(NetezzaNameHelper.QuoteNameIfNeeded))}) " +
                $"SELECT * FROM EXTERNAL '\\\\.\\pipe\\{NetezzaNameHelper.EscapeLiteral(pipeName)}' ({string.Join(',', pipeColumnDefinitions)}) ";
     }
 
