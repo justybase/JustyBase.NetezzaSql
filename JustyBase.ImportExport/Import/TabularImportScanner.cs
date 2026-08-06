@@ -81,6 +81,8 @@ public sealed class TabularImportScanner
         await _detectionGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            source.ActualSheetName = sheetName;
+            source.TreatAllColumnsAsText = TreatAllColumnsAsText;
             return await Task.Run(
                 () => ScanSource(source, sheetName, messageAction, TimeoutInSec),
                 cancellationToken).ConfigureAwait(false);
@@ -278,6 +280,7 @@ public sealed class TabularImportScanner
         }
 
         var analyzer = new ImportTypeAnalyzer(columnCount, inferBoolean: true);
+        bool treatAllColumnsAsText = source.TreatAllColumnsAsText;
         var previewRows = new List<string[]>();
         long rowsCount = -1;
         var timestampBeforeLongLoop = Stopwatch.GetTimestamp();
@@ -295,7 +298,7 @@ public sealed class TabularImportScanner
                     string? cell = source.GetCellText(columnIndex);
                     if (cell is not null)
                     {
-                        analyzer.AddValue(columnIndex, cell);
+                        analyzer.AddValue(columnIndex, cell, treatAllColumnsAsText: treatAllColumnsAsText);
                     }
 
                     if (rowsCount < PreviewRowCount)
@@ -334,7 +337,7 @@ public sealed class TabularImportScanner
                     string? cell = source.GetCellText(columnIndex);
                     if (cell is not null)
                     {
-                        analyzer.AddValue(columnIndex, cell);
+                        analyzer.AddValue(columnIndex, cell, treatAllColumnsAsText: treatAllColumnsAsText);
                     }
                 }
             }
