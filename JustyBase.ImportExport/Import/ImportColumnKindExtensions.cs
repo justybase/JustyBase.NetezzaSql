@@ -3,7 +3,7 @@ using System.Globalization;
 
 namespace JustyBase.ImportExport.Import;
 
-internal static class ImportColumnKindExtensions
+public static class ImportColumnKindExtensions
 {
     internal static readonly NumberFormatInfo NumberWithDot = new()
     {
@@ -11,8 +11,9 @@ internal static class ImportColumnKindExtensions
         NumberDecimalDigits = 6
     };
 
+    /// <summary>Maps an import column kind to its eager .NET cell type.</summary>
     [return: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields | DynamicallyAccessedMemberTypes.PublicProperties)]
-    internal static Type GetNativeType(ImportColumnKind kind) => kind switch
+    public static Type GetNativeType(ImportColumnKind kind) => kind switch
     {
         ImportColumnKind.Integer => typeof(long),
         ImportColumnKind.Numeric => typeof(decimal),
