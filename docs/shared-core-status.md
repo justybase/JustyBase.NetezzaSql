@@ -12,7 +12,7 @@ This document tracks which `JustyBase.Core` / `JustyBase.ImportExport` surfaces 
 | Parquet + gzip/zip export | **Production** | `ParquetExportWriter` + `CompressedExportStreams` in ImportExport; Avalonia façade uses them. Excel / LZ4 / Brotli / Zstd remain host-backed |
 | Excel export | **Host-backed** | Different Xlsx/Xlsb writers per host |
 | Execution runner (`SqlExecutionRunner`) | **Scaffold (deferred)** | Contracts ready; hosts still use local runners |
-| Schema cache | **Scaffold (deferred)** | TTL string snapshots do not replace host schema repositories |
+| Schema cache | **Production (Avalonia + Legacy)** | `NetezzaSchemaLoader` + `NetezzaSchemaCache` in `JustyBase.Netezza` are the shared catalog-loading SoT. Avalonia `NetezzaBase` plugin feeds its host stores from loader snapshots; Legacy `InitializeConnectionSchemaData` builds `NetezzaTableInfo`/column intervals/lookup/owners from loader snapshots and optionally feeds `NetezzaSchemaCache`. Legacy `DownloadSchemaNetezza` still uses legacy catalog SQL (`NetezzaCatalogSql.Legacy`) — migration to modern SQL is a tracked follow-up |
 | Schema context menu SQL templates | **Production (partial)** | Core `SchemaContextMenuCatalog` is shared SQL SoT (`Ids.*`, `Format`). Avalonia/Legacy keep richer UI trees and host-only actions |
 | History / snippets / session vars persistence | **Scaffold (deferred)** | In-memory Core API only; hosts keep file/DB persistence |
 | Grid `CellStatsCalculator` | **Production (Avalonia + Legacy)** | Typed numeric **selection** stats shown in the window bottom bar (80 ms debounce). Avalonia `ResultGridStatsService` and Legacy `CustomDataGridView` both call the shared calculator. Legacy grid **Summaries** remain a separate column-aggregate feature (whole-column SUM/AVG/COUNT row) |
@@ -34,3 +34,4 @@ This document tracks which `JustyBase.Core` / `JustyBase.ImportExport` surfaces 
 - Core `SchemaCache` as a replacement for host schema repositories
 - History / snippets / credential file formats
 - Unifying Avalonia streaming `DatabaseTypeChooser` with ImportExport `Infer` without parity tests
+- Migrating Legacy `DownloadSchemaNetezza` catalog queries from `NetezzaCatalogSql.Legacy` to the modern shared SQL (needs live parity validation)
