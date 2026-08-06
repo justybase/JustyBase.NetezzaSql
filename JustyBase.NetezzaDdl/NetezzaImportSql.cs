@@ -26,9 +26,32 @@ public static class NetezzaImportSql
         return $"INSERT INTO {NetezzaNameHelper.QuoteNameIfNeeded(tableName)} SELECT * FROM EXTERNAL '\\\\.\\pipe\\{NetezzaNameHelper.EscapeLiteral(pipeName)}' ({string.Join(',', columns)}) ";
     }
 
-    public static string InsertSameAsFromExternalPipe(string tableName, string pipeName)
+    /// <summary>
+    /// Inserts into an existing table through an explicit destination column list, mapping the
+    /// piped source columns positionally: <c>INSERT INTO t (c1, c2) SELECT * FROM EXTERNAL 'pipe' (s1 T, s2 T)</c>.
+    /// </summary>
+    public static string InsertIntoColumnsFromExternalPipe(
+        string tableName,
+        IReadOnlyList<string> targetColumns,
+        string pipeName,
+        IReadOnlyList<string> pipeColumnDefinitions)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tableName);
+        ArgumentNullException.ThrowIfNull(targetColumns);
+        ArgumentException.ThrowIfNullOrWhiteSpace(pipeName);
+        ArgumentNullException.ThrowIfNull(pipeColumnDefinitions);
+        if (targetColumns.Count == 0 || targetColumns.Count != pipeColumnDefinitions.Count
+            || targetColumns.Any(string.IsNullOrWhiteSpace) || pipeColumnDefinitions.Any(string.IsNullOrWhiteSpace))
+        {
+            throw new ArgumentException("Target and pipe columns must be non-empty and of equal length.", nameof(targetColumns));
+        }
+
+        return $"INSERT INTO {NetezzaNameHelper.QuoteNameIfNeeded(tableName)} ({string.Join(',', targetColumns)}) " +
+               $"SELECT * FROM EXTERNAL '\\\\.\\pipe\\{NetezzaNameHelper.EscapeLiteral(pipeName)}' ({string.Join(',', pipeColumnDefinitions)}) ";
+    }
+
+    public static string InsertSameAsFromExternalPipe(string tableName, string pipeName)
+    {        ArgumentException.ThrowIfNullOrWhiteSpace(tableName);
         ArgumentException.ThrowIfNullOrWhiteSpace(pipeName);
         string cleanTable = NetezzaNameHelper.QuoteNameIfNeeded(tableName);
         return $"INSERT INTO {cleanTable} SELECT * FROM EXTERNAL '\\\\.\\pipe\\{NetezzaNameHelper.EscapeLiteral(pipeName)}' SAMEAS {cleanTable} ";

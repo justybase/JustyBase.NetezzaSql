@@ -81,11 +81,14 @@ public sealed class NetezzaImportEngine
         string pipeName,
         IReadOnlyList<string> columns,
         NetezzaImportUsingOptions? options = null,
-        bool sameAs = false)
+        bool sameAs = false,
+        IReadOnlyList<string>? insertTargetColumns = null)
     {
         string sql = sameAs
             ? NetezzaImportSql.InsertSameAsFromExternalPipe(tableName, pipeName)
-            : NetezzaImportSql.InsertFromExternalPipe(tableName, pipeName, columns);
+            : insertTargetColumns is not null
+                ? NetezzaImportSql.InsertIntoColumnsFromExternalPipe(tableName, insertTargetColumns, pipeName, columns)
+                : NetezzaImportSql.InsertFromExternalPipe(tableName, pipeName, columns);
         return sql + NetezzaImportSql.BuildUsingClause(options ?? NetezzaImportUsingOptions.Default) + ";";
     }
 }

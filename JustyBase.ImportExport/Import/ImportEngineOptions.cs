@@ -13,4 +13,10 @@ public sealed record ImportEngineOptions
 
     /// <summary>Explicit USING options; when null the ambient <see cref="ImportUsingOptionsContext"/> is used.</summary>
     public ImportUsingOptions? UsingOptions { get; init; }
+
+    /// <summary>
+    /// When set, rows are inserted into the existing target table using these destination
+    /// column names (1:1 with the source columns, in source order) and the CREATE is skipped.
+    /// </summary>
+    public IReadOnlyList<string>? TargetColumnNames { get; init; }
 }

@@ -78,4 +78,20 @@ public sealed class NetezzaImportUsingClauseTests
         Assert.Contains("BOOLSTYLE '1_0'", sql);
         Assert.Contains("MAXERRORS 0", sql);
     }
+
+    [Fact]
+    public void BuildInsertSql_WithTargetColumns_MapsIntoExistingTablePositionally()
+    {
+        string[] source = ["A INTEGER", "B NVARCHAR(20)"];
+        string sql = NetezzaImportEngine.BuildInsertSql(
+            "TARGET_T",
+            "JDE12345",
+            source,
+            EngineOptions(),
+            insertTargetColumns: ["TARGET_A", "TARGET_B"]);
+
+        Assert.StartsWith("INSERT INTO TARGET_T (TARGET_A,TARGET_B) SELECT * FROM EXTERNAL", sql);
+        Assert.Contains("(A INTEGER,B NVARCHAR(20))", sql);
+        Assert.Contains("BOOLSTYLE '1_0'", sql);
+    }
 }

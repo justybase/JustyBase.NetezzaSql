@@ -63,9 +63,13 @@ public sealed class NetezzaExternalTableImportEngine : IImportEngine
             try
             {
                 using var cmd = connection.CreateCommand();
-                cmd.CommandText = NetezzaImportSql.CreateRandomDistributionTable(targetTableName, headersWithDataType);
-                cmd.ExecuteNonQuery();
-                progress?.Invoke($" {targetTableName} created");
+                bool intoExisting = options.TargetColumnNames is { Count: > 0 };
+                if (!intoExisting)
+                {
+                    cmd.CommandText = NetezzaImportSql.CreateRandomDistributionTable(targetTableName, headersWithDataType);
+                    cmd.ExecuteNonQuery();
+                    progress?.Invoke($" {targetTableName} created");
+                }
 
                 string sep2 = columnSeparator == '\t' ? "\\t" : columnSeparator.ToString();
                 string encodingName = string.IsNullOrWhiteSpace(usingOptions.EncodingName) ? "utf-8" : usingOptions.EncodingName;
@@ -87,7 +91,8 @@ public sealed class NetezzaExternalTableImportEngine : IImportEngine
                         MaxErrors = 0,
                         LogDirectory = options.TempLogDirectory,
                         MaxRows = usingOptions.MaxRows is > 0 ? usingOptions.MaxRows : null
-                    });
+                    },
+                    insertTargetColumns: intoExisting ? options.TargetColumnNames : null);
                 cmd.ExecuteNonQuery();
 
                 var badFilePath = Directory.EnumerateFiles(options.TempLogDirectory ?? string.Empty, $"{targetTableName}*.nzbad").FirstOrDefault();
