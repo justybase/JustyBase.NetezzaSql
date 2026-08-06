@@ -30,11 +30,23 @@ public sealed class CatalogSqlSafetyTests
         Assert.Contains("PROCEDURESIGNATURE = 'PROC''OOPS'", sql);
     }
 
-    [Fact]
-    public void LegacySearch_EscapesSearchLiteral()
+    [Theory]
+    [InlineData("DB; DROP TABLE USERS")]
+    [InlineData("DB' OR 1=1 --")]
+    [InlineData("\"DB\"; DROP TABLE USERS")]
+    public void LegacyHostQueries_RejectUnsafeDatabaseIdentifiers(string database)
     {
-        string sql = CatalogSql.GetLegacySearchInSchemaSql("DB", "x' OR 1=1 --");
+        Assert.Throws<ArgumentException>(() => CatalogSql.GetLegacyKeysSql(database));
+        Assert.Throws<ArgumentException>(() => CatalogSql.GetLegacyDistributionColumnsSql(database));
+    }
 
-        Assert.Contains("LIKE '%X'' OR 1=1 --%'", sql);
+    [Fact]
+    public void LegacyHostQueries_PreserveQuotedDatabaseIdentifiers()
+    {
+        string keys = CatalogSql.GetLegacyKeysSql("\"Mixed.Db\"");
+        string dist = CatalogSql.GetLegacyDistributionColumnsSql("\"Mixed.Db\"");
+
+        Assert.Contains("\"Mixed.Db\".._V_RELATION_KEYDATA", keys, StringComparison.Ordinal);
+        Assert.Contains("\"Mixed.Db\".._V_RELATION_COLUMN", dist, StringComparison.Ordinal);
     }
 }

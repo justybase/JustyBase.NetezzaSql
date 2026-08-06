@@ -265,6 +265,68 @@ public static partial class NetezzaCatalogSql
     }
 
     /// <summary>
+    /// Distribution and organize column sequences for every table in one database
+    /// (Legacy host shape: OBJID/ATTNAME keyed, feeds DISTSEQNO/ORGSEQNO on column rows
+    /// consumed by Legacy DDL generation).
+    /// </summary>
+    public static string GetLegacyDistributionColumnsSql(string database)
+    {
+        database = NormalizeDatabaseIdentifier(database, nameof(database));
+        string dbLiteral = EscapeSqlLiteral(database);
+
+        return
+            $"""
+            SELECT
+                X.OBJID::INT AS OBJID
+                , X.ATTNAME
+                , DM.DISTSEQNO::BYTEINT AS DISTSEQNO
+                , DS.ORGSEQNO::BYTEINT AS ORGSEQNO
+            FROM
+                {database}.._V_RELATION_COLUMN X
+                LEFT JOIN {database}.._V_TABLE_DIST_MAP DM ON DM.OBJID = X.OBJID
+                    AND DM.ATTNUM = X.ATTNUM
+                    AND DM.DATABASE = '{dbLiteral}'
+                LEFT JOIN {database}.._V_TABLE_ORGANIZE_COLUMN DS ON DS.OBJID = X.OBJID
+                    AND DS.ATTNUM = X.ATTNUM
+            WHERE
+                X.TYPE IN ('TABLE','VIEW','EXTERNAL TABLE', 'SEQUENCE','SYSTEM VIEW','SYSTEM TABLE')
+                AND X.OBJID NOT IN (4,5)
+                AND X.DATABASE = '{dbLiteral}'
+            ORDER BY
+                X.OBJID, X.ATTNUM
+            """;
+    }
+
+    /// <summary>
+    /// Key constraints for every table in one database (Legacy host shape: OBJID/PKOBJID-based,
+    /// feeds the host key catalog consumed by DDL generation).
+    /// </summary>
+    public static string GetLegacyKeysSql(string database)
+    {
+        database = NormalizeDatabaseIdentifier(database, nameof(database));
+
+        return
+            $"""
+            SELECT
+                X.OBJID::INT AS OBJID
+                , X.CONSTRAINTNAME
+                , X.CONTYPE
+                , X.CONSEQ
+                , X.ATTNAME
+                , X.PKOBJID::INT AS PKOBJID
+                , X.PKATTNAME
+                , X.UPDT_TYPE
+                , X.DEL_TYPE
+            FROM
+                {database}.._V_RELATION_KEYDATA X
+            WHERE
+                X.OBJID NOT IN (4,5)
+            ORDER BY
+                X.OBJID, X.CONSEQ
+            """;
+    }
+
+    /// <summary>
     /// Object DESCRIPTION (table comment) for a single object.
     /// Mirrors JustyBaseLite NZ_QUERIES.getObjectComment.
     /// </summary>

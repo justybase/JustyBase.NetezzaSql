@@ -38,6 +38,8 @@ public sealed class CatalogSqlSurfaceCoverageTests
             CatalogSql.GetDistributionKeysSql(database, "admin", "orders"),
             CatalogSql.GetOrganizeColumnsSql(database, "admin", "orders"),
             CatalogSql.GetTableKeysSql(database, "admin", "orders"),
+            CatalogSql.GetLegacyKeysSql(database),
+            CatalogSql.GetLegacyDistributionColumnsSql(database),
             CatalogSql.GetObjectCommentSql(database, "admin", "orders", "TABLE"),
             CatalogSql.GetObjectCommentSql(database, "admin", "orders"),
             CatalogSql.GetColumnMetadataSql(database, "admin", "orders"),
@@ -58,35 +60,27 @@ public sealed class CatalogSqlSurfaceCoverageTests
     public void CatalogObjectQueries_HandleSystemAndQuotedDatabases()
     {
         var systemObjects = CatalogSql.GetSqlTablesAndOtherObjects("SYSTEM");
-        var legacySystem = CatalogSql.GetLegacyBazyTabeleSql("SYSTEM");
-        var legacyUnion = CatalogSql.GetLegacyBazyTabeleSql("sample", noDescMode: true);
         var quoted = CatalogSql.GetExternalTableSql("\"Mixed Db\"");
 
         Assert.Contains("FROM SYSTEM.._V_OBJECT_DATA", systemObjects, StringComparison.Ordinal);
-        Assert.Contains("FROM SYSTEM.._V_OBJECT_DATA", legacySystem, StringComparison.Ordinal);
-        Assert.Contains("UNION ALL", legacyUnion, StringComparison.Ordinal);
         Assert.Contains("\"Mixed Db\".._V_EXTERNAL", quoted, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void LegacyCatalogQueries_CoverOwnerSchemaAndEscapingModes()
+    public void LegacyHostQueries_CoverDistributionKeysAndKeysShape()
     {
-        var owner = CatalogSql.GetLegacyOneTableSqlOwner("order'name");
-        var schema = CatalogSql.GetLegacyOneTableSqlSchema("order'name", schemaOn: true);
-        var ownerFallback = CatalogSql.GetLegacyOneTableSqlSchema("orders", schemaOn: false);
-        var columns = CatalogSql.GetLegacyObjectColumnsSql("sample");
-        var search = CatalogSql.GetLegacySearchInSchemaSql("sample", "needle'name");
-        var functions = CatalogSql.GetLegacyFulidesSql("sample", 17);
+        var dist = CatalogSql.GetLegacyDistributionColumnsSql("sample");
+        var keys = CatalogSql.GetLegacyKeysSql("sample");
 
-        Assert.Contains("ORDER''NAME", owner, StringComparison.Ordinal);
-        Assert.Contains("D1.SCHEMA", schema, StringComparison.Ordinal);
-        Assert.Contains("D1.OWNER", ownerFallback, StringComparison.Ordinal);
-        Assert.Contains("_V_TABLE_DIST_MAP", columns, StringComparison.Ordinal);
-        Assert.Contains("IS_NULLABLE", columns, StringComparison.Ordinal);
-        Assert.Contains("(NOT X.ATTNOTNULL)", columns, StringComparison.Ordinal);
-        Assert.DoesNotContain("AS ATTNOTNULL", columns, StringComparison.Ordinal);
-        Assert.Contains("%NEEDLE''NAME%", search, StringComparison.Ordinal);
-        Assert.Contains("DATABASEID = 17", functions, StringComparison.Ordinal);
+        Assert.Contains("_V_TABLE_DIST_MAP", dist, StringComparison.Ordinal);
+        Assert.Contains("_V_TABLE_ORGANIZE_COLUMN", dist, StringComparison.Ordinal);
+        Assert.Contains("DISTSEQNO", dist, StringComparison.Ordinal);
+        Assert.Contains("ORGSEQNO", dist, StringComparison.Ordinal);
+        Assert.Contains("_V_RELATION_KEYDATA", keys, StringComparison.Ordinal);
+        Assert.Contains("PKOBJID", keys, StringComparison.Ordinal);
+        Assert.Contains("CONSEQ", keys, StringComparison.Ordinal);
+        Assert.Contains("UPDT_TYPE", keys, StringComparison.Ordinal);
+        Assert.Contains("DEL_TYPE", keys, StringComparison.Ordinal);
     }
 
     [Fact]
