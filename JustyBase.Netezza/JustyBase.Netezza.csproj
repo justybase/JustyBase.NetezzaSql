@@ -16,6 +16,7 @@
   <ItemGroup>
     <ProjectReference Include="..\JustyBase.NetezzaSqlParser.csproj" />
     <ProjectReference Include="..\JustyBase.NetezzaDdl\JustyBase.NetezzaDdl.csproj" />
+    <ProjectReference Include="..\JustyBase.NetezzaCatalogSql\JustyBase.NetezzaCatalogSql.csproj" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.10" />
   </ItemGroup>
 

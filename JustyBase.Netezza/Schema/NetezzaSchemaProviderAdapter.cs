@@ -33,7 +33,10 @@ internal sealed class DefaultNetezzaSchemaProviderAdapter : INetezzaSchemaProvid
             provider.Clear();
 
         foreach (var table in snapshot.Tables)
-            AddTable(provider, table);
+        {
+            if (IsTableLike(table.Kind))
+                AddTable(provider, table);
+        }
 
         if (snapshot.ExternalTables is { Count: > 0 } externals)
         {
@@ -47,6 +50,12 @@ internal sealed class DefaultNetezzaSchemaProviderAdapter : INetezzaSchemaProvid
         provider.BumpMetadataEpoch();
     }
 
+    private static bool IsTableLike(NetezzaObjectKind kind)
+        => kind is NetezzaObjectKind.Table
+            or NetezzaObjectKind.View
+            or NetezzaObjectKind.ExternalTable
+            or NetezzaObjectKind.Synonym;
+
     private static void AddTable(InMemorySchemaProvider provider, NetezzaSchemaTable table)
     {
         var columns = table.Columns?.Select(column => new ColumnInfo(
@@ -59,6 +68,7 @@ internal sealed class DefaultNetezzaSchemaProviderAdapter : INetezzaSchemaProvid
             table.Schema,
             table.Database,
             Columns: columns,
-            IsView: table.IsView));
+            IsView: table.IsView || table.Kind == NetezzaObjectKind.View,
+            IsExternal: table.Kind == NetezzaObjectKind.ExternalTable));
     }
 }
