@@ -3,6 +3,7 @@ using JustyBase.Ai.Embedded.Download;
 using JustyBase.Ai.Embedded.Server;
 using System.Net;
 using System.Text;
+using System.Text.Json;
 
 namespace JustyBase.Ai.Tests;
 
@@ -32,9 +33,48 @@ public sealed class FimServerTests
 
         Assert.NotNull(suggestion);
         Assert.Contains("SELECT 1", suggestion!.Text);
-        Assert.Contains("\"input_prefix\":\"SELECT \"", handler.LastBody, StringComparison.Ordinal);
-        Assert.Contains("\"input_suffix\":\" FROM t\"", handler.LastBody, StringComparison.Ordinal);
-        Assert.Contains("\"n_predict\":50", handler.LastBody, StringComparison.Ordinal);
+        // Recent llama.cpp /completion needs a "prompt" built from the model's FIM tokens;
+        // the legacy input_prefix/input_suffix pair is rejected with 400 on b10xxx builds.
+        using (var doc = JsonDocument.Parse(handler.LastBody!))
+        {
+            Assert.Equal(
+                "<|fim_prefix|>SELECT <|fim_suffix|> FROM t<|fim_middle|>",
+                doc.RootElement.GetProperty("prompt").GetString());
+            Assert.Equal(50, doc.RootElement.GetProperty("n_predict").GetInt32());
+        }
+
+        Assert.DoesNotContain("input_prefix", handler.LastBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("input_suffix", handler.LastBody, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("Qwen (recommended)", "<|fim_prefix|>", "<|fim_suffix|>", "<|fim_middle|>")]
+    [InlineData("CodeGemma", "<|f|>", "<|s|>", "<|m|>")]
+    [InlineData("StarCoder2", "<fim_prefix>", "<fim_suffix>", "<fim_middle>")]
+    [InlineData("Codestral", "[FIM_PREFIX]", "[FIM_SUFFIX]", "[FIM_MIDDLE]")]
+    public async Task FimProvider_ModelFamily_DrivesFimTemplateTokens(
+        string family,
+        string prefixToken,
+        string suffixToken,
+        string middleToken)
+    {
+        var manager = CreateManager();
+        await manager.GetOrStartServerAsync(LlamaServerRole.Fim, "model.gguf", 0, 4096);
+
+        var handler = new CapturingHandler("""{"content":"ok"}""");
+        var store = new FakeModelStore { Family = family };
+        var provider = new LlamaServerFimProvider(
+            manager,
+            store,
+            () => 0,
+            () => 4096,
+            httpClient: new HttpClient(handler));
+
+        await provider.CompleteAsync(new CompletionRequest("A", "B"), CancellationToken.None);
+
+        Assert.NotNull(handler.LastBody);
+        using var doc = JsonDocument.Parse(handler.LastBody!);
+        Assert.Equal($"{prefixToken}A{suffixToken}B{middleToken}", doc.RootElement.GetProperty("prompt").GetString());
     }
 
     [Fact]
@@ -161,8 +201,9 @@ public sealed class FimServerTests
     {
         public bool IsModelPresent { get; set; } = true;
         public bool TryDeleteCurrentModelCalled { get; private set; }
+        public string Family { get; set; } = "Qwen (recommended)";
 
-        public ModelDescriptor CurrentModel { get; set; } = new(
+        public ModelDescriptor CurrentModel => new(
             "qwen2.5-coder-3b",
             "Qwen2.5-Coder 3B",
             "Qwen2.5-Coder-3B.gguf",
@@ -170,7 +211,8 @@ public sealed class FimServerTests
             "~1.9 GB",
             new Uri("https://example.com"),
             "note",
-            1_000_000L);
+            1_000_000L,
+            Family);
 
         public string ModelsDirectory => @"C:\fake\models";
         public string ModelFileName => CurrentModel.FileName;

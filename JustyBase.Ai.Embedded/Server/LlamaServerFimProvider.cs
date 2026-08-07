@@ -61,10 +61,16 @@ public sealed class LlamaServerFimProvider : ICompletionProvider, IDisposable
             return null;
         }
 
+        // Recent llama.cpp (b10xxx-era) /completion requires a "prompt" field and no longer
+        // honours the legacy input_prefix/input_suffix pair (it answers 400 "key 'prompt'
+        // not found"). Build the fill-in-the-middle prompt explicitly from the model family's
+        // FIM special tokens so the request works on every bundled llama-server build.
+        var fim = FimTemplateTokens.ForFamily(_modelStore.CurrentModel.Family);
+        var prompt = string.Concat(fim.Prefix, request.Prefix, fim.Suffix, request.Suffix, fim.Middle);
+
         var body = new LlamaCompletionRequest
         {
-            InputPrefix = request.Prefix,
-            InputSuffix = request.Suffix,
+            Prompt = prompt,
             NPredict = Math.Clamp(request.MaxTokens, 1, 512),
             Temperature = request.Temperature,
             TopP = request.TopP,
@@ -112,11 +118,8 @@ public sealed class LlamaServerFimProvider : ICompletionProvider, IDisposable
 
 internal sealed class LlamaCompletionRequest
 {
-    [JsonPropertyName("input_prefix")]
-    public string InputPrefix { get; init; } = string.Empty;
-
-    [JsonPropertyName("input_suffix")]
-    public string InputSuffix { get; init; } = string.Empty;
+    [JsonPropertyName("prompt")]
+    public string Prompt { get; init; } = string.Empty;
 
     [JsonPropertyName("n_predict")]
     public int NPredict { get; init; } = 50;
@@ -129,6 +132,28 @@ internal sealed class LlamaCompletionRequest
 
     [JsonPropertyName("cache_prompt")]
     public bool CachePrompt { get; init; } = true;
+}
+
+/// <summary>
+/// Fill-in-the-middle special tokens used to wrap the prefix/suffix in the /completion
+/// prompt. They differ per model family and are tokenized by llama.cpp into the model's
+/// native FIM tokens.
+/// </summary>
+internal readonly record struct FimTemplateTokens(string Prefix, string Suffix, string Middle)
+{
+    private static readonly FimTemplateTokens Qwen = new("<|fim_prefix|>", "<|fim_suffix|>", "<|fim_middle|>");
+    private static readonly FimTemplateTokens CodeGemma = new("<|f|>", "<|s|>", "<|m|>");
+    private static readonly FimTemplateTokens StarCoder = new("<fim_prefix>", "<fim_suffix>", "<fim_middle>");
+    private static readonly FimTemplateTokens Codestral = new("[FIM_PREFIX]", "[FIM_SUFFIX]", "[FIM_MIDDLE]");
+
+    public static FimTemplateTokens ForFamily(string? family) =>
+        family switch
+        {
+            string f when f.Contains("CodeGemma", StringComparison.OrdinalIgnoreCase) => CodeGemma,
+            string f when f.Contains("StarCoder2", StringComparison.OrdinalIgnoreCase) => StarCoder,
+            string f when f.Contains("Codestral", StringComparison.OrdinalIgnoreCase) => Codestral,
+            _ => Qwen,
+        };
 }
 
 internal sealed class LlamaCompletionResponse
