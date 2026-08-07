@@ -102,10 +102,11 @@ public sealed class LlamaServerManager : IAsyncDisposable, IDisposable
                 instance = _instanceFactory(_binary.BinaryPath, modelPath, gpuLayers, contextSize);
 #pragma warning restore CA2000
                 var started = await instance.StartAsync(progress, cancellationToken).ConfigureAwait(false);
-                if (!started && gpuLayers > 0)
+                if (!started && gpuLayers != 0)
                 {
                     // GPU (Vulkan) start failed — commonly out-of-device-memory on a low-VRAM
                     // adapter. Retry once on CPU so the backend still works instead of failing.
+                    // Also covers the auto (negative) mode when llama.cpp cannot fit the model.
                     progress?.Report(new FimModelProgress(0.5, "GPU start failed — retrying on CPU…"));
                     await instance.DisposeAsync().ConfigureAwait(false);
 #pragma warning disable CA2000 // Ownership transfers to _chatServer/_fimServer (disposed in StopServerCoreAsync/DisposeAsync).

@@ -211,6 +211,63 @@ public sealed class FimServerTests
         Assert.Equal([0], attempts);
     }
 
+    [Fact]
+    public void GgufBlockCountReader_ReadsBlockCountFromHeader()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"gguf_{Guid.NewGuid():N}.gguf");
+        try
+        {
+            using (var fs = new FileStream(path, FileMode.Create, FileAccess.Write))
+            using (var w = new BinaryWriter(fs, Encoding.UTF8, leaveOpen: false))
+            {
+                w.Write("GGUF"u8);
+                w.Write(3u);              // format version
+                w.Write(0UL);             // tensor_count
+                w.Write(1UL);             // metadata kv count
+                var key = Encoding.UTF8.GetBytes("llama.block_count");
+                w.Write((ulong)key.Length);
+                w.Write(key);
+                w.Write(11u);             // value type: int64
+                w.Write(48L);             // 48 layers
+            }
+
+            Assert.Equal(48, GgufBlockCountReader.Read(path));
+        }
+        finally
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+    }
+
+    [Fact]
+    public void GgufBlockCountReader_MissingOrInvalid_ReturnsNull()
+    {
+        Assert.Null(GgufBlockCountReader.Read(null));
+        Assert.Null(GgufBlockCountReader.Read(@"C:\nonexistent\model.gguf"));
+    }
+
+    [Fact]
+    public void GgufBlockCountReader_ReadsDownloadedChatModel()
+    {
+        // Soft, machine-dependent check against the actually downloaded GGUF.
+        var model = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "JustyBase",
+            "models",
+            "Qwen3.5-4B-Q4_K_M.gguf");
+        if (!File.Exists(model))
+        {
+            return;
+        }
+
+        var count = GgufBlockCountReader.Read(model);
+        Assert.NotNull(count);
+        Assert.True(count > 0);
+    }
+
     private static LlamaServerManager CreateManager()
         => new(new FakeBinary(), (_, _, _, _) => new FakeInstance());
 

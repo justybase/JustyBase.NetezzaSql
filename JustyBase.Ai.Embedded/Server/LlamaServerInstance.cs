@@ -23,7 +23,8 @@ public sealed class LlamaServerInstance : ILlamaServerInstance
     {
         _binaryPath = binaryPath ?? throw new ArgumentNullException(nameof(binaryPath));
         _modelPath = modelPath ?? throw new ArgumentNullException(nameof(modelPath));
-        _gpuLayers = Math.Clamp(gpuLayers, 0, 999);
+        // A negative value means "auto": llama.cpp offloads as many layers as fit in VRAM.
+        _gpuLayers = gpuLayers < 0 ? -1 : Math.Clamp(gpuLayers, 0, 999);
         _contextSize = Math.Clamp(contextSize, 512, 131_072);
         Port = FindFreePort();
         Endpoint = new Uri($"http://127.0.0.1:{Port}");
@@ -71,7 +72,7 @@ public sealed class LlamaServerInstance : ILlamaServerInstance
         psi.ArgumentList.Add("--port");
         psi.ArgumentList.Add(Port.ToString(System.Globalization.CultureInfo.InvariantCulture));
         psi.ArgumentList.Add("--n-gpu-layers");
-        psi.ArgumentList.Add(_gpuLayers.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        psi.ArgumentList.Add(_gpuLayers < 0 ? "auto" : _gpuLayers.ToString(System.Globalization.CultureInfo.InvariantCulture));
         psi.ArgumentList.Add("--ctx-size");
         psi.ArgumentList.Add(_contextSize.ToString(System.Globalization.CultureInfo.InvariantCulture));
         psi.ArgumentList.Add("--no-webui");
