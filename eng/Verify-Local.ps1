@@ -39,6 +39,8 @@ try {
         dotnet pack .\JustyBase.Netezza\JustyBase.Netezza.csproj --no-build -c $Configuration -o $packageDir
         dotnet pack .\JustyBase.Core\JustyBase.Core.csproj --no-build -c $Configuration -o $packageDir
         dotnet pack .\JustyBase.ImportExport\JustyBase.ImportExport.csproj --no-build -c $Configuration -o $packageDir
+        dotnet pack .\JustyBase.Ai\JustyBase.Ai.csproj --no-build -c $Configuration -o $packageDir
+        dotnet pack .\JustyBase.Ai.Embedded\JustyBase.Ai.Embedded.csproj --no-build -c $Configuration -o $packageDir
         if ($LASTEXITCODE -ne 0) { throw 'dotnet pack failed.' }
 
         Write-Host '==> package consumer' -ForegroundColor Cyan

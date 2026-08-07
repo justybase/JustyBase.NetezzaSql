@@ -28,6 +28,8 @@
     <Compile Remove="JustyBase.NetezzaSqlLsp\**\*.cs" />
     <Compile Remove="JustyBase.Core\**\*.cs" />
     <Compile Remove="JustyBase.ImportExport\**\*.cs" />
+    <Compile Remove="JustyBase.Ai\**\*.cs" />
+    <Compile Remove="JustyBase.Ai.Embedded\**\*.cs" />
     <Compile Remove="tests\**\*.cs" />
     <Compile Remove="samples\**\*.cs" />
     <Compile Remove="artifacts\**\*.cs" />
