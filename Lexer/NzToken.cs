@@ -369,6 +369,18 @@ public enum NzToken
     // MySQL-specific quoted identifiers (appended to preserve existing values)
     MySqlBacktickIdentifier,
 
+    // Access-specific tokens (produced only by AccessLexer). Registered before
+    // the shared chain so Access lexical forms win over the ANSI ones.
+    AccessBracketedIdentifier, // [name] or [na]]me] (Access identifier quoting)
+    AccessBacktickIdentifier,  // `name` (Access also allows backticks)
+    AccessDateLiteral,         // #mm/dd/yyyy hh:mm:ss# (Access date literal)
+    AccessAmpersand,           // & (Access string concatenation)
+    AccessTop,                 // TOP
+    AccessPercent,             // PERCENT
+    AccessDistinctRow,         // DISTINCTROW
+    AccessTransform,           // TRANSFORM (crosstab)
+    AccessPivot,               // PIVOT (crosstab)
+
     // Short aliases retained for consumers that use generic operator names.
     JsonTextPath = PostgreSqlJsonTextPath,
     JsonPath = PostgreSqlJsonPath,

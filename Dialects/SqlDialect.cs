@@ -13,4 +13,5 @@ public enum SqlDialect
     Mssql,
     MySql,
     PostgreSql,
+    Access,
 }

@@ -26,6 +26,7 @@ public static class DialectRuntime
         SqlDialect.Mssql => "MSSQL SQL",
         SqlDialect.MySql => "MySQL SQL",
         SqlDialect.PostgreSql => "PostgreSQL SQL",
+        SqlDialect.Access => "Access SQL",
         _ => "Netezza SQL",
     };
 
@@ -66,6 +67,7 @@ public static class DialectRuntime
         SqlDialect.Mssql => MssqlLexer.Tokenize(sql),
         SqlDialect.MySql => MySqlLexer.Tokenize(sql),
         SqlDialect.PostgreSql => PostgreSqlLexer.Tokenize(sql),
+        SqlDialect.Access => AccessLexer.Tokenize(sql),
         _ => NzLexer.Tokenize(sql),
     };
 
@@ -92,6 +94,8 @@ public static class DialectRuntime
             return SqlDialect.Mssql;
         if (value.Equals("mysql", StringComparison.OrdinalIgnoreCase))
             return SqlDialect.MySql;
+        if (value.Equals("access", StringComparison.OrdinalIgnoreCase))
+            return SqlDialect.Access;
         if (value.Equals("postgresql", StringComparison.OrdinalIgnoreCase) ||
             value.Equals("postgres", StringComparison.OrdinalIgnoreCase) ||
             value.Equals("pg", StringComparison.OrdinalIgnoreCase))
