@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsAotCompatible>true</IsAotCompatible>
+    <PackageId>JustyBase.Ai</PackageId>
+    <RootNamespace>JustyBase.Ai</RootNamespace>
+    <AssemblyName>JustyBase.Ai</AssemblyName>
+    <PackageDescription>UI-agnostic AI chat logic for JustyBase hosts: chat service, tool executor, OpenAI-compatible and Codex backends, prompt building, and chat model contracts.</PackageDescription>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="DiffPlex" Version="1.9.0" />
+    <PackageReference Include="Microsoft.Extensions.AI" Version="10.8.3" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.10" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\JustyBase.Ai.Embedded\JustyBase.Ai.Embedded.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="JustyBase.Ai.Tests" />
+  </ItemGroup>
+</Project>
