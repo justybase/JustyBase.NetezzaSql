@@ -173,6 +173,44 @@ public sealed class FimServerTests
         Assert.False(report.Succeeded);
     }
 
+    [Fact]
+    public async Task Manager_WhenGpuStartFails_FallsBackToCpu()
+    {
+        var attempts = new List<int>();
+        var manager = new LlamaServerManager(
+            new FakeBinary(),
+            (_, _, gpu, _) =>
+            {
+                attempts.Add(gpu);
+                return new CpuFallbackFakeInstance(gpu);
+            });
+
+        var instance = await manager.GetOrStartServerAsync(LlamaServerRole.Fim, "model.gguf", gpuLayers: 99, contextSize: 4096);
+
+        Assert.True(instance.IsRunning);
+        // First attempt used the requested GPU layers and failed; the manager retried on CPU.
+        Assert.Equal([99, 0], attempts);
+        Assert.NotNull(manager.FimServer);
+    }
+
+    [Fact]
+    public async Task Manager_WhenCpuStartSucceeds_DoesNotFallBack()
+    {
+        var attempts = new List<int>();
+        var manager = new LlamaServerManager(
+            new FakeBinary(),
+            (_, _, gpu, _) =>
+            {
+                attempts.Add(gpu);
+                return new CpuFallbackFakeInstance(gpu);
+            });
+
+        var instance = await manager.GetOrStartServerAsync(LlamaServerRole.Fim, "model.gguf", gpuLayers: 0, contextSize: 4096);
+
+        Assert.True(instance.IsRunning);
+        Assert.Equal([0], attempts);
+    }
+
     private static LlamaServerManager CreateManager()
         => new(new FakeBinary(), (_, _, _, _) => new FakeInstance());
 
@@ -194,6 +232,23 @@ public sealed class FimServerTests
         public string LogFilePath => string.Empty;
         public Task<bool> StartAsync(IProgress<FimModelProgress>? progress = null, CancellationToken cancellationToken = default)
             => Task.FromResult(true);
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    /// <summary>GPU-layer attempts fail (simulated out-of-device-memory); CPU attempts succeed.</summary>
+    private sealed class CpuFallbackFakeInstance : ILlamaServerInstance
+    {
+        private readonly int _gpuLayers;
+
+        public CpuFallbackFakeInstance(int gpuLayers) => _gpuLayers = gpuLayers;
+
+        public int Port => 8080;
+        public Uri Endpoint => new("http://127.0.0.1:8080");
+        public bool IsRunning => true;
+        public string? LastError => null;
+        public string LogFilePath => string.Empty;
+        public Task<bool> StartAsync(IProgress<FimModelProgress>? progress = null, CancellationToken cancellationToken = default)
+            => Task.FromResult(_gpuLayers == 0);
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
