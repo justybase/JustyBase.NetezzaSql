@@ -418,9 +418,15 @@ public sealed class ChatAttachment
                 return DisplayName;
             }
 
-            var fileOrDirectoryName = System.IO.Path.GetFileName(Path);
+            var fileOrDirectoryName = GetLastPathSegment(Path);
             return string.IsNullOrWhiteSpace(fileOrDirectoryName) ? Path : fileOrDirectoryName;
         }
+    }
+
+    private static string GetLastPathSegment(string path)
+    {
+        int lastSeparator = path.LastIndexOfAny(['/', '\\']);
+        return lastSeparator >= 0 ? path[(lastSeparator + 1)..] : path;
     }
 
     public string DisplayLabel => IsDirectory

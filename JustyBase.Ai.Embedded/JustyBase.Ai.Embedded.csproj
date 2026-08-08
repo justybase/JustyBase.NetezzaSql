@@ -12,4 +12,7 @@
     <InternalsVisibleTo Include="JustyBase.Ai.Tests" />
     <InternalsVisibleTo Include="JustyBase.Tests" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 </Project>
