@@ -268,6 +268,31 @@ public sealed class FimServerTests
         Assert.True(count > 0);
     }
 
+    [Fact]
+    public void LlamaServerInstance_AutoOffload_RendersAutoAndKeepsKvCacheInRam()
+    {
+        var args = LlamaServerInstance.BuildArguments(
+            modelPath: @"C:\models\x.gguf",
+            gpuLayers: -1,
+            contextSize: 4096,
+            port: 8080);
+
+        var index = Array.IndexOf(args.ToArray(), "--n-gpu-layers");
+        Assert.True(index >= 0);
+        Assert.Equal("auto", args[index + 1]);
+        Assert.Contains("--no-kv-offload", args);
+        Assert.DoesNotContain("--kv-offload", args);
+    }
+
+    [Fact]
+    public void LlamaServerInstance_ExplicitOffload_RendersNumber()
+    {
+        var args = LlamaServerInstance.BuildArguments(@"C:\models\x.gguf", gpuLayers: 24, contextSize: 4096, port: 8080);
+
+        var index = Array.IndexOf(args.ToArray(), "--n-gpu-layers");
+        Assert.Equal("24", args[index + 1]);
+    }
+
     private static LlamaServerManager CreateManager()
         => new(new FakeBinary(), (_, _, _, _) => new FakeInstance());
 

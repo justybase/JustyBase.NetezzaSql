@@ -65,17 +65,10 @@ public sealed class LlamaServerInstance : ILlamaServerInstance
             RedirectStandardError = true,
             WorkingDirectory = Path.GetDirectoryName(_binaryPath) ?? string.Empty,
         };
-        psi.ArgumentList.Add("-m");
-        psi.ArgumentList.Add(_modelPath);
-        psi.ArgumentList.Add("--host");
-        psi.ArgumentList.Add("127.0.0.1");
-        psi.ArgumentList.Add("--port");
-        psi.ArgumentList.Add(Port.ToString(System.Globalization.CultureInfo.InvariantCulture));
-        psi.ArgumentList.Add("--n-gpu-layers");
-        psi.ArgumentList.Add(_gpuLayers < 0 ? "auto" : _gpuLayers.ToString(System.Globalization.CultureInfo.InvariantCulture));
-        psi.ArgumentList.Add("--ctx-size");
-        psi.ArgumentList.Add(_contextSize.ToString(System.Globalization.CultureInfo.InvariantCulture));
-        psi.ArgumentList.Add("--no-webui");
+        foreach (var argument in BuildArguments(_modelPath, _gpuLayers, _contextSize, Port))
+        {
+            psi.ArgumentList.Add(argument);
+        }
 
         try
         {
@@ -202,6 +195,34 @@ public sealed class LlamaServerInstance : ILlamaServerInstance
         listener.Start();
         var port = ((IPEndPoint)listener.LocalEndpoint).Port;
         return port;
+    }
+
+    /// <summary>Builds the llama-server command line. Exposed for tests.</summary>
+    internal static IReadOnlyList<string> BuildArguments(
+        string modelPath,
+        int gpuLayers,
+        uint contextSize,
+        int port)
+    {
+        return
+        [
+            "-m",
+            modelPath,
+            "--host",
+            "127.0.0.1",
+            "--port",
+            port.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            "--n-gpu-layers",
+            gpuLayers < 0 ? "auto" : gpuLayers.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            "--ctx-size",
+            contextSize.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            "--no-webui",
+            // Keep the KV cache in system RAM. Offloading it to VRAM on top of the weights can
+            // push a ~1 GB buffer over the device limit on iGPUs / AUTO-UMA adapters, which
+            // llama.cpp "auto" offload does not always account for (out-of-device-memory at
+            // startup). On shared-memory iGPUs the KV cache is the same memory either way.
+            "--no-kv-offload",
+        ];
     }
 
     public async ValueTask DisposeAsync()
