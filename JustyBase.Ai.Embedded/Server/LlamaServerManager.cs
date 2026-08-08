@@ -35,6 +35,16 @@ public sealed class LlamaServerManager : IAsyncDisposable, IDisposable
     {
     }
 
+    /// <summary>
+    /// Apple Silicon variant: provisions the MLX runtime (<c>uv</c>) and launches <c>mlx_lm.server</c>.
+    /// Unlike llama.cpp there is no CPU fallback and no GPU-layer knob — MLX always runs on the
+    /// unified GPU, so switching models must unload the previous one first.
+    /// </summary>
+    public LlamaServerManager(MlxServerRuntime mlxRuntime)
+        : this(mlxRuntime, static (binary, model, _, _) => new MlxServerInstance(binary, model))
+    {
+    }
+
     /// <summary>Test seam: injects a binary provider and an instance factory (no real processes).</summary>
     internal LlamaServerManager(
         ILlamaServerBinary binary,
@@ -67,6 +77,9 @@ public sealed class LlamaServerManager : IAsyncDisposable, IDisposable
             var currentCtx = role == LlamaServerRole.Chat ? _chatContextSize : _fimContextSize;
             var currentVariant = role == LlamaServerRole.Chat ? _chatBinaryVariant : _fimBinaryVariant;
             var binaryVariant = _binary.BinaryVariant;
+            // MLX (Apple Silicon) runs on the single unified GPU: a replacement model can never
+            // share memory with the old one, so the previous server must be stopped before load.
+            var isMlx = string.Equals(binaryVariant, "mlx", StringComparison.OrdinalIgnoreCase);
 
             if (current is { IsRunning: true }
                 && string.Equals(currentPath, modelPath, StringComparison.OrdinalIgnoreCase)
@@ -87,7 +100,7 @@ public sealed class LlamaServerManager : IAsyncDisposable, IDisposable
             // that fails on "out of GPU memory" would otherwise keep the old model loaded
             // and make the switch impossible. CPU-only replacements start first (no
             // resource contention) so a failed start keeps the old server running.
-            if (gpuLayers > 0 && current is { IsRunning: true })
+            if ((gpuLayers > 0 || isMlx) && current is { IsRunning: true })
             {
                 await StopServerCoreAsync(role).ConfigureAwait(false);
             }
@@ -102,7 +115,7 @@ public sealed class LlamaServerManager : IAsyncDisposable, IDisposable
                 instance = _instanceFactory(_binary.BinaryPath, modelPath, gpuLayers, contextSize);
 #pragma warning restore CA2000
                 var started = await instance.StartAsync(progress, cancellationToken).ConfigureAwait(false);
-                if (!started && gpuLayers != 0)
+                if (!started && gpuLayers != 0 && !isMlx)
                 {
                     // GPU (Vulkan) start failed — commonly out-of-device-memory on a low-VRAM
                     // adapter. Retry once on CPU so the backend still works instead of failing.

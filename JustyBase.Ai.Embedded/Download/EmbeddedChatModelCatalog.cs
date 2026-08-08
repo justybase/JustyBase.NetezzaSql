@@ -16,11 +16,10 @@ public static class EmbeddedChatModelIds
 }
 
 /// <summary>
-/// Catalog of instruct GGUF chat models served by the bundled llama.cpp llama-server for the
-/// "Embedded" AI chat backend.
-///
-/// Source policy: prefer the official model provider's own Q4 GGUF when one exists (Google
-/// Gemma QAT q4_0); otherwise use the trusted unsloth Q4_K_M community builds.
+/// Catalog of instruct chat models for the "Embedded" AI chat backend. Windows/Linux hosts
+/// the bundled llama.cpp llama-server with Q4 GGUF sources (official provider QAT q4_0 when
+/// available, otherwise unsloth Q4_K_M). Apple Silicon hosts the verified mlx-community 4-bit
+/// MLX snapshots via <c>mlx_lm.server</c>.
 /// </summary>
 public sealed class EmbeddedChatModelCatalog : IModelCatalog
 {
@@ -34,7 +33,10 @@ public sealed class EmbeddedChatModelCatalog : IModelCatalog
             ApproxSizeLabel: "~2.7 GB",
             SourceModelUrl: new Uri("https://huggingface.co/unsloth/Qwen3.5-4B-GGUF?show_file_info=Qwen3.5-4B-Q4_K_M.gguf"),
             Notes: "Smallest chat model — best starting point on iGPU/CPU. Apache-2.0. Unsloth GGUF.",
-            ApproxBytes: 2_700_000_000),
+            ApproxBytes: 2_700_000_000,
+            MlxRepoId: "mlx-community/Qwen3.5-4B-MLX-4bit",
+            MlxSizeLabel: "~3.1 GB",
+            MlxApproxBytes: 3_061_132_920),
         new(
             Id: EmbeddedChatModelIds.Qwen35_9B,
             DisplayName: "Qwen 3.5 9B (Q4_K_M)",
@@ -43,7 +45,10 @@ public sealed class EmbeddedChatModelCatalog : IModelCatalog
             ApproxSizeLabel: "~5.7 GB",
             SourceModelUrl: new Uri("https://huggingface.co/unsloth/Qwen3.5-9B-GGUF?show_file_info=Qwen3.5-9B-Q4_K_M.gguf"),
             Notes: "Balanced quality/speed — recommended when 8+ GB VRAM is available. Unsloth GGUF.",
-            ApproxBytes: 5_700_000_000),
+            ApproxBytes: 5_700_000_000,
+            MlxRepoId: "mlx-community/Qwen3.5-9B-MLX-4bit",
+            MlxSizeLabel: "~6.0 GB",
+            MlxApproxBytes: 5_977_074_591),
         new(
             Id: EmbeddedChatModelIds.Gemma4_12B,
             DisplayName: "Gemma 4 12B Instruct (QAT q4_0)",
@@ -57,7 +62,10 @@ public sealed class EmbeddedChatModelCatalog : IModelCatalog
             RequiresLicenseAcceptance: true,
             LicenseName: "Gemma Terms of Use",
             LicenseUrl: new Uri("https://ai.google.dev/gemma/terms"),
-            LicenseSummary: "Gemma models are subject to Google's Gemma Terms of Use. You must review and accept those terms before downloading."),
+            LicenseSummary: "Gemma models are subject to Google's Gemma Terms of Use. You must review and accept those terms before downloading.",
+            MlxRepoId: "mlx-community/gemma-4-12B-it-4bit",
+            MlxSizeLabel: "~6.8 GB",
+            MlxApproxBytes: 6_773_372_848),
         new(
             Id: EmbeddedChatModelIds.Devstral2_22B,
             DisplayName: "Devstral Small 2 24B Instruct (Q4_K_M)",
@@ -67,6 +75,9 @@ public sealed class EmbeddedChatModelCatalog : IModelCatalog
             SourceModelUrl: new Uri("https://huggingface.co/unsloth/Devstral-Small-2-24B-Instruct-2512-GGUF?show_file_info=Devstral-Small-2-24B-Instruct-2512-Q4_K_M.gguf"),
             Notes: "Mistral dev-focused instruct model (Devstral 2, 24B) — license acceptance required. Unsloth GGUF.",
             ApproxBytes: 14_000_000_000,
+            MlxRepoId: "mlx-community/Devstral-Small-2-24B-Instruct-2512-4bit",
+            MlxSizeLabel: "~15.1 GB",
+            MlxApproxBytes: 15_136_819_784,
             Family: "Devstral (Mistral)",
             RequiresLicenseAcceptance: true,
             LicenseName: "Mistral license",
@@ -80,7 +91,10 @@ public sealed class EmbeddedChatModelCatalog : IModelCatalog
             ApproxSizeLabel: "~18 GB",
             SourceModelUrl: new Uri("https://huggingface.co/unsloth/Qwen3.6-27B-GGUF?show_file_info=Qwen3.6-27B-Q4_K_M.gguf"),
             Notes: "High-quality chat — needs 24+ GB VRAM or fast CPU + 32 GB RAM. Unsloth GGUF.",
-            ApproxBytes: 18_000_000_000),
+            ApproxBytes: 18_000_000_000,
+            MlxRepoId: "mlx-community/Qwen3.6-27B-4bit",
+            MlxSizeLabel: "~16.1 GB",
+            MlxApproxBytes: 16_081_490_064),
         new(
             Id: EmbeddedChatModelIds.Gemma4_26BA4B,
             DisplayName: "Gemma 4 26B-A4B (MoE, QAT q4_0)",
@@ -91,6 +105,9 @@ public sealed class EmbeddedChatModelCatalog : IModelCatalog
             Notes: "MoE (4B active) — faster inference than dense 26B at similar quality. Google official QAT q4_0. Gemma license.",
             ApproxBytes: 16_000_000_000,
             Family: "Gemma 4 (MoE)",
+            MlxRepoId: "mlx-community/gemma-4-26b-a4b-it-4bit",
+            MlxSizeLabel: "~15.4 GB",
+            MlxApproxBytes: 15_373_588_575,
             RequiresLicenseAcceptance: true,
             LicenseName: "Gemma Terms of Use",
             LicenseUrl: new Uri("https://ai.google.dev/gemma/terms"),
@@ -104,7 +121,10 @@ public sealed class EmbeddedChatModelCatalog : IModelCatalog
             SourceModelUrl: new Uri("https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF?show_file_info=Qwen3.6-35B-A3B-UD-Q4_K_M.gguf"),
             Notes: "MoE (3B active) — large capability at MoE inference cost. Unsloth Dynamic UD-Q4_K_M.",
             ApproxBytes: 20_000_000_000,
-            Family: "Qwen (MoE)"),
+            Family: "Qwen (MoE)",
+            MlxRepoId: "mlx-community/Qwen3.6-35B-A3B-4bit",
+            MlxSizeLabel: "~20.4 GB",
+            MlxApproxBytes: 20_429_169_263),
         new(
             Id: EmbeddedChatModelIds.Gemma4_31B,
             DisplayName: "Gemma 4 31B (QAT q4_0)",
@@ -118,7 +138,10 @@ public sealed class EmbeddedChatModelCatalog : IModelCatalog
             RequiresLicenseAcceptance: true,
             LicenseName: "Gemma Terms of Use",
             LicenseUrl: new Uri("https://ai.google.dev/gemma/terms"),
-            LicenseSummary: "Gemma models are subject to Google's Gemma Terms of Use. You must review and accept those terms before downloading."),
+            LicenseSummary: "Gemma models are subject to Google's Gemma Terms of Use. You must review and accept those terms before downloading.",
+            MlxRepoId: "mlx-community/gemma-4-31b-it-4bit",
+            MlxSizeLabel: "~18.4 GB",
+            MlxApproxBytes: 18_444_421_751),
     ];
 
     public ModelDescriptor Resolve(string? modelId)

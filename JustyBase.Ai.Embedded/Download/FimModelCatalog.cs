@@ -36,7 +36,10 @@ public sealed class FimModelCatalog : IModelCatalog
             ApproxSizeLabel: "~1.0 GB",
             SourceModelUrl: new Uri("https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B"),
             Notes: "Base (non-Instruct) Q4_K_M GGUF of Qwen2.5-Coder-1.5B. Default for Small preset.",
-            ApproxBytes: 986_048_352),
+            ApproxBytes: 986_048_352,
+            MlxRepoId: "mlx-community/Qwen2.5-Coder-1.5B-4bit",
+            MlxSizeLabel: "~0.9 GB",
+            MlxApproxBytes: 880_172_024),
         new(
             Id: FimModelIds.Qwen25Coder3B,
             DisplayName: "Qwen2.5-Coder 3B (Q4_K_M) — default",
@@ -45,7 +48,10 @@ public sealed class FimModelCatalog : IModelCatalog
             ApproxSizeLabel: "~1.9 GB",
             SourceModelUrl: new Uri("https://huggingface.co/Qwen/Qwen2.5-Coder-3B"),
             Notes: "Base FIM model. Default for Medium preset / new installs.",
-            ApproxBytes: 1_929_903_200),
+            ApproxBytes: 1_929_903_200,
+            MlxRepoId: "mlx-community/Qwen2.5-Coder-3B-4bit",
+            MlxSizeLabel: "~1.7 GB",
+            MlxApproxBytes: 1_747_851_656),
         new(
             Id: FimModelIds.Qwen25Coder7B,
             DisplayName: "Qwen2.5-Coder 7B (Q4_K_M) — Medium/Large default",
@@ -54,7 +60,10 @@ public sealed class FimModelCatalog : IModelCatalog
             ApproxSizeLabel: "~4.7 GB",
             SourceModelUrl: new Uri("https://huggingface.co/QuantFactory/Qwen2.5-Coder-7B-GGUF"),
             Notes: "Base FIM model from QuantFactory. Default for Medium/Large.",
-            ApproxBytes: 4_680_000_000),
+            ApproxBytes: 4_680_000_000,
+            MlxRepoId: "mlx-community/Qwen2.5-Coder-7B-4bit",
+            MlxSizeLabel: "~4.3 GB",
+            MlxApproxBytes: 4_295_889_853),
         new(
             Id: FimModelIds.Qwen25Coder14B,
             DisplayName: "Qwen2.5-Coder 14B (Q4_K_M) — heavy",
@@ -63,7 +72,10 @@ public sealed class FimModelCatalog : IModelCatalog
             ApproxSizeLabel: "~9.0 GB",
             SourceModelUrl: new Uri("https://huggingface.co/Qwen/Qwen2.5-Coder-14B"),
             Notes: "Optional Large upgrade when VRAM allows.",
-            ApproxBytes: 9_000_000_000),
+            ApproxBytes: 9_000_000_000,
+            MlxRepoId: "mlx-community/Qwen2.5-Coder-14B-4bit",
+            MlxSizeLabel: "~8.3 GB",
+            MlxApproxBytes: 8_321_093_808),
 
         new(
             Id: FimModelIds.CodeGemma2B,
@@ -75,6 +87,9 @@ public sealed class FimModelCatalog : IModelCatalog
             Notes: "Google CodeGemma — alternative small coder.",
             ApproxBytes: 1_600_000_000,
             Family: "CodeGemma",
+            MlxRepoId: "mlx-community/codegemma-2b-4bit",
+            MlxSizeLabel: "~2.2 GB",
+            MlxApproxBytes: 2_185_375_429,
             RequiresLicenseAcceptance: true,
             LicenseName: "Gemma Terms of Use",
             LicenseUrl: new Uri("https://ai.google.dev/gemma/terms"),
@@ -89,6 +104,9 @@ public sealed class FimModelCatalog : IModelCatalog
             Notes: "Google CodeGemma 7B.",
             ApproxBytes: 5_000_000_000,
             Family: "CodeGemma",
+            MlxRepoId: "mlx-community/codegemma-7b-4bit",
+            MlxSizeLabel: "~6.0 GB",
+            MlxApproxBytes: 5_955_126_526,
             RequiresLicenseAcceptance: true,
             LicenseName: "Gemma Terms of Use",
             LicenseUrl: new Uri("https://ai.google.dev/gemma/terms"),
@@ -103,7 +121,10 @@ public sealed class FimModelCatalog : IModelCatalog
             SourceModelUrl: new Uri("https://huggingface.co/bigcode/starcoder2-3b"),
             Notes: "BigCode StarCoder2 3B (FIM-capable).",
             ApproxBytes: 1_800_000_000,
-            Family: "StarCoder2"),
+            Family: "StarCoder2",
+            MlxRepoId: "mlx-community/starcoder2-3b-4bit",
+            MlxSizeLabel: "~1.9 GB",
+            MlxApproxBytes: 1_926_573_690),
         new(
             Id: FimModelIds.StarCoder2_7B,
             DisplayName: "StarCoder2 7B (Q4_K_M)",
@@ -113,7 +134,10 @@ public sealed class FimModelCatalog : IModelCatalog
             SourceModelUrl: new Uri("https://huggingface.co/bigcode/starcoder2-7b"),
             Notes: "BigCode StarCoder2 7B.",
             ApproxBytes: 4_400_000_000,
-            Family: "StarCoder2"),
+            Family: "StarCoder2",
+            MlxRepoId: "mlx-community/starcoder2-7b-4bit",
+            MlxSizeLabel: "~4.4 GB",
+            MlxApproxBytes: 4_366_764_336),
         new(
             Id: FimModelIds.StarCoder2_15B,
             DisplayName: "StarCoder2 15B (Q4_K_M)",
@@ -123,7 +147,10 @@ public sealed class FimModelCatalog : IModelCatalog
             SourceModelUrl: new Uri("https://huggingface.co/bigcode/starcoder2-15b"),
             Notes: "BigCode StarCoder2 15B — needs substantial VRAM/RAM.",
             ApproxBytes: 9_100_000_000,
-            Family: "StarCoder2"),
+            Family: "StarCoder2",
+            MlxRepoId: "mlx-community/starcoder2-15b-4bit",
+            MlxSizeLabel: "~13.8 GB",
+            MlxApproxBytes: 13_781_307_790),
 
         new(
             Id: FimModelIds.Codestral22B,
@@ -141,7 +168,10 @@ public sealed class FimModelCatalog : IModelCatalog
             LicenseSummary:
                 "Codestral is released under the Mistral Non-Production License (MNPL). " +
                 "It is NOT a permissive open-source license: commercial / production use is restricted. " +
-                "You must read and accept the MNPL before downloading or using this model."),
+                "You must read and accept the MNPL before downloading or using this model.",
+            MlxRepoId: "mlx-community/Codestral-22B-v0.1-4bit",
+            MlxSizeLabel: "~12.5 GB",
+            MlxApproxBytes: 12_517_773_853),
     ];
 
     public ModelDescriptor Resolve(string? modelId)

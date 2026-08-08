@@ -74,6 +74,29 @@ public sealed class LlamaServerGitCommitMessageAiService : JustyBase.Ai.Git.IGit
         }
 
         var prompt = GitCommitPromptBuilder.Build(changeContext);
+
+        // MLX (Apple Silicon) serves the OpenAI /v1/completions endpoint instead of llama.cpp's
+        // native /completion, so the request and response shapes differ by backend.
+        if (server is MlxServerInstance)
+        {
+            using var mlx = new MlxCompletionClient(_http);
+            var mlxRaw = await mlx.CompleteAsync(
+                server.Endpoint,
+                prompt,
+                maxTokens: 96,
+                temperature: 0.2f,
+                topP: 0.9f,
+                cancellationToken).ConfigureAwait(false);
+
+            if (string.IsNullOrWhiteSpace(mlxRaw))
+            {
+                return null;
+            }
+
+            var mlxCleaned = GitCommitPromptBuilder.CleanMessage(mlxRaw);
+            return string.IsNullOrWhiteSpace(mlxCleaned) ? null : mlxCleaned;
+        }
+
         var body = new LlamaGitCompletionRequest
         {
             Prompt = prompt,
