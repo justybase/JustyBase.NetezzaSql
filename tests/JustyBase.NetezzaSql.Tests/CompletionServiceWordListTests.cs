@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using JustyBase.Core.Database;
 using JustyBase.NetezzaSqlParser.Ast;
+using JustyBase.NetezzaSqlParser.Completion;
 using JustyBase.NetezzaSqlParser.Visitor;
 using JustyBase.NetezzaSqlLsp.Protocol;
 using JustyBase.NetezzaSqlLsp.Services;
@@ -81,6 +82,18 @@ public sealed class CompletionServiceWordListTests
 
         var selectItems = list.Items!.Where(i => i.Label == "SELECT").ToList();
         Assert.Single(selectItems); // engine keyword wins; the provider duplicate is dropped
+    }
+
+    [Fact]
+    public async Task Lsp_engine_items_match_core_orchestrator_items()
+    {
+        const string sql = "SELECT * FROM ";
+        var core = await CompletionOrchestrator.GetCompletions(sql, sql.Length, null);
+        var lsp = await CompletionService.GetCompletions(sql, 0, sql.Length, null);
+
+        Assert.Equal(
+            core.EngineItems.Select(item => item.Label),
+            lsp.Items!.Where(item => item.InsertText is null).Select(item => item.Label));
     }
 
     private sealed class FakeWordListProvider : ISqlDbWordListProvider

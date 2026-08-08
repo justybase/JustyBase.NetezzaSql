@@ -46,16 +46,38 @@ public sealed class EngineSqlWordListRequestBuilder
             catalog: DialectRuntime.AuthoringCatalogOrNull(_dialect),
             dialect: _dialect);
         engine.GetCompletions(engineSql, engineCursor);
-        var (withHints, tempTableHints, aliasDbTable) = engine.GetScopeHints();
+        return BuildFromEngineResult(
+            engineSql,
+            engineCursor,
+            connectionName,
+            databaseName,
+            engine.GetScopeHints());
+    }
+
+    /// <summary>
+    /// Builds a request from an already executed engine result. This avoids a
+    /// second parse when the completion orchestrator needs the word-list path.
+    /// </summary>
+    public SqlWordListRequest BuildFromEngineResult(
+        string engineSql,
+        int engineCursor,
+        string? connectionName,
+        string? databaseName,
+        (Dictionary<string, List<string>> WithHints,
+         Dictionary<string, List<string>> TempTableHints,
+         Dictionary<string, List<string>> AliasDbTable) hints)
+    {
+        ArgumentNullException.ThrowIfNull(engineSql);
+        engineCursor = Math.Clamp(engineCursor, 0, engineSql.Length);
 
         SqlWordListRequest fromEngine = SqlWordListRequest.FromText(
             engineSql, engineCursor, connectionName, databaseName);
 
         return fromEngine with
         {
-            AliasDbTable = ToReadOnly(aliasDbTable),
-            WithHints = ToReadOnly(withHints),
-            TempTableHints = ToReadOnly(tempTableHints)
+            AliasDbTable = ToReadOnly(hints.AliasDbTable),
+            WithHints = ToReadOnly(hints.WithHints),
+            TempTableHints = ToReadOnly(hints.TempTableHints)
         };
     }
 

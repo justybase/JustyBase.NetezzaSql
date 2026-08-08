@@ -10,6 +10,9 @@
     <PublishAot>true</PublishAot>
     <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
     <IsPackable>false</IsPackable>
+    <!-- Superpower is a third-party parser dependency that emits an aggregate
+         trim warning under NativeAOT; the LSP code itself remains AOT-safe. -->
+    <NoWarn>$(NoWarn);IL2104</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

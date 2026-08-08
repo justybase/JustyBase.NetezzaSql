@@ -1,6 +1,6 @@
 using JustyBase.Core.Database;
-using JustyBase.NetezzaSqlParser.Authoring;
 using JustyBase.NetezzaSqlParser.Completion;
+using JustyBase.NetezzaSqlParser.Caching;
 using JustyBase.NetezzaSqlParser.Dialects;
 using JustyBase.NetezzaSqlParser.Visitor;
 using JustyBase.NetezzaSqlLsp.Protocol;
@@ -51,15 +51,9 @@ public static class CompletionService
     };
 
     /// <summary>
-    /// Returns LSP completions at the given position. When a live-database
-    /// word-list provider is supplied, its neutral items are merged after the
-    /// engine items (deduplicated by label) through the shared headless
-    /// <see cref="SqlWordListService"/> — the <c>ISqlDbWordListProvider</c> seam.
-    /// The merge is unconditional (no host <c>SqlCompletionMergePolicy</c>
-    /// gate): a provider always contributes items alongside the engine result,
-    /// which is intentional for a headless seam. Hosts that want the
-    /// "skip DB fallback when the engine already found useful results" policy
-    /// must apply it before registering a provider.
+    /// Returns LSP completions at the given position through the shared
+    /// headless completion orchestrator. The merge remains unconditional by
+    /// default because LSP has no host-specific legacy merge policy.
     /// </summary>
     public static async Task<Protocol.CompletionList> GetCompletions(
         string text,
@@ -68,35 +62,37 @@ public static class CompletionService
         ISchemaProvider? schema,
         SqlDialect dialect = SqlDialect.Netezza,
         ISqlDbWordListProvider? wordListProvider = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        DocumentParsingCoordinator? coordinator = null,
+        string? documentUri = null,
+        string? connectionName = null,
+        string? databaseName = null,
+        Func<IReadOnlyList<JustyBase.NetezzaSqlParser.Completion.CompletionItem>, string, bool>? mergePolicy = null)
     {
-        // Convert line/character to offset
-        int offset = 0;
-        int currentLine = 0;
-        for (int i = 0; i < text.Length; i++)
-        {
-            if (currentLine == line)
-            {
-                offset = Math.Min(i + character, text.Length);
-                break;
-            }
-            if (text[i] == '\n')
-                currentLine++;
-        }
+        int offset = GetOffset(text, line, character);
 
         // Parity with the Avalonia editor: whitespace never opens the completion list.
-        if (offset > 0 && char.IsWhiteSpace(text[offset - 1]))
+        if (offset > 0 && CompletionGate.ShouldSuppressTrigger(text[offset - 1]))
             return new Protocol.CompletionList(false, Array.Empty<Protocol.CompletionItem>());
 
-        var catalog = DialectRuntime.AuthoringCatalogOrNull(dialect);
-        var engine = new NzCompletionEngine(schema, catalog: catalog, dialect: dialect);
-        var items = engine.GetCompletions(text, offset);
+        var result = await CompletionOrchestrator.GetCompletions(
+            text,
+            offset,
+            schema,
+            dialect,
+            wordListProvider,
+            mergePolicy,
+            coordinator,
+            documentUri,
+            connectionName,
+            databaseName,
+            new CompletionOrchestrationOptions { ForcedAutocomplete = true },
+            cancellationToken);
 
-        var mapped = new List<Protocol.CompletionItem>(items.Count);
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var item in items)
+        var mapped = new List<Protocol.CompletionItem>(
+            result.EngineItems.Count + result.WordListItems.Count);
+        foreach (var item in result.EngineItems)
         {
-            seen.Add(item.Label);
             mapped.Add(new Protocol.CompletionItem(
                 Label: item.Label,
                 Kind: MapKind(item.Kind),
@@ -105,24 +101,40 @@ public static class CompletionService
             ));
         }
 
-        if (wordListProvider is not null)
+        foreach (var wordItem in result.WordListItems)
         {
-            var builder = new EngineSqlWordListRequestBuilder(dialect);
-            var service = new SqlWordListService(wordListProvider, builder.Build);
-            await foreach (var wordItem in service.GetWordsListAsync(
-                               text, offset, cancellationToken: cancellationToken))
-            {
-                if (!seen.Add(wordItem.Label))
-                    continue;
-                mapped.Add(new Protocol.CompletionItem(
-                    Label: wordItem.Label,
-                    Kind: MapWordListKind(wordItem.Kind),
-                    Detail: wordItem.Detail,
-                    InsertText: wordItem.Label
-                ));
-            }
+            mapped.Add(new Protocol.CompletionItem(
+                Label: wordItem.Label,
+                Kind: MapWordListKind(wordItem.Kind),
+                Detail: wordItem.Detail,
+                InsertText: wordItem.Label
+            ));
         }
 
         return new Protocol.CompletionList(false, mapped.ToArray());
+    }
+
+    private static int GetOffset(string text, int line, int character)
+    {
+        if (line < 0 || character < 0)
+            return 0;
+
+        int currentLine = 0;
+        int lineStart = 0;
+        for (int i = 0; i <= text.Length; i++)
+        {
+            if (currentLine == line)
+            {
+                return Math.Min(lineStart + character, text.Length);
+            }
+
+            if (i < text.Length && text[i] == '\n')
+            {
+                currentLine++;
+                lineStart = i + 1;
+            }
+        }
+
+        return text.Length;
     }
 }

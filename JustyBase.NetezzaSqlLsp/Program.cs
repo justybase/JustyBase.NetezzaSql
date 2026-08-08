@@ -148,7 +148,15 @@ server.RegisterRequestHandler("textDocument/completion", async (root, id, ct) =>
         // No live-database word-list provider is registered today; pass one to
         // CompletionService.GetCompletions to merge DB word-list items (the
         // ISqlDbWordListProvider headless seam).
-        var completions = await CompletionService.GetCompletions(text, line, character, schema, dialect, cancellationToken: ct);
+        var completions = await CompletionService.GetCompletions(
+            text,
+            line,
+            character,
+            schema,
+            dialect,
+            cancellationToken: ct,
+            coordinator: parsingCoordinator,
+            documentUri: uri);
         await server.SendResult(id!, completions, ct);
     }
     catch (Exception ex)
