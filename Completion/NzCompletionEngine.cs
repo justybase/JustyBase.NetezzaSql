@@ -105,7 +105,7 @@ public class NzCompletionEngine
 
         _parsingCoordinator?.GetOrCreate(_documentUri ?? "default", _dialect).Parse(sql);
 
-        var context = AnalyzeContext(contextTokens);
+        var context = AnalyzeContext(contextTokens, IsTrailingWhitespace(sql, cursorPosition));
 
         var suggestions = new List<CompletionItem>();
 
@@ -128,6 +128,10 @@ public class NzCompletionEngine
                 break;
             }
 
+            case CompletionContext.FromClauseTail:
+                AddKeywords(suggestions, SqlContext.FromContinuationKeywords);
+                break;
+
             case CompletionContext.AfterUpdate:
                 AddTables(suggestions);
                 AddKeywords(suggestions, new[] { "SET" });
@@ -146,11 +150,23 @@ public class NzCompletionEngine
                 break;
 
             case CompletionContext.AfterWhere:
-            case CompletionContext.WhereClause:
-            case CompletionContext.AfterOn:
                 AddColumnsFromScope(suggestions, fullTokens, astScope);
                 AddFunctions(suggestions);
                 AddKeywords(suggestions, SqlContext.WhereKeywords);
+                break;
+
+            case CompletionContext.WhereClause:
+            case CompletionContext.AfterOn:
+                if (IsWhereContinuation(contextTokens))
+                {
+                    AddKeywords(suggestions, SqlContext.WhereKeywords);
+                }
+                else
+                {
+                    AddColumnsFromScope(suggestions, fullTokens, astScope);
+                    AddFunctions(suggestions);
+                    AddKeywords(suggestions, SqlContext.WhereKeywords);
+                }
                 break;
 
             case CompletionContext.AfterJoin:
@@ -374,7 +390,7 @@ public class NzCompletionEngine
     {
         TopLevel,
         AfterSelect, SelectList,
-        AfterFrom, FromList,
+        AfterFrom, FromList, FromClauseTail,
         AfterWhere, WhereClause,
         AfterJoin,
         AfterOn,
@@ -402,10 +418,11 @@ public class NzCompletionEngine
         QualifiedReference,
     }
 
-    private static CompletionContext AnalyzeContext(Token<NzToken>[] tokens)
+    private static CompletionContext AnalyzeContext(Token<NzToken>[] tokens, bool lastTokenComplete = false)
     {
         var ctx = CompletionContext.TopLevel;
         int parenDepth = 0;
+        bool sawSelect = false;
 
         if (tokens.Length >= 2 &&
             tokens[^1].Kind == NzToken.Dot &&
@@ -423,7 +440,7 @@ public class NzCompletionEngine
 
             if (parenDepth > 0) continue;
 
-            if (IsSelect(t)) ctx = CompletionContext.AfterSelect;
+            if (IsSelect(t)) { ctx = CompletionContext.AfterSelect; sawSelect = true; }
             else if (IsFrom(t)) ctx = CompletionContext.AfterFrom;
             else if (IsWhere(t)) ctx = CompletionContext.AfterWhere;
             else if (IsJoin(t)) ctx = CompletionContext.AfterJoin;
@@ -539,8 +556,33 @@ public class NzCompletionEngine
             }
         }
 
+        // A completed (space-terminated) table reference or alias at the end of a
+        // SELECT FROM clause expects clause-continuation keywords (JOIN/WHERE/...).
+        // When the caret is on an in-progress word, the completed reference is the
+        // token before it.
+        if (sawSelect &&
+            ctx is CompletionContext.AfterFrom or CompletionContext.FromList &&
+            tokens.Length > 0)
+        {
+            int completedIndex = tokens.Length - 1;
+            if (!lastTokenComplete)
+            {
+                completedIndex--;
+            }
+
+            if (completedIndex >= 0 &&
+                tokens[completedIndex].Kind is NzToken.Identifier or NzToken.QuotedIdentifier &&
+                (completedIndex == 0 || tokens[completedIndex - 1].Kind != NzToken.Comma))
+            {
+                return CompletionContext.FromClauseTail;
+            }
+        }
+
         return ctx;
     }
+
+    private static bool IsTrailingWhitespace(string sql, int cursorPosition)
+        => cursorPosition > 0 && cursorPosition <= sql.Length && char.IsWhiteSpace(sql[cursorPosition - 1]);
 
     private static bool IsSelect(NzToken t) => t == NzToken.Select;
     private static bool IsFrom(NzToken t) => t == NzToken.From;
@@ -549,6 +591,38 @@ public class NzCompletionEngine
     private static bool IsGroupBy(NzToken t) => t == NzToken.GroupBy;
     private static bool IsOrderBy(NzToken t) => t == NzToken.OrderBy;
     private static bool IsHaving(NzToken t) => t == NzToken.Having;
+
+    /// <summary>
+    /// True when the WHERE/ON predicate already contains a comparison operator since
+    /// the last logical boundary (AND/OR/WHERE/start), i.e. the caret is positioned
+    /// after a complete predicate and only continuation keywords make sense.
+    /// </summary>
+    private static bool IsWhereContinuation(Token<NzToken>[] tokens)
+    {
+        int parenDepth = 0;
+        for (int i = tokens.Length - 1; i >= 0; i--)
+        {
+            var t = tokens[i].Kind;
+            if (t == NzToken.RParen) { parenDepth++; continue; }
+            if (t == NzToken.LParen)
+            {
+                if (parenDepth > 0) { parenDepth--; continue; }
+                return false;
+            }
+            if (parenDepth > 0) continue;
+
+            if (t is NzToken.And or NzToken.Or) return false;
+            if (t == NzToken.Where) return false;
+            if (t is NzToken.EqualsOp or NzToken.NotEquals or NzToken.LessThanEquals or NzToken.GreaterThanEquals
+                or NzToken.LessThan or NzToken.GreaterThan or NzToken.Like or NzToken.Ilike
+                or NzToken.Is or NzToken.In or NzToken.Between)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     // ====== Suggestion Generators ======
 
@@ -1265,6 +1339,17 @@ internal static class SqlContext
     {
         "JOIN", "INNER JOIN", "LEFT JOIN", "RIGHT JOIN", "FULL JOIN",
         "CROSS JOIN", "NATURAL JOIN", "ON"
+    };
+
+    /// <summary>
+    /// Keywords valid after a completed table reference / alias in a SELECT FROM clause.
+    /// </summary>
+    public static readonly string[] FromContinuationKeywords =
+    {
+        "JOIN", "INNER JOIN", "LEFT JOIN", "LEFT OUTER JOIN",
+        "RIGHT JOIN", "RIGHT OUTER JOIN", "FULL JOIN", "FULL OUTER JOIN",
+        "CROSS JOIN", "NATURAL JOIN",
+        "WHERE", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET", "FETCH"
     };
 
     public static readonly string[] WhereKeywords =

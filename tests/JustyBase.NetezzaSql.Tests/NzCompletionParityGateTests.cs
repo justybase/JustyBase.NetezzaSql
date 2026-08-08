@@ -260,11 +260,12 @@ public sealed class NzCompletionParityGateTests
     }
 
     [Fact]
-    public void ParityGate_AfterHaving_SuggestsFunctions()
+    public void ParityGate_AfterHaving_CompletePredicate_SuggestsContinuationKeywordsOnly()
     {
         var sql = "SELECT * FROM EMPLOYEES GROUP BY DEPARTMENT_ID HAVING COUNT(*) > ";
         var items = _engine.GetCompletions(sql, sql.Length);
-        Assert.Contains(items, i => i.Kind is CompletionKind.Function or CompletionKind.Column);
+        Assert.Contains(items, i => i.Label == "AND");
+        Assert.DoesNotContain(items, i => i.Kind is CompletionKind.Function or CompletionKind.Column);
     }
 
     [Fact]

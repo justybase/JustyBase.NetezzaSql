@@ -1,5 +1,7 @@
 using System.Runtime.CompilerServices;
 using JustyBase.Core.Database;
+using JustyBase.NetezzaSqlParser.Ast;
+using JustyBase.NetezzaSqlParser.Visitor;
 using JustyBase.NetezzaSqlLsp.Protocol;
 using JustyBase.NetezzaSqlLsp.Services;
 
@@ -17,6 +19,26 @@ public sealed class CompletionServiceWordListTests
     {
         var list = await CompletionService.GetCompletions("SELE", 0, 4, schema: null);
         Assert.Contains(list.Items!, i => i.Label == "SELECT");
+    }
+
+    [Theory]
+    [InlineData("SELECT * FROM ", 14)]
+    [InlineData("SELECT * FROM T A ", 18)]
+    [InlineData("SELECT * FROM T WHERE A.X = 1\t", 30)]
+    public async Task GetCompletions_after_whitespace_returns_empty_list(string sql, int offset)
+    {
+        var list = await CompletionService.GetCompletions(sql, 0, offset, schema: null);
+        Assert.NotNull(list.Items);
+        Assert.Empty(list.Items!);
+    }
+
+    [Fact]
+    public async Task GetCompletions_after_word_char_still_returns_items()
+    {
+        var schema = new InMemorySchemaProvider();
+        schema.AddTable(new TableInfo("DIMDATE", Columns: [new ColumnInfo("ID")]));
+        var list = await CompletionService.GetCompletions("SELECT * FROM DIM", 0, 17, schema);
+        Assert.NotEmpty(list.Items!);
     }
 
     [Fact]

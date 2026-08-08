@@ -84,6 +84,10 @@ public static class CompletionService
                 currentLine++;
         }
 
+        // Parity with the Avalonia editor: whitespace never opens the completion list.
+        if (offset > 0 && char.IsWhiteSpace(text[offset - 1]))
+            return new Protocol.CompletionList(false, Array.Empty<Protocol.CompletionItem>());
+
         var catalog = DialectRuntime.AuthoringCatalogOrNull(dialect);
         var engine = new NzCompletionEngine(schema, catalog: catalog, dialect: dialect);
         var items = engine.GetCompletions(text, offset);

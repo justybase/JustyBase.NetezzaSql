@@ -19,7 +19,7 @@ public sealed class LspRequestServiceCoverageTests
 
         var schema = new InMemorySchemaProvider();
         schema.AddTable(new TableInfo("CTE", Columns: [new ColumnInfo("ID")]));
-        var completion = await CompletionService.GetCompletions("SELECT ", 0, 7, schema);
+        var completion = await CompletionService.GetCompletions("SELECT", 0, 6, schema);
         var hover = HoverService.GetHover("SELECT HASH(1)", 0, 7, schema);
         var signature = SignatureHelpService.GetSignatureHelp("SELECT HASH(", 0, 12);
         var diagnostics = LintService.Lint("SELECT * FROM missing_table", schema);

@@ -188,7 +188,7 @@ public sealed class PostgreSqlSqlParserTests
         Assert.Equal(SqlDialect.PostgreSql, LspDialectArgs.Parse(["--dialect", "postgres"]));
         var diagnostics = LintService.Lint("SELECT JSONB_BUILD_OBJECT('id', id) FROM public.items", null, SqlDialect.PostgreSql);
         Assert.Empty(diagnostics);
-        var completions = await CompletionService.GetCompletions("SELECT ", 0, 7, null, SqlDialect.PostgreSql);
+        var completions = await CompletionService.GetCompletions("SELECT", 0, 6, null, SqlDialect.PostgreSql);
         Assert.Contains(completions.Items!, item => item.Label == "JSONB_BUILD_OBJECT");
     }
 }

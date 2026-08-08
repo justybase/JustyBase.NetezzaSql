@@ -145,7 +145,7 @@ public sealed class OracleDialectLspTests
     [Fact]
     public async Task Completion_OracleDialect_OffersOracleFunctions()
     {
-        var completions = await CompletionService.GetCompletions("SELECT ", 0, 7, null, SqlDialect.Oracle);
+        var completions = await CompletionService.GetCompletions("SELECT", 0, 6, null, SqlDialect.Oracle);
 
         Assert.NotNull(completions.Items);
         Assert.Contains(completions.Items!, i => i.Label == "NVL");

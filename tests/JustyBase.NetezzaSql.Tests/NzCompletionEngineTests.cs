@@ -977,4 +977,145 @@ public sealed class NzCompletionEngineTests
         Assert.Contains(i, x => x.Label == "employees" && x.Kind == CompletionKind.Table);
         Assert.DoesNotContain(i, x => x.Label == "orders");
     }
+
+    // ===== FromClauseTail: continuation keywords after a completed FROM reference/alias =====
+
+    [Fact]
+    public void FromClauseTail_after_alias_suggests_continuation_keywords()
+    {
+        const string sql = "SELECT * FROM employees e ";
+        var i = _engine.GetCompletions(sql, sql.Length);
+
+        Assert.Contains(i, x => x.Label == "JOIN" && x.Kind == CompletionKind.Keyword);
+        Assert.Contains(i, x => x.Label == "LEFT OUTER JOIN" && x.Kind == CompletionKind.Keyword);
+        Assert.Contains(i, x => x.Label == "FULL OUTER JOIN" && x.Kind == CompletionKind.Keyword);
+        Assert.Contains(i, x => x.Label == "WHERE" && x.Kind == CompletionKind.Keyword);
+        Assert.Contains(i, x => x.Label == "GROUP BY" && x.Kind == CompletionKind.Keyword);
+        Assert.Contains(i, x => x.Label == "ORDER BY" && x.Kind == CompletionKind.Keyword);
+        Assert.Contains(i, x => x.Label == "LIMIT" && x.Kind == CompletionKind.Keyword);
+        Assert.Contains(i, x => x.Label == "OFFSET" && x.Kind == CompletionKind.Keyword);
+        Assert.Contains(i, x => x.Label == "FETCH" && x.Kind == CompletionKind.Keyword);
+        Assert.DoesNotContain(i, x => x.Label == "employees");
+        Assert.DoesNotContain(i, x => x.Label == "ON");
+    }
+
+    [Fact]
+    public void FromClauseTail_after_plain_table_suggests_continuation_keywords()
+    {
+        const string sql = "SELECT * FROM employees ";
+        var i = _engine.GetCompletions(sql, sql.Length);
+
+        Assert.Contains(i, x => x.Label == "WHERE" && x.Kind == CompletionKind.Keyword);
+        Assert.DoesNotContain(i, x => x.Kind == CompletionKind.Column);
+        Assert.DoesNotContain(i, x => x.Kind == CompletionKind.Function);
+    }
+
+    [Fact]
+    public void FromClauseTail_prefix_filters_multiword_keywords()
+    {
+        const string sql = "SELECT * FROM employees e L";
+        var i = _engine.GetCompletions(sql, sql.Length);
+
+        Assert.Contains(i, x => x.Label == "LEFT JOIN" && x.Kind == CompletionKind.Keyword);
+        Assert.Contains(i, x => x.Label == "LIMIT" && x.Kind == CompletionKind.Keyword);
+        Assert.DoesNotContain(i, x => x.Label == "WHERE");
+        Assert.All(i, x => Assert.StartsWith("L", x.Label, StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void FromClauseTail_mid_word_table_typing_still_suggests_tables()
+    {
+        var schema = SqlTestHelpers.CreateMultiSchemaDuplicateCatalog();
+        var engine = new NzCompletionEngine(schema);
+
+        const string sql = "SELECT * FROM DIMDA";
+        var i = engine.GetCompletions(sql, sql.Length);
+
+        Assert.Contains(i, x => x.Label == "DIMDATE" && x.Kind == CompletionKind.Table);
+        Assert.DoesNotContain(i, x => x.Kind == CompletionKind.Keyword);
+    }
+
+    [Fact]
+    public void FromList_after_comma_suggests_tables_not_continuation_keywords()
+    {
+        const string sql = "SELECT * FROM employees e, ";
+        var i = _engine.GetCompletions(sql, sql.Length);
+
+        Assert.Contains(i, x => x.Label == "departments" && x.Kind == CompletionKind.Table);
+        Assert.DoesNotContain(i, x => x.Label == "JOIN");
+    }
+
+    [Fact]
+    public void FromClauseTail_qualified_table_suggests_continuation_keywords()
+    {
+        const string sql = "SELECT * FROM MYDB..employees ";
+        var i = _engine.GetCompletions(sql, sql.Length);
+
+        Assert.Contains(i, x => x.Label == "JOIN" && x.Kind == CompletionKind.Keyword);
+        Assert.Contains(i, x => x.Label == "WHERE" && x.Kind == CompletionKind.Keyword);
+    }
+
+    [Fact]
+    public void FromClauseTail_not_applied_to_update_statements()
+    {
+        const string sql = "UPDATE employees ";
+        var i = _engine.GetCompletions(sql, sql.Length);
+
+        Assert.Contains(i, x => x.Label == "SET" && x.Kind == CompletionKind.Keyword);
+        Assert.DoesNotContain(i, x => x.Label == "JOIN");
+        Assert.DoesNotContain(i, x => x.Label == "WHERE");
+    }
+
+    // ===== WhereClause vs WhereContinuation =====
+
+    [Fact]
+    public void WhereClauseStart_suggests_columns_functions_and_keywords()
+    {
+        const string sql = "SELECT * FROM employees e WHERE e.";
+        var i = _engine.GetCompletions(sql, sql.Length);
+
+        Assert.Contains(i, x => x.Label == "id" && x.Kind == CompletionKind.Column);
+    }
+
+    [Fact]
+    public void WhereContinuation_after_full_predicate_suggests_keywords_only()
+    {
+        const string sql = "SELECT * FROM employees e WHERE e.salary = 1 ";
+        var i = _engine.GetCompletions(sql, sql.Length);
+
+        Assert.Contains(i, x => x.Label == "AND" && x.Kind == CompletionKind.Keyword);
+        Assert.Contains(i, x => x.Label == "OR" && x.Kind == CompletionKind.Keyword);
+        Assert.Contains(i, x => x.Label == "IN" && x.Kind == CompletionKind.Keyword);
+        Assert.DoesNotContain(i, x => x.Kind == CompletionKind.Column);
+        Assert.DoesNotContain(i, x => x.Kind == CompletionKind.Function);
+    }
+
+    [Fact]
+    public void WhereContinuation_after_like_predicate_suggests_keywords_only()
+    {
+        const string sql = "SELECT * FROM employees e WHERE e.name LIKE 'x' ";
+        var i = _engine.GetCompletions(sql, sql.Length);
+
+        Assert.Contains(i, x => x.Label == "AND" && x.Kind == CompletionKind.Keyword);
+        Assert.DoesNotContain(i, x => x.Kind == CompletionKind.Column);
+    }
+
+    [Fact]
+    public void WhereClauseStart_after_and_boundary_suggests_columns_again()
+    {
+        const string sql = "SELECT * FROM employees e WHERE e.salary = 1 AND ";
+        var i = _engine.GetCompletions(sql, sql.Length);
+
+        Assert.Contains(i, x => x.Label == "salary" && x.Kind == CompletionKind.Column);
+    }
+
+    [Fact]
+    public void WhereContinuation_parens_are_balanced_before_detection()
+    {
+        const string sql = "SELECT * FROM employees e WHERE e.salary = 1 AND e.dept_id IN (1, 2) ";
+        var i = _engine.GetCompletions(sql, sql.Length);
+
+        Assert.Contains(i, x => x.Label == "AND" && x.Kind == CompletionKind.Keyword);
+        Assert.DoesNotContain(i, x => x.Kind == CompletionKind.Column);
+    }
 }

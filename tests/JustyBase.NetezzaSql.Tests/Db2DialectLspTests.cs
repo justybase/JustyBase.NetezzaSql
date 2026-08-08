@@ -71,7 +71,7 @@ public sealed class Db2DialectLspTests
     [Fact]
     public async Task Completion_Db2Dialect_OffersDb2Functions()
     {
-        var completions = await CompletionService.GetCompletions("SELECT ", 0, 7, null, SqlDialect.Db2);
+        var completions = await CompletionService.GetCompletions("SELECT", 0, 6, null, SqlDialect.Db2);
         Assert.NotNull(completions.Items);
         Assert.Contains(completions.Items!, i => i.Label.Equals("COALESCE", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(completions.Items!, i => i.Label.Equals("CONCAT", StringComparison.OrdinalIgnoreCase));
