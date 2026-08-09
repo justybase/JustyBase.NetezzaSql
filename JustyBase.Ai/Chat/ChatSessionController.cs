@@ -49,6 +49,7 @@ public sealed class ChatSessionController
     public event EventHandler<bool>? StreamingChanged;
     public event EventHandler<ChatMessage>? UserMessageAdded;
     public event EventHandler<ChatMessage>? AssistantMessageStarted;
+    public event EventHandler<ChatMessage>? AssistantMessageContentChanged;
     public event EventHandler<ChatMessage>? AssistantMessageCompleted;
     public event EventHandler<ChatMessage>? ToolConfirmationRequested;
     public event EventHandler<string>? StatusMessageChanged;
@@ -147,6 +148,7 @@ public sealed class ChatSessionController
                 _currentStreamingCts.Token))
             {
                 assistantMessage.Content += chunk;
+                AssistantMessageContentChanged?.Invoke(this, assistantMessage);
             }
 
             CurrentSession.CodexThreadId = _chatService.GetCodexThreadId();
@@ -154,6 +156,13 @@ public sealed class ChatSessionController
             assistantMessage.IsStreaming = false;
             stopwatch.Stop();
             assistantMessage.GenerationTimeMs = stopwatch.ElapsedMilliseconds;
+            var reasoning = _chatService.LastReasoningContent;
+            if (!string.IsNullOrWhiteSpace(reasoning) && !string.IsNullOrWhiteSpace(assistantMessage.Content))
+            {
+                // The visible answer is the thinking text only when the model answered
+                // entirely inside its reasoning phase (the client flushes it into Content).
+                assistantMessage.ThinkingContent = reasoning;
+            }
             CurrentSession.Messages.Add(assistantMessage);
             CurrentSession.LastActivityAt = DateTime.Now;
             AssistantMessageCompleted?.Invoke(this, assistantMessage);

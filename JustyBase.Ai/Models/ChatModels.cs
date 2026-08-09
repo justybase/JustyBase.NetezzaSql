@@ -256,6 +256,22 @@ public sealed class ChatMessage : INotifyPropertyChanged
 
     public bool HasThinkingContent => !string.IsNullOrWhiteSpace(_thinkingContent);
 
+    private bool _isThinkingExpanded;
+
+    /// <summary>Whether the collapsed "thinking" section of an assistant message is expanded.</summary>
+    public bool IsThinkingExpanded
+    {
+        get => _isThinkingExpanded;
+        set
+        {
+            if (_isThinkingExpanded != value)
+            {
+                _isThinkingExpanded = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
     public bool ShowThinkingInline => IsStreaming && HasThinkingContent && string.IsNullOrWhiteSpace(Content);
 
     public List<ChatAttachment> Attachments

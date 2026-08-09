@@ -137,6 +137,14 @@ server.RegisterRequestHandler("textDocument/completion", async (root, id, ct) =>
         var pos = p.GetProperty("position");
         var line = pos.GetProperty("line").GetInt32();
         var character = pos.GetProperty("character").GetInt32();
+        int? triggerKind = null;
+        if (p.TryGetProperty("context", out var completionContext)
+            && completionContext.ValueKind == JsonValueKind.Object
+            && completionContext.TryGetProperty("triggerKind", out var triggerKindValue)
+            && triggerKindValue.TryGetInt32(out var parsedTriggerKind))
+        {
+            triggerKind = parsedTriggerKind;
+        }
 
         var text = docs.GetText(uri);
         if (text is null)
@@ -156,7 +164,8 @@ server.RegisterRequestHandler("textDocument/completion", async (root, id, ct) =>
             dialect,
             cancellationToken: ct,
             coordinator: parsingCoordinator,
-            documentUri: uri);
+            documentUri: uri,
+            triggerKind: triggerKind);
         await server.SendResult(id!, completions, ct);
     }
     catch (Exception ex)

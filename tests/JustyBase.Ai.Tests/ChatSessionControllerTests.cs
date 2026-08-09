@@ -120,7 +120,11 @@ public sealed class ChatSessionControllerTests
 
         public FakeChatService(string[] chunks) : this(new ScriptedStream(chunks.Select(c => (Func<CancellationToken, Task<string>>)(_ => Task.FromResult(c))).ToArray())) { }
 
-        public FakeChatService(IAsyncEnumerable<string> script) => _script = script;
+        public FakeChatService(IAsyncEnumerable<string> script)
+        {
+            _script = script;
+            ReasoningChunkReceived += _ => { };
+        }
 
         public bool IsConnected => true;
         public string? ConnectionError => null;
@@ -156,6 +160,10 @@ public sealed class ChatSessionControllerTests
         public Task CancelCurrentRequestAsync() => Task.CompletedTask;
         public void SetCodexThreadId(string? threadId) => _threadId = threadId;
         public string? GetCodexThreadId() => _threadId;
+        public string? LastReasoningContent { get; set; }
+#pragma warning disable CS0067 // test fake: reasoning channel is exercised by the scripted streams
+        public event Action<string>? ReasoningChunkReceived;
+#pragma warning restore CS0067
     }
 
     private sealed class ScriptedStream : IAsyncEnumerable<string>

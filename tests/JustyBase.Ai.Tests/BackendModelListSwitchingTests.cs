@@ -27,7 +27,7 @@ public sealed class BackendModelListSwitchingTests
 
         Assert.True(await service.SwitchBackendAsync("embedded"));
         Assert.Equal(["qwen3.5-4b"], await service.GetAvailableModelsAsync());
-        Assert.Equal(["low", "medium", "high"], await service.GetAvailableReasoningEffortsAsync());
+        Assert.Equal(["low", "medium", "high", "off"], await service.GetAvailableReasoningEffortsAsync());
 
         Assert.Equal("embedded", service.ActiveBackendId);
         Assert.True(service.IsConnected);
@@ -41,7 +41,7 @@ public sealed class BackendModelListSwitchingTests
             new FakeBackend("embedded", "Embedded (local)", "m2"));
 
         await service.SwitchBackendAsync("embedded");
-        Assert.Equal(["low", "medium", "high"], await service.GetAvailableReasoningEffortsAsync());
+        Assert.Equal(["low", "medium", "high", "off"], await service.GetAvailableReasoningEffortsAsync());
 
         await service.SwitchBackendAsync("openai-compatible");
         Assert.Empty(await service.GetAvailableReasoningEffortsAsync());
@@ -150,6 +150,16 @@ public sealed class BackendModelListSwitchingTests
 /// <summary>Proves the OpenAI-compatible client serializes reasoning_effort for the embedded backend only.</summary>
 public sealed class OpenAiReasoningEffortTests
 {
+    [Fact]
+    public void NormalizeReasoningEffort_MapsOffToNull()
+    {
+        Assert.Null(LocalChatService.NormalizeReasoningEffort("off"));
+        Assert.Null(LocalChatService.NormalizeReasoningEffort("OFF"));
+        Assert.Null(LocalChatService.NormalizeReasoningEffort(null));
+        Assert.Equal("low", LocalChatService.NormalizeReasoningEffort("low"));
+        Assert.Equal("high", LocalChatService.NormalizeReasoningEffort("high"));
+    }
+
     [Fact]
     public async Task EmbeddedClient_SendsReasoningEffort_WhenProvided()
     {

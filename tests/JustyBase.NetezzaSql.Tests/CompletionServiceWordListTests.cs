@@ -34,6 +34,22 @@ public sealed class CompletionServiceWordListTests
     }
 
     [Fact]
+    public async Task GetCompletions_explicitInvocationAfterWhitespace_returnsItems()
+    {
+        var schema = new InMemorySchemaProvider();
+        schema.AddTable(new TableInfo("EMPLOYEES", Columns: [new ColumnInfo("ID")]));
+
+        var list = await CompletionService.GetCompletions(
+            "SELECT * FROM ",
+            0,
+            14,
+            schema,
+            triggerKind: (int)CompletionTriggerKind.Invoked);
+
+        Assert.Contains(list.Items!, item => item.Label == "EMPLOYEES");
+    }
+
+    [Fact]
     public async Task GetCompletions_after_word_char_still_returns_items()
     {
         var schema = new InMemorySchemaProvider();

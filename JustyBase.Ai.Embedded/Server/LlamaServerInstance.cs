@@ -80,6 +80,8 @@ public sealed class LlamaServerInstance : ILlamaServerInstance
             }
 
             _process = process;
+            // Track the child so a crashed host can be cleaned up on the next start.
+            LlamaServerProcessRegistry.Register(process, _binaryPath);
             _ = Task.Run(() => PumpProcessOutput(process, LogFilePath), CancellationToken.None);
         }
         catch (Exception ex)
@@ -213,7 +215,12 @@ public sealed class LlamaServerInstance : ILlamaServerInstance
             "--port",
             port.ToString(System.Globalization.CultureInfo.InvariantCulture),
             "--n-gpu-layers",
-            gpuLayers < 0 ? "auto" : gpuLayers.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            // Existing settings use 99 as the persisted "Auto" value. Keep accepting the
+            // negative internal sentinel as well so both old and new settings reach llama.cpp's
+            // native auto-offload mode.
+            gpuLayers < 0 || gpuLayers == 99
+                ? "auto"
+                : gpuLayers.ToString(System.Globalization.CultureInfo.InvariantCulture),
             "--ctx-size",
             contextSize.ToString(System.Globalization.CultureInfo.InvariantCulture),
             "--no-webui",
@@ -253,6 +260,7 @@ public sealed class LlamaServerInstance : ILlamaServerInstance
                 await process.WaitForExitAsync().ConfigureAwait(false);
             }
 
+            LlamaServerProcessRegistry.Unregister(process.Id);
             process.Dispose();
         }
         catch

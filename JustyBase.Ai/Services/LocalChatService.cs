@@ -37,6 +37,12 @@ public interface ICopilotChatService
     Task CancelCurrentRequestAsync();
     void SetCodexThreadId(string? threadId);
     string? GetCodexThreadId();
+
+    /// <summary>Reasoning (thinking) text accumulated during the last streaming turn, or null.</summary>
+    string? LastReasoningContent { get; }
+
+    /// <summary>Fired with each reasoning (thinking) chunk as it streams from a local backend.</summary>
+    event Action<string>? ReasoningChunkReceived;
 }
 
 public sealed class LocalChatService : ICopilotChatService, IAsyncDisposable, IDisposable
@@ -55,9 +61,21 @@ public sealed class LocalChatService : ICopilotChatService, IAsyncDisposable, ID
     public bool IsConnected => _isConnected;
     public string? ConnectionError { get; private set; }
 
+    public string? LastReasoningContent
+    {
+        get
+        {
+            var reasoning = _activeReasoning.ToString();
+            return string.IsNullOrWhiteSpace(reasoning) ? null : reasoning;
+        }
+    }
+
     private ILocalChatBackend? _activeBackend;
     private string? _activeBackendId;
     private ChatMode _currentMode = ChatMode.Expert;
+    private readonly StringBuilder _activeReasoning = new();
+
+    public event Action<string>? ReasoningChunkReceived;
 
     private Func<string, string, Task<bool>>? _toolConfirmationHandler;
     private int? _lastSqlHash;
@@ -249,7 +267,6 @@ public sealed class LocalChatService : ICopilotChatService, IAsyncDisposable, ID
                 _activeBackendId = backend.Id;
                 _isConnected = true;
                 ConnectionError = null;
-                _logger?.TrackError(new Exception($"Switched to {backend.DisplayName} at {backend.Endpoint}"), isCrash: false);
                 return true;
             }
 
@@ -269,7 +286,6 @@ public sealed class LocalChatService : ICopilotChatService, IAsyncDisposable, ID
 
     public async Task<bool> InitializeAsync()
     {
-        _logger?.TrackError(new Exception("Initializing local chat backend..."), isCrash: false);
         ConnectionError = null;
         MigrateLegacyBackendConfiguration();
 
@@ -289,7 +305,6 @@ public sealed class LocalChatService : ICopilotChatService, IAsyncDisposable, ID
                     _activeBackend = backend;
                     _activeBackendId = backend.Id;
                     _isConnected = true;
-                    _logger?.TrackError(new Exception($"Connected to {backend.DisplayName} at {backend.Endpoint}"), isCrash: false);
                     return true;
                 }
             }
@@ -317,12 +332,31 @@ public sealed class LocalChatService : ICopilotChatService, IAsyncDisposable, ID
 
         // The embedded llama-server accepts reasoning_effort for models with a thinking
         // chat template (Qwen3-family GGUF). The exact set is model-dependent; expose the
-        // same standard values the OpenAI-style APIs use.
+        // same standard values the OpenAI-style APIs use, plus "off" to disable thinking
+        // (sends {"think": false} instead of a reasoning budget).
         if (string.Equals(_activeBackendId, "embedded", StringComparison.OrdinalIgnoreCase))
-            return ["low", "medium", "high"];
+            return ["low", "medium", "high", "off"];
 
         return [];
     }
+
+    /// <summary>
+    /// Maps the UI-level "off" choice to "no reasoning": it is dropped from the request so
+    /// the client's {"think": false} suppression applies instead of a thinking budget.
+    /// </summary>
+    internal static string? NormalizeReasoningEffort(string? reasoningEffort)
+        => string.Equals(reasoningEffort, "off", StringComparison.OrdinalIgnoreCase)
+            ? null
+            : reasoningEffort;
+
+    /// <summary>
+    /// System-prompt instruction appended when "No reasoning" is selected for the embedded
+    /// backend. Empirically required: llama.cpp ignores {"think": false} for models whose
+    /// chat template has no thinking control (Gemma 4 streams reasoning_content anyway),
+    /// while the explicit instruction reliably suppresses the thinking phase.
+    /// </summary>
+    internal const string NoThinkingSystemPrompt =
+        "Answer directly and immediately. Do NOT think or reason — respond with the final answer only, without any internal deliberation.";
 
     public async IAsyncEnumerable<string> SendMessageAsync(
         List<ChatMessage> messages,
@@ -330,6 +364,11 @@ public sealed class LocalChatService : ICopilotChatService, IAsyncDisposable, ID
         string? reasoningEffort = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        // Clear state before any backend/model-selection exit. Codex turns and failed model
+        // loads do not reach the embedded streaming branch below, so clearing only there can
+        // attach the previous turn's thinking to a later assistant message.
+        _activeReasoning.Clear();
+
         if (string.Equals(_activeBackendId, "codex", StringComparison.OrdinalIgnoreCase))
         {
             var codexSqlFix = _currentMode == ChatMode.SqlFix;
@@ -368,6 +407,14 @@ public sealed class LocalChatService : ICopilotChatService, IAsyncDisposable, ID
             yield break;
         }
 
+        // Selecting another downloaded GGUF in the chat panel must reload the embedded
+        // llama-server before the client is created (the endpoint changes with the instance).
+        if (!await EnsureEmbeddedModelLoadedAsync(modelId, cancellationToken, () => "failed to load the selected embedded model").ConfigureAwait(false))
+        {
+            yield return $"[Error: {ConnectionError}]";
+            yield break;
+        }
+
         var client = GetClient(modelId);
         if (client is null)
         {
@@ -377,8 +424,10 @@ public sealed class LocalChatService : ICopilotChatService, IAsyncDisposable, ID
 
         // Reasoning effort is forwarded for the embedded llama-server (Qwen3-style thinking
         // budgets); the OpenAI-compatible backend ignores it (its client does not send it).
+        // "off" means "no thinking" — it must not reach the server as a budget, so the
+        // {"think": false} suppression in the client can take effect instead.
         _reasoningEffort = string.Equals(_activeBackendId, "embedded", StringComparison.OrdinalIgnoreCase)
-            ? reasoningEffort
+            ? NormalizeReasoningEffort(reasoningEffort)
             : null;
 
         switch (_currentMode)
@@ -398,6 +447,36 @@ public sealed class LocalChatService : ICopilotChatService, IAsyncDisposable, ID
                     yield return chunk;
                 break;
         }
+    }
+
+    /// <summary>
+    /// The embedded backend hosts a single GGUF at a time — selecting a different downloaded
+    /// model in the chat panel must reload the llama-server before the request is sent.
+    /// </summary>
+    private async Task<bool> EnsureEmbeddedModelLoadedAsync(
+        string? modelId,
+        CancellationToken cancellationToken,
+        Func<string>? getErrorMessage)
+    {
+        if (!string.Equals(_activeBackendId, "embedded", StringComparison.OrdinalIgnoreCase)
+            || string.IsNullOrWhiteSpace(modelId)
+            || string.Equals(_settingsStore.Settings.EmbeddedChatModelId, modelId, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (_clientFactory.GetBackend("embedded") is not EmbeddedChatBackend embeddedBackend)
+        {
+            return false;
+        }
+
+        var loaded = await embeddedBackend.EnsureModelAsync(modelId, cancellationToken).ConfigureAwait(false);
+        if (!loaded && getErrorMessage is not null)
+        {
+            ConnectionError = embeddedBackend.LastError ?? getErrorMessage();
+        }
+
+        return loaded;
     }
 
     #region Mode Implementations
@@ -729,13 +808,30 @@ public sealed class LocalChatService : ICopilotChatService, IAsyncDisposable, ID
     {
         var basePrompt = _promptBuilder.Build(mode);
         var overrideText = _settingsStore.Settings.AiChatSystemPromptOverride;
+        string prompt;
         if (string.IsNullOrWhiteSpace(overrideText))
         {
-            return basePrompt;
+            prompt = basePrompt;
         }
-        return string.IsNullOrWhiteSpace(basePrompt)
-            ? overrideText.Trim()
-            : $"{overrideText.Trim()}\n\n{basePrompt}";
+        else
+        {
+            prompt = string.IsNullOrWhiteSpace(basePrompt)
+                ? overrideText.Trim()
+                : $"{overrideText.Trim()}\n\n{basePrompt}";
+        }
+
+        // The embedded backend with "No reasoning" (effort = off) must suppress the model's
+        // thinking phase. llama.cpp only honors {"think": false} for templates that implement
+        // thinking control (Qwen3 family); Gemma 4 ignores it and still streams
+        // reasoning_content — an explicit system instruction is the reliable switch.
+        if (string.Equals(_activeBackendId, "embedded", StringComparison.OrdinalIgnoreCase)
+            && _reasoningEffort is null
+            && !string.IsNullOrWhiteSpace(prompt))
+        {
+            return $"{prompt}\n\n{NoThinkingSystemPrompt}";
+        }
+
+        return prompt;
     }
 
     private async Task<(List<Microsoft.Extensions.AI.ChatMessage> AiMessages, string CurrentPrompt)> BuildAiMessagesAsync(
@@ -1214,14 +1310,23 @@ public sealed class LocalChatService : ICopilotChatService, IAsyncDisposable, ID
         }
     }
 
-    private static async IAsyncEnumerable<string> InnerStreamAsync(
+    private async IAsyncEnumerable<string> InnerStreamAsync(
         IChatClient client,
         List<Microsoft.Extensions.AI.ChatMessage> messages,
         ChatOptions options,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
+        _activeReasoning.Clear();
         await foreach (var update in client.GetStreamingResponseAsync(messages, options, cancellationToken))
         {
+            if (update.AdditionalProperties?.TryGetValue("reasoning_content", out var reasoning) == true
+                && reasoning is string reasoningChunk
+                && !string.IsNullOrEmpty(reasoningChunk))
+            {
+                _activeReasoning.Append(reasoningChunk);
+                ReasoningChunkReceived?.Invoke(reasoningChunk);
+            }
+
             if (update.Text is not null)
             {
                 yield return update.Text;

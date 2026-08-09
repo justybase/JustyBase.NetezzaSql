@@ -74,7 +74,7 @@ public sealed class LlamaServerFimBootstrapService : IFimModelBootstrapService
 
             try
             {
-                var mb = new FileInfo(_store.LocalModelPath).Length / (1024d * 1024d);
+                var mb = _store.LocalModelSizeBytes / (1024d * 1024d);
                 var server = _serverManager.FimServer;
                 var state = server is { IsRunning: true }
                     ? $"server on port {server.Port}"

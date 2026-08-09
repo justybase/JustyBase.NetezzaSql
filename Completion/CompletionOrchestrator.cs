@@ -88,7 +88,7 @@ public static class CompletionOrchestrator
 
         var distinctEngineItems = DistinctEngineItems(engineItems);
         bool shouldRunWordList = wordListProvider is not null
-            && (mergePolicy is null || mergePolicy(distinctEngineItems, engineSql));
+            && (mergePolicy is null || mergePolicy(distinctEngineItems, text));
 
         if (!shouldRunWordList)
             return new CompletionOrchestrationResult(distinctEngineItems, []);

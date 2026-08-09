@@ -82,6 +82,7 @@ public sealed class MlxServerInstance : ILlamaServerInstance
             }
 
             _process = process;
+            LlamaServerProcessRegistry.Register(process, _uvPath);
             _ = Task.Run(() => PumpProcessOutput(process, LogFilePath), CancellationToken.None);
         }
         catch (Exception ex)
@@ -239,6 +240,7 @@ public sealed class MlxServerInstance : ILlamaServerInstance
                 await process.WaitForExitAsync().ConfigureAwait(false);
             }
 
+            LlamaServerProcessRegistry.Unregister(process.Id);
             process.Dispose();
         }
         catch

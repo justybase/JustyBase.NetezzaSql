@@ -21,6 +21,7 @@ namespace JustyBase.NetezzaSqlLsp.Protocol;
 [JsonSerializable(typeof(SemanticTokensOptions))]
 [JsonSerializable(typeof(SemanticTokensLegend))]
 [JsonSerializable(typeof(CompletionParams))]
+[JsonSerializable(typeof(CompletionContext))]
 [JsonSerializable(typeof(CompletionList))]
 [JsonSerializable(typeof(CompletionItem))]
 [JsonSerializable(typeof(PublishDiagnosticsParams))]

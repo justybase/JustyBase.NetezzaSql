@@ -100,7 +100,7 @@ public sealed class LlamaServerManager : IAsyncDisposable, IDisposable
             // that fails on "out of GPU memory" would otherwise keep the old model loaded
             // and make the switch impossible. CPU-only replacements start first (no
             // resource contention) so a failed start keeps the old server running.
-            if ((gpuLayers > 0 || isMlx) && current is { IsRunning: true })
+            if ((gpuLayers != 0 || isMlx) && current is { IsRunning: true })
             {
                 await StopServerCoreAsync(role).ConfigureAwait(false);
             }

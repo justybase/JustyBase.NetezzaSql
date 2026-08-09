@@ -9,6 +9,8 @@ public interface IModelStore
     string ModelsDirectory { get; }
     string ModelFileName { get; }
     string LocalModelPath { get; }
+    /// <summary>Size of the selected model, whether it is a file or a directory snapshot.</summary>
+    long LocalModelSizeBytes => ModelStoreFileSystem.GetSize(LocalModelPath);
     bool IsModelPresent { get; }
     /// <summary>Creates the models directory if missing. Returns the directory path.</summary>
     string EnsureModelsDirectory();
@@ -17,6 +19,47 @@ public interface IModelStore
     bool TryDeleteCurrentModel();
     /// <summary>Deletes only the in-progress .partial file for the selected model (if any).</summary>
     bool TryDeletePartialDownload();
+}
+
+/// <summary>Shared filesystem helpers for GGUF files and MLX directory snapshots.</summary>
+public static class ModelStoreFileSystem
+{
+    public static long GetSize(string path)
+    {
+        if (File.Exists(path))
+        {
+            try
+            {
+                return new FileInfo(path).Length;
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        if (!Directory.Exists(path))
+        {
+            return 0;
+        }
+
+        try
+        {
+            long total = 0;
+            foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+            {
+                total += new FileInfo(file).Length;
+            }
+
+            return total;
+        }
+#pragma warning disable CA1031
+        catch
+#pragma warning restore CA1031
+        {
+            return 0;
+        }
+    }
 }
 
 /// <summary>

@@ -105,7 +105,12 @@ public class NzCompletionEngine
 
         _parsingCoordinator?.GetOrCreate(_documentUri ?? "default", _dialect).Parse(sql);
 
-        var context = AnalyzeContext(contextTokens, IsTrailingWhitespace(sql, cursorPosition));
+        var trailingFromComma = cursorPosition > 0
+            && sql[..cursorPosition].TrimEnd().EndsWith(",", StringComparison.Ordinal);
+        var context = AnalyzeContext(
+            contextTokens,
+            IsTrailingWhitespace(sql, cursorPosition),
+            trailingFromComma);
 
         var suggestions = new List<CompletionItem>();
 
@@ -192,9 +197,16 @@ public class NzCompletionEngine
                 break;
 
             case CompletionContext.AfterHaving:
-                AddColumnsFromScope(suggestions, fullTokens, astScope);
-                AddFunctions(suggestions);
-                AddKeywords(suggestions, new[] { "AND", "OR", "NOT", "IN", "BETWEEN", "LIKE", "ILIKE", "IS", "NULL" });
+                if (IsWhereContinuation(contextTokens))
+                {
+                    AddKeywords(suggestions, new[] { "AND", "OR", "NOT", "IN", "BETWEEN", "LIKE", "ILIKE", "IS", "NULL" });
+                }
+                else
+                {
+                    AddColumnsFromScope(suggestions, fullTokens, astScope);
+                    AddFunctions(suggestions);
+                    AddKeywords(suggestions, new[] { "AND", "OR", "NOT", "IN", "BETWEEN", "LIKE", "ILIKE", "IS", "NULL" });
+                }
                 break;
 
             case CompletionContext.AfterAs:
@@ -418,7 +430,10 @@ public class NzCompletionEngine
         QualifiedReference,
     }
 
-    private static CompletionContext AnalyzeContext(Token<NzToken>[] tokens, bool lastTokenComplete = false)
+    private static CompletionContext AnalyzeContext(
+        Token<NzToken>[] tokens,
+        bool lastTokenComplete = false,
+        bool trailingFromComma = false)
     {
         var ctx = CompletionContext.TopLevel;
         int parenDepth = 0;
@@ -564,6 +579,11 @@ public class NzCompletionEngine
             ctx is CompletionContext.AfterFrom or CompletionContext.FromList &&
             tokens.Length > 0)
         {
+            if (trailingFromComma)
+            {
+                return CompletionContext.FromList;
+            }
+
             int completedIndex = tokens.Length - 1;
             if (!lastTokenComplete)
             {
@@ -600,10 +620,16 @@ public class NzCompletionEngine
     private static bool IsWhereContinuation(Token<NzToken>[] tokens)
     {
         int parenDepth = 0;
+        bool hasRightHandOperand = false;
         for (int i = tokens.Length - 1; i >= 0; i--)
         {
             var t = tokens[i].Kind;
-            if (t == NzToken.RParen) { parenDepth++; continue; }
+            if (t == NzToken.RParen)
+            {
+                parenDepth++;
+                hasRightHandOperand = true;
+                continue;
+            }
             if (t == NzToken.LParen)
             {
                 if (parenDepth > 0) { parenDepth--; continue; }
@@ -617,7 +643,15 @@ public class NzCompletionEngine
                 or NzToken.LessThan or NzToken.GreaterThan or NzToken.Like or NzToken.Ilike
                 or NzToken.Is or NzToken.In or NzToken.Between)
             {
-                return true;
+                // An operator at the caret is an unfinished predicate. Only an operator
+                // encountered after a RHS operand means the comparison is complete.
+                return hasRightHandOperand;
+            }
+
+            if (t is NzToken.Identifier or NzToken.QuotedIdentifier or NzToken.NumberLiteral
+                or NzToken.StringLiteral or NzToken.Null or NzToken.Multiply)
+            {
+                hasRightHandOperand = true;
             }
         }
 

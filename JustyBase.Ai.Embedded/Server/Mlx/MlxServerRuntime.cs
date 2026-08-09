@@ -151,5 +151,11 @@ public sealed class MlxServerRuntime : ILlamaServerBinary
         }
     }
 
-    public void Dispose() => _httpClient.Dispose();
+    public void Dispose()
+    {
+        if (_ownsHttpClient)
+        {
+            _httpClient.Dispose();
+        }
+    }
 }

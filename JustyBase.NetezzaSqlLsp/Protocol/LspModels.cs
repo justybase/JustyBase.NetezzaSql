@@ -91,7 +91,20 @@ public record SemanticTokensOptions(
 
 public record SemanticTokensLegend(string[] TokenTypes, string[] TokenModifiers);
 
-public record CompletionParams(TextDocumentIdentifier TextDocument, Position Position);
+public record CompletionParams(
+    TextDocumentIdentifier TextDocument,
+    Position Position,
+    CompletionContext? Context = null);
+
+/// <summary>Context supplied by the LSP client for an explicit or automatic completion.</summary>
+public record CompletionContext(int TriggerKind, string? TriggerCharacter = null);
+
+public enum CompletionTriggerKind
+{
+    Invoked = 1,
+    TriggerCharacter = 2,
+    TriggerForIncompleteCompletions = 3,
+}
 
 public record TextDocumentIdentifier(string Uri);
 

@@ -67,12 +67,14 @@ public static class CompletionService
         string? documentUri = null,
         string? connectionName = null,
         string? databaseName = null,
-        Func<IReadOnlyList<JustyBase.NetezzaSqlParser.Completion.CompletionItem>, string, bool>? mergePolicy = null)
+        Func<IReadOnlyList<JustyBase.NetezzaSqlParser.Completion.CompletionItem>, string, bool>? mergePolicy = null,
+        int? triggerKind = null)
     {
         int offset = GetOffset(text, line, character);
 
         // Parity with the Avalonia editor: whitespace never opens the completion list.
-        if (offset > 0 && CompletionGate.ShouldSuppressTrigger(text[offset - 1]))
+        var explicitRequest = triggerKind == (int)Protocol.CompletionTriggerKind.Invoked;
+        if (!explicitRequest && offset > 0 && CompletionGate.ShouldSuppressTrigger(text[offset - 1]))
             return new Protocol.CompletionList(false, Array.Empty<Protocol.CompletionItem>());
 
         var result = await CompletionOrchestrator.GetCompletions(

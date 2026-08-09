@@ -103,6 +103,8 @@ public sealed class OpenAiCompatibleChatClient : IChatClient
             // Stream each SSE delta live so long local generations render incrementally;
             // tool calls are accumulated in parallel for the agent loop below.
             var toolCalls = new List<ToolCallAccumulator>();
+            var reasoning = new StringBuilder();
+            var yieldedContent = false;
 
             var body = BuildRequest(history, options, tools);
             var json = JsonSerializer.Serialize(body, OpenAiCompatJsonContext.Default.OpenAiChatRequest);
@@ -158,11 +160,29 @@ public sealed class OpenAiCompatibleChatClient : IChatClient
                     continue;
                 }
 
+                // Qwen3-style thinking models stream the reasoning phase in a separate
+                // "reasoning_content" field. It is surfaced live so hosts can show it,
+                // and retained in case the model answers entirely inside its thinking.
+                if (delta.TryGetProperty("reasoning_content", out var thinking))
+                {
+                    var chunk = thinking.GetString();
+                    if (!string.IsNullOrEmpty(chunk))
+                    {
+                        reasoning.Append(chunk);
+                        yield return new ChatResponseUpdate()
+                        {
+                            Role = ChatRole.Assistant,
+                            AdditionalProperties = new() { ["reasoning_content"] = chunk }
+                        };
+                    }
+                }
+
                 if (delta.TryGetProperty("content", out var content))
                 {
                     var chunk = content.GetString();
                     if (!string.IsNullOrEmpty(chunk))
                     {
+                        yieldedContent = true;
                         yield return new ChatResponseUpdate(ChatRole.Assistant, chunk);
                     }
                 }
@@ -205,14 +225,26 @@ public sealed class OpenAiCompatibleChatClient : IChatClient
                 }
             }
 
+            // A thinking model can spend its whole turn inside the reasoning phase and never
+            // emit delta.content (common for trivial prompts with a reasoning budget). Surface
+            // the reasoning as the answer so the message is never blank.
+            if (!yieldedContent && reasoning.Length > 0 && toolCalls.Count == 0)
+            {
+                yield return new ChatResponseUpdate(ChatRole.Assistant, reasoning.ToString());
+            }
+
             if (toolCalls.Count == 0 || _toolExecutor is null)
             {
                 yield break;
             }
 
-            // Execute tools and continue the conversation for the next round.
-            foreach (var call in toolCalls)
+            // Execute every requested tool, then append one assistant tool-call message followed
+            // by one tool-result message. OpenAI-compatible APIs require that ordering when a
+            // response contains multiple tool calls.
+            var executions = new List<ToolExecution>(toolCalls.Count);
+            for (var callIndex = 0; callIndex < toolCalls.Count; callIndex++)
             {
+                var call = toolCalls[callIndex];
                 string result;
                 try
                 {
@@ -226,13 +258,15 @@ public sealed class OpenAiCompatibleChatClient : IChatClient
                 }
 
                 var callId = string.IsNullOrWhiteSpace(call.Id)
-                    ? $"call_{round}_{toolCalls.IndexOf(call)}"
+                    ? $"call_{round}_{callIndex}"
                     : call.Id;
-                history = AppendToolTurn(history, callId, call.Name, call.Arguments, result);
+                executions.Add(new ToolExecution(callId, call.Name, call.Arguments, result));
 
                 var trimmed = result.Length > 400 ? result[..400] + "…" : result;
                 yield return new ChatResponseUpdate(ChatRole.Assistant, $"\n\n[Tool '{call.Name}' executed: {trimmed}]");
             }
+
+            history = AppendToolTurn(history, executions);
         }
     }
 
@@ -351,18 +385,31 @@ public sealed class OpenAiCompatibleChatClient : IChatClient
 
     private static IReadOnlyList<ChatMessage> AppendToolTurn(
         IReadOnlyList<ChatMessage> history,
-        string callId,
-        string toolName,
-        string argumentsJson,
-        string result)
+        IReadOnlyList<ToolExecution> executions)
     {
+        var callContents = executions
+            .Select(call => (AIContent)new FunctionCallContent(
+                call.CallId,
+                call.ToolName,
+                ParseArguments(call.ArgumentsJson)))
+            .ToArray();
+        var resultContents = executions
+            .Select(call => (AIContent)new FunctionResultContent(call.CallId, call.Result))
+            .ToArray();
+
         var updated = new List<ChatMessage>(history)
         {
-            new(ChatRole.Assistant, [new FunctionCallContent(callId, toolName, ParseArguments(argumentsJson))]),
-            new(ChatRole.Tool, [new FunctionResultContent(callId, result)]),
+            new(ChatRole.Assistant, callContents),
+            new(ChatRole.Tool, resultContents),
         };
         return updated;
     }
+
+    private sealed record ToolExecution(
+        string CallId,
+        string ToolName,
+        string ArgumentsJson,
+        string Result);
 
     private static IDictionary<string, object?> ParseArguments(string argumentsJson)
     {
@@ -382,7 +429,9 @@ public sealed class OpenAiCompatibleChatClient : IChatClient
             var result = new Dictionary<string, object?>();
             foreach (var property in doc.RootElement.EnumerateObject())
             {
-                result[property.Name] = property.Value;
+                // JsonElement values refer to the JsonDocument's backing buffer. Clone them
+                // before leaving the using scope so the next agent round can serialize them.
+                result[property.Name] = property.Value.Clone();
             }
 
             return result;

@@ -29,6 +29,25 @@ public sealed class NzCompletionParityGateTests
     }
 
     [Fact]
+    public void ParityGate_FromListTrailingCommaWithoutSpace_SuggestsTables()
+    {
+        var sql = "SELECT * FROM EMPLOYEES e,";
+        var items = _engine.GetCompletions(sql, sql.Length);
+
+        Assert.Contains(items, i => i.Kind == CompletionKind.Table);
+    }
+
+    [Fact]
+    public void ParityGate_IncompleteComparison_SuggestsRhsColumnsAndFunctions()
+    {
+        var sql = "SELECT * FROM EMPLOYEES WHERE SALARY =";
+        var items = _engine.GetCompletions(sql, sql.Length);
+
+        Assert.Contains(items, i => i.Kind == CompletionKind.Column);
+        Assert.Contains(items, i => i.Kind == CompletionKind.Function);
+    }
+
+    [Fact]
     public void ParityGate_AfterUpdate_SuggestsSetKeyword()
     {
         var items = _engine.GetCompletions("UPDATE EMPLOYEES ", 17);
@@ -260,12 +279,12 @@ public sealed class NzCompletionParityGateTests
     }
 
     [Fact]
-    public void ParityGate_AfterHaving_CompletePredicate_SuggestsContinuationKeywordsOnly()
+    public void ParityGate_AfterHaving_IncompletePredicate_SuggestsRhsItems()
     {
         var sql = "SELECT * FROM EMPLOYEES GROUP BY DEPARTMENT_ID HAVING COUNT(*) > ";
         var items = _engine.GetCompletions(sql, sql.Length);
-        Assert.Contains(items, i => i.Label == "AND");
-        Assert.DoesNotContain(items, i => i.Kind is CompletionKind.Function or CompletionKind.Column);
+        Assert.Contains(items, i => i.Kind == CompletionKind.Column);
+        Assert.Contains(items, i => i.Kind == CompletionKind.Function);
     }
 
     [Fact]

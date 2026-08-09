@@ -18,15 +18,18 @@ public sealed class EmbeddedChatBackend : ILocalChatBackend
 
     private readonly IChatSettingsStore _settingsStore;
     private readonly LlamaServerManager _serverManager;
+    private readonly EmbeddedChatModelCatalog _catalog;
     private readonly IModelStore _chatModelStore;
 
     public EmbeddedChatBackend(
         IChatSettingsStore settingsStore,
         LlamaServerManager serverManager,
+        EmbeddedChatModelCatalog catalog,
         [FromKeyedServices(ChatModelStoreKey)] IModelStore chatModelStore)
     {
         _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
         _serverManager = serverManager ?? throw new ArgumentNullException(nameof(serverManager));
+        _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         _chatModelStore = chatModelStore ?? throw new ArgumentNullException(nameof(chatModelStore));
     }
 
@@ -63,13 +66,10 @@ public sealed class EmbeddedChatBackend : ILocalChatBackend
                 return false;
             }
 
-            var server = _serverManager.ChatServer;
-            if (server is { IsRunning: true })
-            {
-                return await PingServerAsync(server, ct);
-            }
-
             var settings = _settingsStore.Settings;
+            // Always go through the manager. It compares the requested model path and runtime
+            // parameters with the active instance and replaces the process when the selection
+            // changed; pinging the current process here would silently keep serving the old GGUF.
             var instance = await _serverManager.GetOrStartServerAsync(
                 LlamaServerRole.Chat,
                 _chatModelStore.LocalModelPath,
@@ -103,7 +103,57 @@ public sealed class EmbeddedChatBackend : ILocalChatBackend
     public async Task<List<string>> ListModelsAsync(CancellationToken ct = default)
     {
         await Task.CompletedTask.ConfigureAwait(false);
-        return [_chatModelStore.CurrentModel.Id];
+
+        // List every catalog model actually present on disk, so the chat panel can switch
+        // between downloaded GGUFs instead of only showing the currently selected one.
+        var models = new List<string>();
+        foreach (var model in _catalog.Models)
+        {
+            if (IsModelOnDisk(model))
+            {
+                models.Add(model.Id);
+            }
+        }
+
+        // Always include the selected model — its file may still be download-pending.
+        if (!models.Contains(_chatModelStore.CurrentModel.Id, StringComparer.OrdinalIgnoreCase))
+        {
+            models.Add(_chatModelStore.CurrentModel.Id);
+        }
+
+        return models;
+    }
+
+    /// <summary>
+    /// Switches the embedded chat model: persists the selection and (re)loads the GGUF by
+    /// (re)starting the llama-server when the model path changed. Returns false on failure
+    /// (<see cref="LastError"/> carries the reason).
+    /// </summary>
+    public async Task<bool> EnsureModelAsync(string modelId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(modelId))
+        {
+            return false;
+        }
+
+        if (!string.Equals(_settingsStore.Settings.EmbeddedChatModelId, modelId, StringComparison.OrdinalIgnoreCase))
+        {
+            _settingsStore.Update(s => s.EmbeddedChatModelId = modelId);
+        }
+
+        return await PingAsync(ct).ConfigureAwait(false);
+    }
+
+    private bool IsModelOnDisk(ModelDescriptor model)
+    {
+        if (_chatModelStore is HuggingFaceMlxRepoStore)
+        {
+            var dir = Path.Combine(_chatModelStore.ModelsDirectory, model.Id);
+            return Directory.Exists(dir) && File.Exists(Path.Combine(dir, "config.json"));
+        }
+
+        var path = Path.Combine(_chatModelStore.ModelsDirectory, model.FileName);
+        return File.Exists(path) && new FileInfo(path).Length > 1_000_000;
     }
 
     public IChatClient CreateChatClient(string modelId, bool enableFunctionInvocation = true)

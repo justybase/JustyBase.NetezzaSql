@@ -18,6 +18,7 @@ public sealed class LlamaServerFimProvider : ICompletionProvider, IDisposable
     private readonly Func<int> _getGpuLayers;
     private readonly Func<uint> _getContextSize;
     private readonly HttpClient _http;
+    private readonly bool _ownsHttp;
 
     public LlamaServerFimProvider(
         LlamaServerManager serverManager,
@@ -30,6 +31,7 @@ public sealed class LlamaServerFimProvider : ICompletionProvider, IDisposable
         _modelStore = modelStore ?? throw new ArgumentNullException(nameof(modelStore));
         _getGpuLayers = getGpuLayers ?? (() => 0);
         _getContextSize = getContextSize ?? (() => 4096);
+        _ownsHttp = httpClient is null;
         _http = httpClient ?? new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
     }
 
@@ -113,7 +115,13 @@ public sealed class LlamaServerFimProvider : ICompletionProvider, IDisposable
         return t.TrimEnd();
     }
 
-    public void Dispose() => _http.Dispose();
+    public void Dispose()
+    {
+        if (_ownsHttp)
+        {
+            _http.Dispose();
+        }
+    }
 }
 
 internal sealed class LlamaCompletionRequest

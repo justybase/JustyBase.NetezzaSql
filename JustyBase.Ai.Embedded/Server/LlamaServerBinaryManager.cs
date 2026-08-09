@@ -1,11 +1,13 @@
 using JustyBase.Ai.Embedded.Abstractions;
+using System.Formats.Tar;
 using System.IO.Compression;
 using System.Net.Http.Headers;
+using System.Runtime.InteropServices;
 
 namespace JustyBase.Ai.Embedded.Server;
 
 /// <summary>
-/// Downloads and caches the llama.cpp <c>llama-server.exe</c> binary.
+/// Downloads and caches the platform-native llama.cpp <c>llama-server</c> binary.
 ///
 /// NOTE: the release tag/URLs must be verified at build time — llama.cpp moved its release
 /// distribution off GitHub; the URL template below is best-effort. Override the tag with the
@@ -35,20 +37,27 @@ public sealed class LlamaServerBinaryManager : ILlamaServerBinary
 
     public string BinaryDirectory { get; }
 
-    /// <summary>llama-server.exe for the currently selected variant (vulkan or avx2).</summary>
-    public string BinaryPath => Path.Combine(BinaryDirectory, BinaryVariant, "llama-server.exe");
+    /// <summary>llama-server for the currently selected variant (Vulkan or CPU).</summary>
+    public string BinaryPath => Path.Combine(BinaryDirectory, BinaryVariant, ExecutableName);
 
-    // Since the b10xxx-era releases llama-server.exe is a small launcher stub — the real
-    // implementation ships in llama-server-impl.dll — so presence alone is not enough to
-    // prove a complete extraction. Require the implementation DLL (and the ggml-base.dll
-    // it depends on) to be on disk so partial/broken installs are repaired automatically.
+    private static string ExecutableName => OperatingSystem.IsWindows() ? "llama-server.exe" : "llama-server";
+
+    // Since the b10xxx-era Windows releases llama-server.exe is a small launcher stub, require
+    // the implementation DLL and ggml-base.dll there. Unix bundles use different shared-library
+    // names, so the executable is the portable completeness check for those archives.
     public bool IsBinaryPresent =>
         File.Exists(BinaryPath)
-        && File.Exists(Path.Combine(VariantDirectory, "ggml-base.dll"))
-        && File.Exists(Path.Combine(VariantDirectory, "llama-server-impl.dll"))
-        && new FileInfo(Path.Combine(VariantDirectory, "llama-server-impl.dll")).Length > 1_000_000;
+        && new FileInfo(BinaryPath).Length > 0
+        && (!OperatingSystem.IsWindows()
+            || (File.Exists(Path.Combine(VariantDirectory, "ggml-base.dll"))
+                && File.Exists(Path.Combine(VariantDirectory, "llama-server-impl.dll"))
+                && new FileInfo(Path.Combine(VariantDirectory, "llama-server-impl.dll")).Length > 1_000_000));
 
-    public string BinaryVariant => _preferVulkan() ? "vulkan" : "avx2";
+    public string BinaryVariant => _preferVulkan() && SupportsVulkanAsset() ? "vulkan" : "avx2";
+
+    private static bool SupportsVulkanAsset()
+        => RuntimeInformation.ProcessArchitecture == Architecture.X64
+            && (OperatingSystem.IsWindows() || OperatingSystem.IsLinux());
 
     public static string DefaultBinaryDirectory() =>
         Path.Combine(
@@ -71,7 +80,7 @@ public sealed class LlamaServerBinaryManager : ILlamaServerBinary
         return client;
     }
 
-    /// <summary>Downloads and extracts llama-server.exe for the current variant when missing. Safe to call repeatedly.</summary>
+    /// <summary>Downloads and extracts the native llama-server for the current variant when missing.</summary>
     public async Task EnsureBinaryAsync(
         IProgress<FimModelProgress>? progress = null,
         CancellationToken cancellationToken = default)
@@ -91,30 +100,30 @@ public sealed class LlamaServerBinaryManager : ILlamaServerBinary
         }
 
         var variant = BinaryVariant;
-        var zipVariant = variant.Equals("vulkan", StringComparison.OrdinalIgnoreCase) ? "vulkan" : "cpu";
-        var zipUri = new Uri(
-            $"https://github.com/ggml-org/llama.cpp/releases/download/{tag}/llama-{tag}-bin-win-{zipVariant}-x64.zip");
+        var asset = ResolveReleaseAsset(tag, variant);
+        var archiveUri = new Uri(
+            $"https://github.com/ggml-org/llama.cpp/releases/download/{tag}/{asset.FileName}");
 
-        var zipPath = Path.Combine(BinaryDirectory, $"llama-{tag}-bin-win-{zipVariant}-x64.zip");
+        var archivePath = Path.Combine(BinaryDirectory, asset.FileName);
         progress?.Report(new FimModelProgress(0, $"Downloading llama-server ({variant})…"));
 
         try
         {
             long total = 0;
             long copied = 0;
-            using (var response = await _httpClient.GetAsync(zipUri, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false))
+            using (var response = await _httpClient.GetAsync(archiveUri, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false))
             {
                 if (!response.IsSuccessStatusCode)
                 {
                     throw new HttpRequestException(
-                        $"llama-server download failed: {(int)response.StatusCode} {response.ReasonPhrase} ({zipUri}). " +
+                        $"llama-server download failed: {(int)response.StatusCode} {response.ReasonPhrase} ({archiveUri}). " +
                         "Check the llama.cpp release tag (JUSTYBASE_LLAMA_TAG) or your network.");
                 }
 
                 total = response.Content.Headers.ContentLength ?? 0L;
                 await using var source = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
                 await using var target = new FileStream(
-                    zipPath,
+                    archivePath,
                     FileMode.Create,
                     FileAccess.Write,
                     FileShare.None,
@@ -145,40 +154,156 @@ public sealed class LlamaServerBinaryManager : ILlamaServerBinary
             }
 
             progress?.Report(new FimModelProgress(0.95, "Extracting llama-server…"));
-            using (var archive = ZipFile.OpenRead(zipPath))
-            {
-                var exeEntry = archive.Entries.FirstOrDefault(e =>
-                    e.FullName.EndsWith("llama-server.exe", StringComparison.OrdinalIgnoreCase))
-                    ?? throw new InvalidOperationException("llama-server.exe not found in the downloaded archive.");
-
-                exeEntry.ExtractToFile(BinaryPath, overwrite: true);
-
-                foreach (var entry in archive.Entries)
-                {
-                    if (entry.FullName.EndsWith("/", StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(entry.FullName, exeEntry.FullName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
-
-                    entry.ExtractToFile(
-                        Path.Combine(VariantDirectory, Path.GetFileName(entry.FullName)),
-                        overwrite: true);
-                }
-            }
+            await ExtractArchiveAsync(archivePath, asset, cancellationToken).ConfigureAwait(false);
+            MakeExecutable(BinaryPath);
 
             if (!IsBinaryPresent)
             {
-                throw new InvalidOperationException("Extracted llama-server.exe is missing or empty.");
+                throw new InvalidOperationException($"Extracted {asset.ExecutableName} is missing or incomplete.");
             }
 
             progress?.Report(new FimModelProgress(1.0, "llama-server ready."));
         }
         finally
         {
-            try { File.Delete(zipPath); } catch { /* best effort */ }
+            try { File.Delete(archivePath); } catch { /* best effort */ }
         }
     }
 
-    public void Dispose() => _httpClient.Dispose();
+    private sealed record ReleaseAsset(string FileName, string ExecutableName, bool IsZip);
+
+    private static ReleaseAsset ResolveReleaseAsset(string tag, string variant)
+    {
+        var architecture = RuntimeInformation.ProcessArchitecture;
+        var isVulkan = string.Equals(variant, "vulkan", StringComparison.OrdinalIgnoreCase);
+
+        if (OperatingSystem.IsWindows())
+        {
+            if (architecture != Architecture.X64)
+            {
+                throw new PlatformNotSupportedException(
+                    $"The bundled llama-server currently supports Windows x64 only (found {architecture}).");
+            }
+
+            var flavor = isVulkan ? "vulkan" : "cpu";
+            return new ReleaseAsset($"llama-{tag}-bin-win-{flavor}-x64.zip", "llama-server.exe", IsZip: true);
+        }
+
+        if (OperatingSystem.IsLinux())
+        {
+            var architectureName = architecture switch
+            {
+                Architecture.X64 => "x64",
+                Architecture.Arm64 => "arm64",
+                _ => throw new PlatformNotSupportedException(
+                    $"The bundled llama-server currently supports Linux x64 and arm64 (found {architecture}).")
+            };
+            var flavor = isVulkan ? "vulkan-" : string.Empty;
+            return new ReleaseAsset(
+                $"llama-{tag}-bin-ubuntu-{flavor}{architectureName}.tar.gz",
+                "llama-server",
+                IsZip: false);
+        }
+
+        if (OperatingSystem.IsMacOS())
+        {
+            var architectureName = architecture switch
+            {
+                Architecture.X64 => "x64",
+                Architecture.Arm64 => "arm64",
+                _ => throw new PlatformNotSupportedException(
+                    $"The bundled llama-server currently supports macOS x64 and arm64 (found {architecture}).")
+            };
+            return new ReleaseAsset(
+                $"llama-{tag}-bin-macos-{architectureName}.tar.gz",
+                "llama-server",
+                IsZip: false);
+        }
+
+        throw new PlatformNotSupportedException("The bundled llama-server is not available for this operating system.");
+    }
+
+    private async Task ExtractArchiveAsync(
+        string archivePath,
+        ReleaseAsset asset,
+        CancellationToken cancellationToken)
+    {
+        if (asset.IsZip)
+        {
+            using var archive = ZipFile.OpenRead(archivePath);
+            foreach (var entry in archive.Entries)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var fileName = Path.GetFileName(entry.FullName);
+                if (string.IsNullOrEmpty(fileName) || entry.FullName.EndsWith("/", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                entry.ExtractToFile(Path.Combine(VariantDirectory, fileName), overwrite: true);
+            }
+
+            return;
+        }
+
+        await using var file = new FileStream(archivePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        await using var gzip = new GZipStream(file, CompressionMode.Decompress);
+        using var tar = new TarReader(gzip, leaveOpen: false);
+        TarEntry? tarEntry;
+        while ((tarEntry = await tar.GetNextEntryAsync().ConfigureAwait(false)) is not null)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (tarEntry.EntryType != TarEntryType.RegularFile)
+            {
+                continue;
+            }
+
+            var fileName = Path.GetFileName(tarEntry.Name);
+            if (string.IsNullOrEmpty(fileName) || tarEntry.DataStream is null)
+            {
+                continue;
+            }
+
+            var outputPath = Path.Combine(VariantDirectory, fileName);
+            await using var output = new FileStream(
+                outputPath,
+                FileMode.Create,
+                FileAccess.Write,
+                FileShare.None,
+                bufferSize: 128 * 1024,
+                useAsync: true);
+            await tarEntry.DataStream.CopyToAsync(output, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static void MakeExecutable(string path)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        try
+        {
+            File.SetUnixFileMode(
+                path,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute
+                | UnixFileMode.GroupRead | UnixFileMode.GroupExecute
+                | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+        }
+#pragma warning disable CA1031
+        catch
+#pragma warning restore CA1031
+        {
+            // A read-only filesystem may preserve the executable bit from the tar archive.
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_ownsHttpClient)
+        {
+            _httpClient.Dispose();
+        }
+    }
 }
