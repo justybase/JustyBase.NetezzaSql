@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented here.
 
+## 0.8.0
+
+- Add the shared AI libraries: `JustyBase.Ai` (chat service, tool executor,
+  OpenAI-compatible and Codex backends, prompt building, chat model contracts) and
+  `JustyBase.Ai.Embedded` (embedded llama-server / GGUF model management for FIM inline
+  completion and AI chat). Both are packed and published under the same 0.8.0 version.
+- Add MLX backend for Apple Silicon and harden llama-server startup: CPU fallback when GPU
+  start fails, GPU offload defaulting to auto (model layer count read), KV cache kept in
+  system RAM, and the FIM prompt field fixed for recent llama.cpp.
+- Add a shared completion orchestrator, fragment and gate; route the LSP completion through
+  it. Gate completion after whitespace and add FROM-continuation and WHERE-continuation
+  contexts.
+- Add the Access SQL dialect to the lexer infrastructure.
+- Add a shared Netezza schema loader with typed schema cache (and unit/live tests), plus
+  modern Legacy-host catalog queries replacing the retired legacy SQL file.
+- Harden the import pipe, schema cache, and scan-preview handling; improve Netezza import
+  date handling and logging.
+- CI: cross-platform attachment paths and AI package READMEs; `JustyBase.Ai` and
+  `JustyBase.Ai.Embedded` are now packed in `ci.yml` alongside the six existing libraries.
+
 ## 0.5.2
 
 - Live test host: treat the driver's `Error opening file` XferTable message as a pipe-topology

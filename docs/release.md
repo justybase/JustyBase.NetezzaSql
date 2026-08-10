@@ -22,8 +22,8 @@ Publishing to NuGet.org is done by GitHub Actions when a GitHub Release is
 4. Choose a production SemVer version without a prerelease suffix (for example
    `0.3.0`), bump `PackageVersion` in `Directory.Build.props`, and update
    `CHANGELOG.md`.
-   Publish parser, DDL, catalog, `JustyBase.Netezza`, Core, and ImportExport
-   under the **same** version.
+   Publish parser, DDL, catalog, `JustyBase.Netezza`, Core, ImportExport, `JustyBase.Ai`,
+   and `JustyBase.Ai.Embedded` under the **same** version.
 5. Inspect the generated `.nupkg` and `.snupkg` files, including README, XML
    documentation, Apache-2.0 metadata and Source Link.
 6. Commit, push to `master`, create a GitHub Release with tag

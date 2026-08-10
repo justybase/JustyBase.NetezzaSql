@@ -15,7 +15,7 @@ This script runs, in order:
 
 ## Full CI parity (before a release tag)
 
-Add `-FullCi` to also run vulnerable-package scan, `dotnet pack` for all six libraries, and `eng\Test-PackageConsumer.ps1`:
+Add `-FullCi` to also run vulnerable-package scan, `dotnet pack` for all eight libraries, and `eng\Test-PackageConsumer.ps1`:
 
 ```powershell
 pwsh .\eng\Verify-Local.ps1 -FullCi

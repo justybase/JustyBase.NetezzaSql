@@ -108,7 +108,7 @@ Optional database-backed smoke tests:
 
 ## Create NuGet packages
 
-Pack all six libraries under the same `PackageVersion` (default from `Directory.Build.props`):
+Pack all eight libraries under the same `PackageVersion` (default from `Directory.Build.props`):
 
 ```powershell
 dotnet pack .\JustyBase.NetezzaSql.sln -c Release -o .\artifacts
@@ -123,6 +123,8 @@ dotnet pack .\JustyBase.NetezzaCatalogSql\JustyBase.NetezzaCatalogSql.csproj -c 
 dotnet pack .\JustyBase.Netezza\JustyBase.Netezza.csproj -c Release
 dotnet pack .\JustyBase.Core\JustyBase.Core.csproj -c Release
 dotnet pack .\JustyBase.ImportExport\JustyBase.ImportExport.csproj -c Release
+dotnet pack .\JustyBase.Ai\JustyBase.Ai.csproj -c Release
+dotnet pack .\JustyBase.Ai.Embedded\JustyBase.Ai.Embedded.csproj -c Release
 ```
 
 Each package includes README and XML documentation. On push/PR, CI builds, tests, packs, and uploads all packages as one artifact. Publishing a GitHub Release (tag like `v0.3.0`) runs the same workflow’s **publish** job and pushes `.nupkg` / `.snupkg` to NuGet.org via OIDC. See [docs/release.md](docs/release.md).

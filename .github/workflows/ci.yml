@@ -46,6 +46,8 @@ jobs:
           dotnet pack JustyBase.Netezza/JustyBase.Netezza.csproj --no-build --configuration Release --output artifacts/packages
           dotnet pack JustyBase.Core/JustyBase.Core.csproj --no-build --configuration Release --output artifacts/packages
           dotnet pack JustyBase.ImportExport/JustyBase.ImportExport.csproj --no-build --configuration Release --output artifacts/packages
+          dotnet pack JustyBase.Ai/JustyBase.Ai.csproj --no-build --configuration Release --output artifacts/packages
+          dotnet pack JustyBase.Ai.Embedded/JustyBase.Ai.Embedded.csproj --no-build --configuration Release --output artifacts/packages
 
       - name: Build a package-only consumer
         shell: pwsh
