@@ -37,6 +37,7 @@ public sealed class LlamaServerProcessRegistryTests
         try
         {
             var me = Environment.ProcessId;
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             File.WriteAllLines(path,
             [
                 "999999991|999999990",        // dead owner, dead server -> kill attempt (no-op)
