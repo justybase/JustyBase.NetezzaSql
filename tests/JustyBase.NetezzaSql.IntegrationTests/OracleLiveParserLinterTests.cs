@@ -121,8 +121,8 @@ public sealed class OracleLiveParserLinterTests : IClassFixture<OracleLiveFixtur
     public void Live_CanConnectAndSeeSchemaObjects()
     {
         if (!RequireLive()) return;
+        Assert.True(OracleLiveTestHost.UserTableExists(_fx.Connection!, _fx.TableName));
         var tables = OracleLiveTestHost.ListUserTables(_fx.Connection!);
-        Assert.Contains(_fx.TableName, tables, StringComparer.OrdinalIgnoreCase);
         Console.WriteLine($"Oracle live schema={_fx.Schema}; sample tables={string.Join(", ", tables.Take(8))}");
     }
 

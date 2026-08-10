@@ -126,6 +126,18 @@ internal static class OracleLiveTestHost
         return names;
     }
 
+    public static bool UserTableExists(OracleConnection connection, string tableName)
+    {
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            SELECT COUNT(*)
+            FROM user_tables
+            WHERE table_name = :t
+            """;
+        cmd.Parameters.Add("t", OracleDbType.Varchar2).Value = tableName.ToUpperInvariant();
+        return Convert.ToInt32(cmd.ExecuteScalar()) > 0;
+    }
+
     public static List<(string Name, string? DataType)> ListColumns(
         OracleConnection connection,
         string tableName)
