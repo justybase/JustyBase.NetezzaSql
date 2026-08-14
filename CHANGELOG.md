@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented here.
 
+## 0.8.1
+
+- Update `Microsoft.Extensions.AI` to 10.9.0 and the .NET 10 dependency-abstractions packages to 10.0.11.
+- Update `Parquet.Net` to 6.1.0 for the shared import/export libraries.
+
 ## 0.8.0
 
 - Add the shared AI libraries: `JustyBase.Ai` (chat service, tool executor,
