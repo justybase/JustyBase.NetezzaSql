@@ -18,6 +18,7 @@ public static class DialectRuntime
     private static readonly QualityRuleRegistry MssqlRules = new(MssqlLintRules.AllRules);
     private static readonly QualityRuleRegistry MySqlRules = new(MySqlLintRules.AllRules);
     private static readonly QualityRuleRegistry PostgreSqlRules = new(PostgreSqlLintRules.AllRules);
+    private static readonly QualityRuleRegistry SqliteRules = new(SqliteLintRules.AllRules);
 
     public static string DiagnosticSource(SqlDialect dialect) => dialect switch
     {
@@ -27,6 +28,7 @@ public static class DialectRuntime
         SqlDialect.MySql => "MySQL SQL",
         SqlDialect.PostgreSql => "PostgreSQL SQL",
         SqlDialect.Access => "Access SQL",
+        SqlDialect.Sqlite => "SQLite SQL",
         _ => "Netezza SQL",
     };
 
@@ -37,6 +39,7 @@ public static class DialectRuntime
         SqlDialect.Mssql => MssqlRules,
         SqlDialect.MySql => MySqlRules,
         SqlDialect.PostgreSql => PostgreSqlRules,
+        SqlDialect.Sqlite => SqliteRules,
         _ => NetezzaRules,
     };
 
@@ -47,6 +50,7 @@ public static class DialectRuntime
         SqlDialect.Mssql => MssqlSqlCatalog.Instance,
         SqlDialect.MySql => MySqlSqlCatalog.Instance,
         SqlDialect.PostgreSql => PostgreSqlSqlCatalog.Instance,
+        SqlDialect.Sqlite => SqliteSqlCatalog.Instance,
         _ => NetezzaSqlAuthoringCatalog.Instance,
     };
 
@@ -57,6 +61,7 @@ public static class DialectRuntime
         SqlDialect.Mssql => MssqlSqlCatalog.Instance,
         SqlDialect.MySql => MySqlSqlCatalog.Instance,
         SqlDialect.PostgreSql => PostgreSqlSqlCatalog.Instance,
+        SqlDialect.Sqlite => SqliteSqlCatalog.Instance,
         _ => null, // callers default to Netezza catalog
     };
 
@@ -68,6 +73,7 @@ public static class DialectRuntime
         SqlDialect.MySql => MySqlLexer.Tokenize(sql),
         SqlDialect.PostgreSql => PostgreSqlLexer.Tokenize(sql),
         SqlDialect.Access => AccessLexer.Tokenize(sql),
+        SqlDialect.Sqlite => SqliteLexer.Tokenize(sql),
         _ => NzLexer.Tokenize(sql),
     };
 
@@ -78,6 +84,7 @@ public static class DialectRuntime
         SqlDialect.Mssql => new MssqlSqlParser(tokens),
         SqlDialect.MySql => new MySqlSqlParser(tokens),
         SqlDialect.PostgreSql => new PostgreSqlSqlParser(tokens),
+        SqlDialect.Sqlite => new SqliteSqlParser(tokens),
         _ => new NzSqlParser(tokens),
     };
 
@@ -96,6 +103,9 @@ public static class DialectRuntime
             return SqlDialect.MySql;
         if (value.Equals("access", StringComparison.OrdinalIgnoreCase))
             return SqlDialect.Access;
+        if (value.Equals("sqlite", StringComparison.OrdinalIgnoreCase) ||
+            value.Equals("sqlite3", StringComparison.OrdinalIgnoreCase))
+            return SqlDialect.Sqlite;
         if (value.Equals("postgresql", StringComparison.OrdinalIgnoreCase) ||
             value.Equals("postgres", StringComparison.OrdinalIgnoreCase) ||
             value.Equals("pg", StringComparison.OrdinalIgnoreCase))

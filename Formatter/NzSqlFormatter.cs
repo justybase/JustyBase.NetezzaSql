@@ -139,6 +139,38 @@ public sealed class NzSqlFormatter
                 Write(" FOR ");
                 Write(FormatTableName(nickname.Target));
                 break;
+            case SqliteCreateTriggerStatement sqliteTrigger:
+                Write("CREATE");
+                var triggerTokens = sqliteTrigger.Tokens;
+                int triggerOffset = 0;
+                if (triggerTokens is { Count: > 0 } && triggerTokens[0].Kind == NzToken.Temp)
+                {
+                    Write(" TEMP");
+                    triggerOffset = 1;
+                }
+                Write(" TRIGGER");
+                if (sqliteTrigger.IfNotExists)
+                    Write(" IF NOT EXISTS");
+                Write(" ");
+                Write(FormatTableName(sqliteTrigger.Trigger));
+                if (triggerTokens is not null && triggerTokens.Count > triggerOffset)
+                {
+                    Write(" ");
+                    Write(FormatOpaqueTokens(triggerTokens.Skip(triggerOffset).ToArray()));
+                }
+                break;
+            case SqliteCreateVirtualTableStatement sqliteVirtual:
+                Write("CREATE VIRTUAL TABLE");
+                if (sqliteVirtual.IfNotExists)
+                    Write(" IF NOT EXISTS");
+                Write(" ");
+                Write(FormatTableName(sqliteVirtual.Table));
+                if (sqliteVirtual.Tokens is { Count: > 0 })
+                {
+                    Write(" ");
+                    Write(FormatOpaqueTokens(sqliteVirtual.Tokens));
+                }
+                break;
             default:
                 Write("?");
                 break;
@@ -224,6 +256,12 @@ public sealed class NzSqlFormatter
             FormatExpression(stmt.Having);
         }
 
+        if (stmt.SqliteWindowTokens is { Count: > 0 })
+        {
+            NewLine();
+            Write(FormatOpaqueTokens(stmt.SqliteWindowTokens));
+        }
+
         if (stmt.OrderBy is { Count: > 0 })
         {
             NewLine();
@@ -249,7 +287,11 @@ public sealed class NzSqlFormatter
         else if (stmt.Limit is not null)
         {
             NewLine();
-            if (stmt.Limit.Syntax == LimitClauseSyntax.Fetch)
+            if (stmt.Limit.SqliteTokens is { Count: > 0 })
+            {
+                Write(FormatOpaqueTokens(stmt.Limit.SqliteTokens));
+            }
+            else if (stmt.Limit.Syntax == LimitClauseSyntax.Fetch)
             {
                 Write("FETCH FIRST ");
                 Write(stmt.Limit.Limit.ToString());
@@ -474,7 +516,15 @@ public sealed class NzSqlFormatter
 
     private void FormatInsert(InsertStatement stmt)
     {
-        Write(stmt.MySqlIgnore ? "INSERT IGNORE INTO " : "INSERT INTO ");
+        Write("INSERT");
+        if (stmt.SqliteOrTokens is { Count: > 0 })
+        {
+            Write(" ");
+            Write(FormatOpaqueTokens(stmt.SqliteOrTokens));
+        }
+        if (stmt.MySqlIgnore)
+            Write(" IGNORE");
+        Write(" INTO ");
         Write(FormatTableName(stmt.Target));
 
         if (stmt.Columns is { Count: > 0 })
@@ -525,7 +575,13 @@ public sealed class NzSqlFormatter
 
     private void FormatUpdate(UpdateStatement stmt)
     {
-        Write("UPDATE ");
+        Write("UPDATE");
+        if (stmt.SqliteOrTokens is { Count: > 0 })
+        {
+            Write(" ");
+            Write(FormatOpaqueTokens(stmt.SqliteOrTokens));
+        }
+        Write(" ");
         Write(FormatTableName(stmt.Target));
         if (stmt.Alias is not null)
         {
@@ -1449,9 +1505,18 @@ public sealed class NzSqlFormatter
                 }
                 if (functionCall.Over is not null)
                 {
-                    Write(" OVER (");
-                    FormatOverClause(functionCall.Over);
-                    Write(")");
+                    // SQLite: OVER window-name has no parentheses.
+                    if (functionCall.Over.WindowName is not null)
+                    {
+                        Write(" OVER ");
+                        FormatOverClause(functionCall.Over);
+                    }
+                    else
+                    {
+                        Write(" OVER (");
+                        FormatOverClause(functionCall.Over);
+                        Write(")");
+                    }
                 }
                 break;
             case BinaryExpression binary:
@@ -1591,6 +1656,13 @@ public sealed class NzSqlFormatter
 
     private void FormatOverClause(OverClause overClause)
     {
+        // SQLite: OVER window-name references a named WINDOW clause.
+        if (overClause.WindowName is not null)
+        {
+            Write(overClause.WindowName);
+            return;
+        }
+
         var parts = new List<string>();
 
         if (overClause.PartitionBy is { Count: > 0 })
@@ -1706,6 +1778,9 @@ public sealed class NzSqlFormatter
                 break;
             case LiteralKind.Null:
                 Write("NULL");
+                break;
+            case LiteralKind.Blob:
+                Write(literal.Value);
                 break;
             default:
                 Write(literal.Value);
@@ -1828,6 +1903,11 @@ public sealed class NzSqlFormatter
             case NullConstraint:
                 Write("NULL");
                 break;
+            case CheckColumnConstraint checkColumnConstraint:
+                Write("CHECK (");
+                FormatExpression(checkColumnConstraint.Condition);
+                Write(")");
+                break;
             default:
                 Write("?");
                 break;
@@ -1848,6 +1928,8 @@ public sealed class NzSqlFormatter
                 Write("PRIMARY KEY");
                 if (primaryKeyConstraint.Columns is { Count: > 0 })
                     Write(" (" + string.Join(", ", primaryKeyConstraint.Columns) + ")");
+                if (primaryKeyConstraint.SqliteConflictTokens is { Count: > 0 })
+                    Write(" " + FormatOpaqueTokens(primaryKeyConstraint.SqliteConflictTokens));
                 break;
             case UniqueConstraint uniqueConstraint:
                 if (uniqueConstraint.Name is not null)
@@ -1859,6 +1941,8 @@ public sealed class NzSqlFormatter
                 Write("UNIQUE");
                 if (uniqueConstraint.Columns is { Count: > 0 })
                     Write(" (" + string.Join(", ", uniqueConstraint.Columns) + ")");
+                if (uniqueConstraint.SqliteConflictTokens is { Count: > 0 })
+                    Write(" " + FormatOpaqueTokens(uniqueConstraint.SqliteConflictTokens));
                 break;
             case ForeignKeyConstraint foreignKeyConstraint:
                 if (foreignKeyConstraint.Name is not null)
@@ -1874,6 +1958,8 @@ public sealed class NzSqlFormatter
                 Write(FormatTableName(foreignKeyConstraint.ReferencedTable));
                 if (foreignKeyConstraint.ReferencedColumns is { Count: > 0 })
                     Write(" (" + string.Join(", ", foreignKeyConstraint.ReferencedColumns) + ")");
+                if (foreignKeyConstraint.SqliteTailTokens is { Count: > 0 })
+                    Write(" " + FormatOpaqueTokens(foreignKeyConstraint.SqliteTailTokens));
                 break;
             case CheckConstraint checkConstraint:
                 Write("CHECK (");

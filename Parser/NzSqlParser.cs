@@ -122,7 +122,9 @@ public partial class NzSqlParser
         // Mssql-only tokens (never emitted by the other lexers).
         or NzToken.MssqlVariable or NzToken.MssqlBracketedIdentifier
         or NzToken.MySqlBacktickIdentifier
-        or NzToken.MssqlTop or NzToken.MssqlOutput or NzToken.MssqlProc;
+        or NzToken.MssqlTop or NzToken.MssqlOutput or NzToken.MssqlProc
+        // SQLite-only tokens (never emitted by the other lexers).
+        or NzToken.SqliteBracketedIdentifier;
 
     protected bool IsSetOperationStart() => Peek().Kind is NzToken.Union or NzToken.Intersect or NzToken.Except or NzToken.MinusSet
         || (Peek().Kind == NzToken.Identifier &&

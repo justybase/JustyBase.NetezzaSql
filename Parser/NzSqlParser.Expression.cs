@@ -505,6 +505,15 @@ public partial class NzSqlParser
         IReadOnlyList<Expression>? partitionBy = null;
         IReadOnlyList<OrderByItem>? orderBy = null;
         WindowFrame? frame = null;
+        string? windowName = null;
+
+        // Dialect hook: SQLite allows OVER window-name in addition to an
+        // inline window specification.
+        if (AllowWindowNameAfterOver && Peek().Kind is NzToken.Identifier or NzToken.QuotedIdentifier)
+        {
+            windowName = StripQuotes(Advance().ToStringValue());
+            return new OverClause(FromToken(pos), null, null, null, windowName);
+        }
 
         if (Peek().Kind == NzToken.LParen)
         {
@@ -535,8 +544,15 @@ public partial class NzSqlParser
                 SourcePosition.FromToken(Peek()), "PARSE001"));
         }
 
-        return new OverClause(FromToken(pos), partitionBy, orderBy, frame);
+        return new OverClause(FromToken(pos), partitionBy, orderBy, frame, windowName);
     }
+
+    /// <summary>
+    /// Dialect hook: when true, OVER may be followed by a named window
+    /// reference (<c>OVER window-name</c>) in addition to an inline window
+    /// specification. SQLite enables this.
+    /// </summary>
+    protected virtual bool AllowWindowNameAfterOver => false;
 
     private WindowFrame ParseWindowFrame()
     {

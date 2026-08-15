@@ -97,7 +97,10 @@ public record SelectStatement(
     // the formatter can reproduce the original clause faithfully. Null for all
     // other dialects.
     IReadOnlyList<Token<NzToken>>? TopTokens = null,
-    IReadOnlyList<Expression>? DistinctOn = null
+    IReadOnlyList<Expression>? DistinctOn = null,
+    // SQLite: WINDOW name AS (...) clause kept as an opaque offset-stable
+    // token range until deeper window-specification AST work lands.
+    IReadOnlyList<Token<NzToken>>? SqliteWindowTokens = null
 ) : Statement(Position);
 
 public record InsertStatement(
@@ -111,7 +114,9 @@ public record InsertStatement(
     IReadOnlyList<Token<NzToken>>? OutputTokens = null,
     bool MySqlIgnore = false,
     IReadOnlyList<Token<NzToken>>? MySqlOnDuplicateKeyUpdateTokens = null,
-    PostgreSqlOnConflictClause? OnConflict = null
+    PostgreSqlOnConflictClause? OnConflict = null,
+    // SQLite: INSERT OR ROLLBACK|ABORT|REPLACE|FAIL|IGNORE clause tokens.
+    IReadOnlyList<Token<NzToken>>? SqliteOrTokens = null
 ) : Statement(Position);
 
 public record UpdateStatement(
@@ -123,7 +128,9 @@ public record UpdateStatement(
     Expression? Where,
     ReturningClause? Returning = null,
     // Mssql: OUTPUT clause as an opaque offset-stable token range.
-    IReadOnlyList<Token<NzToken>>? OutputTokens = null
+    IReadOnlyList<Token<NzToken>>? OutputTokens = null,
+    // SQLite: UPDATE OR ROLLBACK|ABORT|REPLACE|FAIL|IGNORE clause tokens.
+    IReadOnlyList<Token<NzToken>>? SqliteOrTokens = null
 ) : Statement(Position);
 
 public record DeleteStatement(
@@ -401,7 +408,10 @@ public record LimitClause(
     SourcePosition Position,
     int Limit,
     int? Offset,
-    LimitClauseSyntax Syntax = LimitClauseSyntax.Limit
+    LimitClauseSyntax Syntax = LimitClauseSyntax.Limit,
+    // SQLite: raw LIMIT clause tokens when an operand is a bound parameter
+    // or expression that a numeric Limit cannot represent (LIMIT ?).
+    IReadOnlyList<Token<NzToken>>? SqliteTokens = null
 ) : AstNode(Position);
 
 public enum FetchDirection
@@ -471,19 +481,34 @@ public record NamedColumnConstraint(SourcePosition Position, string Name, Column
     : ColumnConstraint(Position);
 
 public abstract record TableConstraint(SourcePosition Position) : AstNode(Position);
-public record PrimaryKeyConstraint(SourcePosition Position, IReadOnlyList<string>? Columns, string? Name)
-    : TableConstraint(Position);
-public record UniqueConstraint(SourcePosition Position, IReadOnlyList<string>? Columns, string? Name)
-    : TableConstraint(Position);
+public record PrimaryKeyConstraint(
+    SourcePosition Position,
+    IReadOnlyList<string>? Columns,
+    string? Name,
+    // SQLite: opaque ON CONFLICT clause tokens (ON CONFLICT REPLACE, ...).
+    IReadOnlyList<Token<NzToken>>? SqliteConflictTokens = null
+) : TableConstraint(Position);
+public record UniqueConstraint(
+    SourcePosition Position,
+    IReadOnlyList<string>? Columns,
+    string? Name,
+    // SQLite: opaque ON CONFLICT clause tokens (ON CONFLICT IGNORE, ...).
+    IReadOnlyList<Token<NzToken>>? SqliteConflictTokens = null
+) : TableConstraint(Position);
 public record ForeignKeyConstraint(
     SourcePosition Position,
     IReadOnlyList<string>? Columns,
     TableName ReferencedTable,
     IReadOnlyList<string>? ReferencedColumns,
-    string? Name
+    string? Name,
+    // SQLite: opaque referential-action tail tokens (ON DELETE CASCADE, MATCH,
+    // DEFERRABLE INITIALLY DEFERRED, ...).
+    IReadOnlyList<Token<NzToken>>? SqliteTailTokens = null
 ) : TableConstraint(Position);
 public record CheckConstraint(SourcePosition Position, Expression Condition)
     : TableConstraint(Position);
+public record CheckColumnConstraint(SourcePosition Position, Expression Condition)
+    : ColumnConstraint(Position);
 
 public record DistributeClause(
     SourcePosition Position,
@@ -534,7 +559,7 @@ public record Literal(SourcePosition Position, LiteralKind Kind, string Value) :
 
 public enum LiteralKind
 {
-    Number, String, Null, BooleanTrue, BooleanFalse
+    Number, String, Null, BooleanTrue, BooleanFalse, Blob
 }
 
 public record TypeLiteral(
@@ -569,7 +594,9 @@ public record OverClause(
     SourcePosition Position,
     IReadOnlyList<Expression>? PartitionBy,
     IReadOnlyList<OrderByItem>? OrderBy,
-    WindowFrame? Frame
+    WindowFrame? Frame,
+    // SQLite: OVER window-name (a named WINDOW clause reference).
+    string? WindowName = null
 ) : AstNode(Position);
 
 public record WindowFrame(
@@ -869,4 +896,22 @@ public record MssqlProcedureUnitStatement(
     SourcePosition Position,
     TableName Name,
     IReadOnlyList<Token<NzToken>> Tokens
+) : Statement(Position);
+
+// ====== SQLite dialect statements ======
+// Thin SQLite units keep offset-stable token ranges until deeper SQLite
+// visitor work lands (virtual-table module arguments, trigger bodies).
+
+public record SqliteCreateVirtualTableStatement(
+    SourcePosition Position,
+    TableName Table,
+    IReadOnlyList<Token<NzToken>> Tokens,
+    bool IfNotExists = false
+) : Statement(Position);
+
+public record SqliteCreateTriggerStatement(
+    SourcePosition Position,
+    TableName Trigger,
+    IReadOnlyList<Token<NzToken>> Tokens,
+    bool IfNotExists = false
 ) : Statement(Position);

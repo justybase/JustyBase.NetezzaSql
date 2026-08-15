@@ -381,6 +381,27 @@ public enum NzToken
     AccessTransform,           // TRANSFORM (crosstab)
     AccessPivot,               // PIVOT (crosstab)
 
+    // SQLite-specific tokens (produced only by SqliteLexer). Registered before
+    // the shared chain so SQLite lexical forms win over the ANSI ones.
+    SqliteAutoincrement,          // AUTOINCREMENT
+    SqliteAttach,                 // ATTACH
+    SqliteBracketedIdentifier,    // [name] or [na]]me] (SQLite identifier quoting)
+    SqliteCollate,                // COLLATE
+    SqliteConflict,               // CONFLICT
+    SqliteDetach,                 // DETACH
+    SqliteDo,                     // DO
+    SqliteGenerated,              // GENERATED
+    SqliteNothing,                // NOTHING
+    SqlitePragma,                 // PRAGMA
+    SqliteReturning,              // RETURNING
+    SqliteSavepoint,              // SAVEPOINT
+    SqliteStrict,                 // STRICT
+    SqliteVacuum,                 // VACUUM
+    SqliteVirtual,                // VIRTUAL
+    SqliteWindow,                 // WINDOW
+    SqliteWithout,                // WITHOUT
+    SqliteBlobLiteral,            // X'...' hex blob literal
+
     // Short aliases retained for consumers that use generic operator names.
     JsonTextPath = PostgreSqlJsonTextPath,
     JsonPath = PostgreSqlJsonPath,

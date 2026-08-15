@@ -37,6 +37,7 @@ try {
         dotnet pack .\JustyBase.NetezzaDdl\JustyBase.NetezzaDdl.csproj --no-build -c $Configuration -o $packageDir
         dotnet pack .\JustyBase.NetezzaCatalogSql\JustyBase.NetezzaCatalogSql.csproj --no-build -c $Configuration -o $packageDir
         dotnet pack .\JustyBase.Netezza\JustyBase.Netezza.csproj --no-build -c $Configuration -o $packageDir
+        dotnet pack .\JustyBase.Sqlite\JustyBase.Sqlite.csproj --no-build -c $Configuration -o $packageDir
         dotnet pack .\JustyBase.Core\JustyBase.Core.csproj --no-build -c $Configuration -o $packageDir
         dotnet pack .\JustyBase.ImportExport\JustyBase.ImportExport.csproj --no-build -c $Configuration -o $packageDir
         dotnet pack .\JustyBase.Ai\JustyBase.Ai.csproj --no-build -c $Configuration -o $packageDir
