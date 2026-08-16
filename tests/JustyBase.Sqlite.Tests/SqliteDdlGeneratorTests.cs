@@ -17,13 +17,15 @@ public sealed class SqliteDdlGeneratorTests
 
         var ddl = SqliteDdlGenerator.CreateTable(table);
 
-        Assert.Equal("""
+        var expected = """
             CREATE TABLE "users" (
               "id" INTEGER PRIMARY KEY,
               "name" TEXT NOT NULL,
               "email" TEXT DEFAULT 'n/a'
             )
-            """, ddl);
+            """.ReplaceLineEndings("\n");
+
+        Assert.Equal(expected, ddl);
     }
 
     [Fact]
