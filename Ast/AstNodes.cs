@@ -100,7 +100,9 @@ public record SelectStatement(
     IReadOnlyList<Expression>? DistinctOn = null,
     // SQLite: WINDOW name AS (...) clause kept as an opaque offset-stable
     // token range until deeper window-specification AST work lands.
-    IReadOnlyList<Token<NzToken>>? SqliteWindowTokens = null
+    IReadOnlyList<Token<NzToken>>? SqliteWindowTokens = null,
+    // Access: TOP / external database / WITH OWNERACCESS OPTION metadata.
+    AccessQueryOptions? AccessOptions = null
 ) : Statement(Position);
 
 public record InsertStatement(
@@ -130,7 +132,10 @@ public record UpdateStatement(
     // Mssql: OUTPUT clause as an opaque offset-stable token range.
     IReadOnlyList<Token<NzToken>>? OutputTokens = null,
     // SQLite: UPDATE OR ROLLBACK|ABORT|REPLACE|FAIL|IGNORE clause tokens.
-    IReadOnlyList<Token<NzToken>>? SqliteOrTokens = null
+    IReadOnlyList<Token<NzToken>>? SqliteOrTokens = null,
+    // Access keeps the complete target reference so joined UPDATE syntax can
+    // be validated and formatted without losing joins or identifier quotes.
+    TableReference? AccessTargetReference = null
 ) : Statement(Position);
 
 public record DeleteStatement(
@@ -142,7 +147,10 @@ public record DeleteStatement(
     // Mssql: OUTPUT clause as an opaque offset-stable token range.
     IReadOnlyList<Token<NzToken>>? OutputTokens = null,
     // Mssql: optional FROM join source after OUTPUT (DELETE t OUTPUT ... FROM s).
-    IReadOnlyList<TableReference>? From = null
+    IReadOnlyList<TableReference>? From = null,
+    // Access keeps the complete target reference for joined DELETE syntax.
+    TableReference? AccessTargetReference = null,
+    bool AccessWildcard = false
 ) : Statement(Position);
 
 public record MergeStatement(
@@ -333,12 +341,13 @@ public record VariableSetStatement(
 
 // ====== Clauses ======
 
-public record SelectModifier(bool Distinct, bool All);
+public record SelectModifier(bool Distinct, bool All, bool DistinctRow = false);
 
 public record SelectItem(
     SourcePosition Position,
     Expression Expression,
-    string? Alias
+    string? Alias,
+    char? AliasQuote = null
 ) : AstNode(Position);
 
 public record TableReference(
@@ -363,7 +372,8 @@ public record TableSource(
     bool FunctionSource = false,
     SourcePosition? AliasPosition = null,
     bool Lateral = false,
-    FunctionCall? TableFunction = null
+    FunctionCall? TableFunction = null,
+    char? AliasQuote = null
 ) : AstNode(Position);
 
 public record TableName(
@@ -547,7 +557,9 @@ public abstract record Expression(SourcePosition Position) : AstNode(Position);
 public record ColumnReference(
     SourcePosition Position,
     string? Qualifier,
-    string Name
+    string Name,
+    char? NameQuote = null,
+    char? QualifierQuote = null
 ) : Expression(Position);
 
 public record StarExpression(
@@ -559,7 +571,7 @@ public record Literal(SourcePosition Position, LiteralKind Kind, string Value) :
 
 public enum LiteralKind
 {
-    Number, String, Null, BooleanTrue, BooleanFalse, Blob
+    Number, String, Date, Null, BooleanTrue, BooleanFalse, Blob
 }
 
 public record TypeLiteral(
@@ -651,7 +663,8 @@ public record BinaryExpression(
     SourcePosition Position,
     BinaryOperator Operator,
     Expression Left,
-    Expression Right
+    Expression Right,
+    string? OperatorText = null
 ) : Expression(Position);
 
 public enum BinaryOperator
@@ -746,7 +759,8 @@ public record SequenceValueExpression(
 ) : Expression(Position);
 
 public record ParameterExpression(
-    SourcePosition Position
+    SourcePosition Position,
+    string? Name = null
 ) : Expression(Position);
 
 // ====== Procedure Body ======
@@ -914,4 +928,83 @@ public record SqliteCreateTriggerStatement(
     TableName Trigger,
     IReadOnlyList<Token<NzToken>> Tokens,
     bool IfNotExists = false
+) : Statement(Position);
+
+// ====== Microsoft Access / Jet / ACE dialect ======
+
+/// <summary>Access TOP clause. Count is an expression so parameters remain editable.</summary>
+public record AccessTopClause(
+    SourcePosition Position,
+    Expression Count,
+    bool Percent
+) : AstNode(Position);
+
+/// <summary>Access query options shared by SELECT and crosstab statements.</summary>
+public record AccessQueryOptions(
+    SourcePosition Position,
+    AccessTopClause? Top = null,
+    string? ExternalDatabase = null,
+    bool WithOwnerAccessOption = false
+) : AstNode(Position);
+
+public record AccessParameterDeclaration(
+    SourcePosition Position,
+    string Name,
+    DataTypeInfo Type
+) : AstNode(Position);
+
+public record AccessParametersClause(
+    SourcePosition Position,
+    IReadOnlyList<AccessParameterDeclaration> Declarations
+) : AstNode(Position);
+
+/// <summary>
+/// PARAMETERS is a prefix to a query in Access. Keeping the wrapped statement
+/// makes the clause available to formatter, symbols and validation consumers.
+/// </summary>
+public record AccessParameterizedStatement(
+    SourcePosition Position,
+    AccessParametersClause Parameters,
+    Statement Body
+) : Statement(Position);
+
+/// <summary>Structured Access TRANSFORM/PIVOT (crosstab) query.</summary>
+public record AccessCrosstabStatement(
+    SourcePosition Position,
+    IReadOnlyList<SelectItem> TransformItems,
+    SelectStatement RowQuery,
+    Expression PivotExpression,
+    IReadOnlyList<Expression>? InValues,
+    AccessQueryOptions? AccessOptions = null
+) : Statement(Position);
+
+public record AccessCreateIndexStatement(
+    SourcePosition Position,
+    string Name,
+    TableName Table,
+    bool Unique,
+    IReadOnlyList<string> Columns,
+    IReadOnlyList<Token<NzToken>>? OptionTokens = null,
+    char? NameQuote = null,
+    IReadOnlyList<AccessIndexColumn>? IndexColumns = null
+) : Statement(Position);
+
+public enum AccessIndexColumnDirection
+{
+    Unspecified,
+    Ascending,
+    Descending
+}
+
+public record AccessIndexColumn(
+    string Name,
+    char? Quote = null,
+    AccessIndexColumnDirection Direction = AccessIndexColumnDirection.Unspecified
+);
+
+public record AccessDropIndexStatement(
+    SourcePosition Position,
+    string Name,
+    TableName Table,
+    char? NameQuote = null
 ) : Statement(Position);

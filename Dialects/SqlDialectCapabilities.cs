@@ -41,6 +41,11 @@ public static class SqlDialectCapabilitiesCatalog
             SupportsFetchFirst: false,
             SupportsAnsiOffsetFetch: false,
             SupportsLimit: true),
+        SqlDialect.Access => new(
+            SupportsMerge: false,
+            SupportsFetchFirst: false,
+            SupportsAnsiOffsetFetch: false,
+            SupportsLimit: false),
         _ => new(
             SupportsMerge: true,
             SupportsFetchFirst: true,

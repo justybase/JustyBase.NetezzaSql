@@ -320,7 +320,7 @@ public sealed class LintEngine : IDisposable
         {
             ct.ThrowIfCancellationRequested();
 
-            var visitor = new NzSqlVisitor(schema);
+            var visitor = new NzSqlVisitor(schema, DialectRuntime.AuthoringCatalog(_dialect));
             visitor.SeedMultiStatementScope(scriptScope.Values);
 
             if (dirtySet.Count == 0 || dirtySet.Contains(stmtIndex))

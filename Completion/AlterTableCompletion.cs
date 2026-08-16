@@ -83,7 +83,7 @@ public static class AlterTableCompletion
                     _ => phase
                 };
             }
-            else if (kind is NzToken.Identifier or NzToken.QuotedIdentifier)
+            else if (kind.IsIdentifierLike())
             {
                 var text = tokens[i].ToStringValue().ToUpperInvariant();
                 if (text == "RENAME") phase = AlterTablePhase.Rename;
@@ -117,7 +117,7 @@ public static class AlterTableCompletion
 
         while (i < tokens.Length)
         {
-            if (tokens[i].Kind is NzToken.Identifier or NzToken.QuotedIdentifier)
+            if (tokens[i].Kind.IsIdentifierLike())
             {
                 lastName = tokens[i].ToStringValue();
                 i++;

@@ -2,10 +2,19 @@
 
 All notable changes to this project will be documented here.
 
+## 0.8.2
+
+- Preserve Access DML joins, quoted aliases/assignments, and index column
+  direction metadata through parsing and formatting.
+- Complete Access provider function/type authoring metadata and declared
+  parameter validation; ignore Access identifiers in non-Access syntax linting.
+- Publish the Access AST contract consumed by the UCanAccess provider package.
+
 ## 0.8.1
 
 - Update `Microsoft.Extensions.AI` to 10.9.0 and the .NET 10 dependency-abstractions packages to 10.0.11.
 - Update `Parquet.Net` to 6.1.0 for the shared import/export libraries.
+- Fix Access `NOT LIKE` / `NOT ILIKE` AST mapping so negated comparisons keep their operator.
 
 ## 0.8.0
 
@@ -19,7 +28,9 @@ All notable changes to this project will be documented here.
 - Add a shared completion orchestrator, fragment and gate; route the LSP completion through
   it. Gate completion after whitespace and add FROM-continuation and WHERE-continuation
   contexts.
-- Add the Access SQL dialect to the lexer infrastructure.
+- Complete the Microsoft Access / Jet / ACE SQL dialect: Access lexer tokens,
+  TOP/DISTINCTROW, TRANSFORM/PIVOT, PARAMETERS, Access index DDL, formatter,
+  lint rules, completion/hover/signature metadata, semantic tokens and LSP/runtime dispatch.
 - Add a shared Netezza schema loader with typed schema cache (and unit/live tests), plus
   modern Legacy-host catalog queries replacing the retired legacy SQL file.
 - Harden the import pipe, schema cache, and scan-preview handling; improve Netezza import

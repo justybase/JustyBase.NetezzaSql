@@ -34,7 +34,7 @@ public static class NzRenameService
             if (cursorToken is null)
                 return null;
 
-            if (cursorToken.Value.Kind is not (NzToken.Identifier or NzToken.QuotedIdentifier or NzToken.MySqlBacktickIdentifier))
+            if (!cursorToken.Value.Kind.IsIdentifierLike())
                 return null;
 
             var symbolName = StripQuotes(cursorToken.Value.ToStringValue());
@@ -79,14 +79,14 @@ public static class NzRenameService
             if (first.StartAbsolute >= 0 && first.EndAbsolute <= text.Length)
             {
                 var originalText = text[first.StartAbsolute..first.EndAbsolute];
-                originalIsQuoted = originalText.Length > 0 && (originalText[0] is '"' or '`');
+                originalIsQuoted = originalText.Length > 0 && (originalText[0] is '"' or '`' or '[');
             }
         }
 
         if (originalIsQuoted)
         {
             // Accept any non-empty name that can be auto-quoted (no internal ")
-            if (string.IsNullOrWhiteSpace(newName) || newName.Contains('"') || newName.Contains('`'))
+            if (string.IsNullOrWhiteSpace(newName) || newName.Contains('"') || newName.Contains('`') || newName.Contains(']'))
                 return text;
         }
         else if (!IsValidIdentifier(newName))
@@ -117,14 +117,15 @@ public static class NzRenameService
         if (string.IsNullOrWhiteSpace(name))
             return false;
 
-        if (name[0] is '"' or '`')
+        if (name[0] is '"' or '`' or '[')
         {
-            if (name.Length < 2 || name[^1] != name[0])
+            var closingQuote = name[0] == '[' ? ']' : name[0];
+            if (name.Length < 2 || name[^1] != closingQuote)
                 return false;
 
             for (int i = 1; i < name.Length - 1; i++)
             {
-                if (name[i] == '"')
+                if (name[i] == closingQuote)
                     return false;
             }
 
@@ -145,9 +146,12 @@ public static class NzRenameService
 
     private static string PreserveCasing(string original, string newName)
     {
-        if (original.Length > 0 && (original[0] is '"' or '`'))
+        if (original.Length > 0 && (original[0] is '"' or '`' or '['))
         {
             var quote = original[0];
+            if (quote == '[')
+                return $"[{newName.Replace("]", "]]", StringComparison.Ordinal)}]";
+
             return newName.Contains(quote) ? newName : $"{quote}{newName}{quote}";
         }
 
@@ -169,6 +173,8 @@ public static class NzRenameService
             return value[1..^1];
         if (value.Length >= 2 && value[0] == '`' && value[^1] == '`')
             return value[1..^1].Replace("``", "`", StringComparison.Ordinal);
+        if (value.Length >= 2 && value[0] == '[' && value[^1] == ']')
+            return value[1..^1].Replace("]]", "]", StringComparison.Ordinal);
         return value;
     }
 }

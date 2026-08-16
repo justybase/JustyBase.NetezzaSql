@@ -39,6 +39,18 @@ public sealed class NzSqlFormatter
     {
         switch (stmt)
         {
+            case AccessParameterizedStatement parameterized:
+                FormatAccessParameterized(parameterized);
+                break;
+            case AccessCrosstabStatement crosstab:
+                FormatAccessCrosstab(crosstab);
+                break;
+            case AccessCreateIndexStatement createIndex:
+                FormatAccessCreateIndex(createIndex);
+                break;
+            case AccessDropIndexStatement dropIndex:
+                FormatAccessDropIndex(dropIndex);
+                break;
             case SelectStatement select:
                 FormatSelectCore(select);
                 break;
@@ -205,10 +217,19 @@ public sealed class NzSqlFormatter
         Write("SELECT");
         if (stmt.Modifier is not null)
         {
-            if (stmt.Modifier.Distinct)
+            if (stmt.Modifier.DistinctRow)
+                Write(" DISTINCTROW");
+            else if (stmt.Modifier.Distinct)
                 Write(" DISTINCT");
             else if (stmt.Modifier.All)
                 Write(" ALL");
+        }
+        if (stmt.AccessOptions?.Top is { } top)
+        {
+            Write(" TOP ");
+            FormatExpression(top.Count);
+            if (top.Percent)
+                Write(" PERCENT");
         }
         if (stmt.DistinctOn is { Count: > 0 })
         {
@@ -228,6 +249,11 @@ public sealed class NzSqlFormatter
             NewLine();
             Write("FROM ");
             FormatFrom(stmt.From);
+            if (stmt.AccessOptions?.ExternalDatabase is { } externalDatabase)
+            {
+                Write(" IN ");
+                Write(externalDatabase);
+            }
         }
 
         if (stmt.Where is not null)
@@ -341,6 +367,99 @@ public sealed class NzSqlFormatter
                 }
             }
         }
+
+        if (stmt.AccessOptions?.WithOwnerAccessOption == true)
+        {
+            NewLine();
+            Write("WITH OWNERACCESS OPTION");
+        }
+    }
+
+    private void FormatAccessParameterized(AccessParameterizedStatement stmt)
+    {
+        Write("PARAMETERS ");
+        for (var i = 0; i < stmt.Parameters.Declarations.Count; i++)
+        {
+            if (i > 0)
+                Write(", ");
+            var declaration = stmt.Parameters.Declarations[i];
+            Write(declaration.Name);
+            Write(" ");
+            FormatDataType(declaration.Type);
+        }
+        NewLine();
+        FormatStatementCore(stmt.Body);
+    }
+
+    private void FormatAccessCrosstab(AccessCrosstabStatement stmt)
+    {
+        Write("TRANSFORM ");
+        FormatSelectList(stmt.TransformItems);
+        NewLine();
+        FormatSelectCore(stmt.RowQuery);
+        NewLine();
+        Write("PIVOT ");
+        FormatExpression(stmt.PivotExpression);
+        if (stmt.InValues is { Count: > 0 })
+        {
+            Write(" IN (");
+            for (var i = 0; i < stmt.InValues.Count; i++)
+            {
+                if (i > 0)
+                    Write(", ");
+                FormatExpression(stmt.InValues[i]);
+            }
+            Write(")");
+        }
+        if (stmt.AccessOptions?.WithOwnerAccessOption == true)
+        {
+            NewLine();
+            Write("WITH OWNERACCESS OPTION");
+        }
+    }
+
+    private void FormatAccessCreateIndex(AccessCreateIndexStatement stmt)
+    {
+        Write("CREATE ");
+        if (stmt.Unique)
+            Write("UNIQUE ");
+        Write("INDEX ");
+        Write(FormatTableIdentifier(stmt.Name, stmt.NameQuote));
+        Write(" ON ");
+        Write(FormatTableName(stmt.Table));
+        Write(" (");
+        if (stmt.IndexColumns is { Count: > 0 })
+        {
+            for (var i = 0; i < stmt.IndexColumns.Count; i++)
+            {
+                if (i > 0)
+                    Write(", ");
+                var column = stmt.IndexColumns[i];
+                Write(FormatTableIdentifier(column.Name, column.Quote));
+                if (column.Direction == AccessIndexColumnDirection.Ascending)
+                    Write(" ASC");
+                else if (column.Direction == AccessIndexColumnDirection.Descending)
+                    Write(" DESC");
+            }
+        }
+        else
+        {
+            Write(string.Join(", ", stmt.Columns));
+        }
+        Write(")");
+        if (stmt.OptionTokens is { Count: > 0 })
+        {
+            Write(" ");
+            Write(FormatOpaqueTokens(stmt.OptionTokens));
+        }
+    }
+
+    private void FormatAccessDropIndex(AccessDropIndexStatement stmt)
+    {
+        Write("DROP INDEX ");
+        Write(FormatTableIdentifier(stmt.Name, stmt.NameQuote));
+        Write(" ON ");
+        Write(FormatTableName(stmt.Table));
     }
 
     private void FormatOffsetFetch(OffsetFetchClause clause)
@@ -412,7 +531,7 @@ public sealed class NzSqlFormatter
             if (items[i].Alias is not null)
             {
                 Write(" AS ");
-                Write(items[i].Alias!);
+                Write(FormatTableIdentifier(items[i].Alias!, items[i].AliasQuote));
             }
         }
     }
@@ -424,13 +543,17 @@ public sealed class NzSqlFormatter
             if (i > 0)
                 Write(", ");
 
-            FormatTableSource(refs[i].Source);
-            var joins = refs[i].Joins;
-            if (joins is not null)
-            {
-                foreach (var join in joins)
-                    FormatJoin(join);
-            }
+            FormatTableReference(refs[i]);
+        }
+    }
+
+    private void FormatTableReference(TableReference reference)
+    {
+        FormatTableSource(reference.Source);
+        if (reference.Joins is not null)
+        {
+            foreach (var join in reference.Joins)
+                FormatJoin(join);
         }
     }
 
@@ -445,7 +568,7 @@ public sealed class NzSqlFormatter
             if (src.Alias is not null)
             {
                 Write(" AS ");
-                Write(src.Alias);
+                Write(FormatTableIdentifier(src.Alias, src.AliasQuote));
             }
             return;
         }
@@ -456,7 +579,7 @@ public sealed class NzSqlFormatter
             if (src.Alias is not null)
             {
                 Write(" AS ");
-                Write(src.Alias);
+                Write(FormatTableIdentifier(src.Alias, src.AliasQuote));
             }
             return;
         }
@@ -475,7 +598,7 @@ public sealed class NzSqlFormatter
         if (src.Alias is not null)
         {
             Write(" AS ");
-            Write(src.Alias);
+            Write(FormatTableIdentifier(src.Alias, src.AliasQuote));
         }
     }
 
@@ -582,11 +705,18 @@ public sealed class NzSqlFormatter
             Write(FormatOpaqueTokens(stmt.SqliteOrTokens));
         }
         Write(" ");
-        Write(FormatTableName(stmt.Target));
-        if (stmt.Alias is not null)
+        if (stmt.AccessTargetReference is not null)
         {
-            Write(" ");
-            Write(stmt.Alias);
+            FormatTableReference(stmt.AccessTargetReference);
+        }
+        else
+        {
+            Write(FormatTableName(stmt.Target));
+            if (stmt.Alias is not null)
+            {
+                Write(" ");
+                Write(stmt.Alias);
+            }
         }
 
         Write(" SET ");
@@ -617,23 +747,30 @@ public sealed class NzSqlFormatter
     {
         if (item.Column.Qualifier is not null)
         {
-            Write(item.Column.Qualifier);
+            Write(FormatTableIdentifier(item.Column.Qualifier, item.Column.QualifierQuote));
             Write(".");
         }
 
-        Write(item.Column.Name);
+        Write(FormatTableIdentifier(item.Column.Name, item.Column.NameQuote));
         Write(" = ");
         FormatExpression(item.Value);
     }
 
     private void FormatDelete(DeleteStatement stmt)
     {
-        Write("DELETE FROM ");
-        Write(FormatTableName(stmt.Target));
-        if (stmt.Alias is not null)
+        Write(stmt.AccessWildcard ? "DELETE * FROM " : "DELETE FROM ");
+        if (stmt.AccessTargetReference is not null)
         {
-            Write(" ");
-            Write(stmt.Alias);
+            FormatTableReference(stmt.AccessTargetReference);
+        }
+        else
+        {
+            Write(FormatTableName(stmt.Target));
+            if (stmt.Alias is not null)
+            {
+                Write(" ");
+                Write(stmt.Alias);
+            }
         }
 
         if (stmt.From is { Count: > 0 })
@@ -1460,10 +1597,10 @@ public sealed class NzSqlFormatter
             case ColumnReference columnReference:
                 if (columnReference.Qualifier is not null)
                 {
-                    Write(columnReference.Qualifier);
+                    Write(FormatTableIdentifier(columnReference.Qualifier, columnReference.QualifierQuote));
                     Write(".");
                 }
-                Write(columnReference.Name);
+                Write(FormatTableIdentifier(columnReference.Name, columnReference.NameQuote));
                 break;
             case StarExpression star:
                 if (star.Qualifier is not null)
@@ -1522,7 +1659,7 @@ public sealed class NzSqlFormatter
             case BinaryExpression binary:
                 FormatExpression(binary.Left);
                 Write(" ");
-                Write(OpString(binary.Operator));
+                Write(binary.OperatorText ?? OpString(binary.Operator));
                 Write(" ");
                 FormatExpression(binary.Right);
                 break;
@@ -1556,8 +1693,8 @@ public sealed class NzSqlFormatter
                 Write(sequenceValue.NextVal ? "NEXT VALUE FOR " : "CURRENT VALUE FOR ");
                 Write(FormatTableName(sequenceValue.Sequence));
                 break;
-            case ParameterExpression:
-                Write("?");
+            case ParameterExpression parameter:
+                Write(parameter.Name ?? "?");
                 break;
             case CaseExpression caseExpression:
                 Write("CASE");
@@ -1766,9 +1903,19 @@ public sealed class NzSqlFormatter
         {
             case LiteralKind.String:
                 var unescaped = StripQuotes(literal.Value);
+                if (literal.Value.Length >= 2 && literal.Value[0] == '"' && literal.Value[^1] == '"')
+                {
+                    Write("\"");
+                    Write(unescaped.Replace("\"", "\"\"", StringComparison.Ordinal));
+                    Write("\"");
+                    break;
+                }
                 Write("'");
                 Write(unescaped.Replace("'", "''", StringComparison.Ordinal));
                 Write("'");
+                break;
+            case LiteralKind.Date:
+                Write(literal.Value);
                 break;
             case LiteralKind.BooleanTrue:
                 Write("TRUE");
@@ -1791,7 +1938,9 @@ public sealed class NzSqlFormatter
     private static string StripQuotes(string value)
     {
         if (value.Length >= 2 && value[0] == '\'' && value[^1] == '\'')
-            return value[1..^1];
+            return value[1..^1].Replace("''", "'", StringComparison.Ordinal);
+        if (value.Length >= 2 && value[0] == '"' && value[^1] == '"')
+            return value[1..^1].Replace("\"\"", "\"", StringComparison.Ordinal);
         return value;
     }
 
@@ -2019,6 +2168,9 @@ public sealed class NzSqlFormatter
     {
         if (quote is null)
             return value;
+
+        if (quote == '[')
+            return $"[{value.Replace("]", "]]", StringComparison.Ordinal)}]";
 
         var delimiter = quote.Value.ToString();
         return $"{delimiter}{value.Replace(delimiter, delimiter + delimiter, StringComparison.Ordinal)}{delimiter}";

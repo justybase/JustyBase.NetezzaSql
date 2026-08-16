@@ -380,6 +380,7 @@ public enum NzToken
     AccessDistinctRow,         // DISTINCTROW
     AccessTransform,           // TRANSFORM (crosstab)
     AccessPivot,               // PIVOT (crosstab)
+    AccessNamedParameter,      // @name or :name
 
     // SQLite-specific tokens (produced only by SqliteLexer). Registered before
     // the shared chain so SQLite lexical forms win over the ANSI ones.

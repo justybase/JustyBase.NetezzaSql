@@ -191,9 +191,9 @@ public sealed class NzSemanticTokenClassifier
             if (kind == SemanticTokenKind.Operator)
                 continue;
 
-            if (token.Kind is NzToken.Identifier or NzToken.QuotedIdentifier or NzToken.MySqlBacktickIdentifier)
+            if (token.Kind.IsIdentifierLike())
             {
-                var normalizedName = token.ToStringValue();
+                var normalizedName = token.ToIdentifierText();
                 switch (kind)
                 {
                     case SemanticTokenKind.Alias:
@@ -250,7 +250,11 @@ public sealed class NzSemanticTokenClassifier
             case NzToken.Parameter:
             case NzToken.DollarNumber:
             case NzToken.OracleBindVariable:
+            case NzToken.AccessNamedParameter:
+            case NzToken.MssqlVariable:
                 return (SemanticTokenKind.Parameter, SemanticTokenModifiers.None);
+            case NzToken.AccessDateLiteral:
+                return (SemanticTokenKind.String, SemanticTokenModifiers.None);
             case NzToken.OracleQualifiedFunction:
                 return (SemanticTokenKind.Function, SemanticTokenModifiers.None);
             case NzToken.BracedVariable:
@@ -260,6 +264,10 @@ public sealed class NzSemanticTokenClassifier
             case NzToken.QuotedIdentifier:
                 return (SemanticTokenKind.String, SemanticTokenModifiers.None);
             case NzToken.MySqlBacktickIdentifier:
+            case NzToken.AccessBracketedIdentifier:
+            case NzToken.AccessBacktickIdentifier:
+            case NzToken.MssqlBracketedIdentifier:
+            case NzToken.SqliteBracketedIdentifier:
                 return ClassifyIdentifier(token, allTokens, index, scopeCollector, aliasNames, tableNames, cachedRoleNames, schema);
             case NzToken.Identifier:
                 return ClassifyIdentifier(token, allTokens, index, scopeCollector, aliasNames, tableNames, cachedRoleNames, schema);
@@ -282,7 +290,7 @@ public sealed class NzSemanticTokenClassifier
         SemanticRoleNameCache? cachedRoleNames,
         ISchemaProvider? schema)
     {
-        var name = token.ToStringValue();
+        var name = token.ToIdentifierText();
         var pos = token.Span.Position.Absolute;
 
         if (NzSemanticTokenKnown.DataTypes.Contains(name))
@@ -427,9 +435,9 @@ public sealed class NzSemanticTokenClassifier
             if (k == NzToken.Dot)
                 continue;
 
-            if (k is NzToken.Identifier or NzToken.QuotedIdentifier)
+            if (k.IsIdentifierLike())
             {
-                var name = tokens[i].ToStringValue();
+                var name = tokens[i].ToIdentifierText();
                 if (previousIdentifier is not null && (inFromOrJoin || afterUpdate))
                     aliases.Add(name);
 
@@ -461,16 +469,16 @@ public sealed class NzSemanticTokenClassifier
             if (tokens[i].Kind == NzToken.Merge && j < tokens.Length && tokens[j].Kind == NzToken.Into)
                 j++;
 
-            while (j < tokens.Length && tokens[j].Kind is not (NzToken.Identifier or NzToken.QuotedIdentifier))
+            while (j < tokens.Length && !tokens[j].Kind.IsIdentifierLike())
             {
                 if (tokens[j].Kind == NzToken.Semicolon)
                     break;
                 j++;
             }
 
-            while (j < tokens.Length && tokens[j].Kind is NzToken.Identifier or NzToken.QuotedIdentifier)
+            while (j < tokens.Length && tokens[j].Kind.IsIdentifierLike())
             {
-                tables.Add(tokens[j].ToStringValue());
+                tables.Add(tokens[j].ToIdentifierText());
                 j++;
                 if (j < tokens.Length && tokens[j].Kind == NzToken.Dot)
                 {
@@ -556,7 +564,7 @@ public sealed class NzSemanticTokenClassifier
             int pos = start;
             while (pos < stmtEnd)
             {
-                if (tokens[pos].Kind is NzToken.Identifier or NzToken.QuotedIdentifier)
+                if (tokens[pos].Kind.IsIdentifierLike())
                 {
                     var (path, _, consumed) = CompletionAliasResolver.ParseTablePathAt(tokens, pos);
                     if (consumed > 0)
@@ -615,7 +623,7 @@ public sealed class NzSemanticTokenClassifier
             var k = tokens[i].Kind;
             if (k == NzToken.Dot)
                 return true;
-            if (k is NzToken.Identifier or NzToken.QuotedIdentifier)
+            if (k.IsIdentifierLike())
                 continue;
             break;
         }
@@ -635,7 +643,7 @@ public sealed class NzSemanticTokenClassifier
         {
             if (tokens[i].Kind is NzToken.From or NzToken.Join or NzToken.Into or NzToken.Update or NzToken.Merge)
                 return true;
-            if (tokens[i].Kind is NzToken.Identifier or NzToken.QuotedIdentifier)
+            if (tokens[i].Kind.IsIdentifierLike())
                 continue;
             break;
         }

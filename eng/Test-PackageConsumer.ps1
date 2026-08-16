@@ -40,6 +40,8 @@ using JustyBase.ImportExport.Export;
 using JustyBase.Netezza;
 using JustyBase.NetezzaCatalogSql;
 using JustyBase.NetezzaDdl;
+using JustyBase.NetezzaSqlParser.Ast;
+using JustyBase.NetezzaSqlParser.Dialects;
 using JustyBase.NetezzaSqlParser.Lexer;
 
 Console.WriteLine(NzLexer.Tokenize("SELECT 1").Count());
@@ -48,6 +50,10 @@ Console.WriteLine(NetezzaCatalogSql.GetSchemasSql("SAMPLE"));
 Console.WriteLine(NetezzaResult<int>.Ok(42).Value);
 Console.WriteLine(new SqlRiskAnalysisService().Analyze("UPDATE t SET a=1").Count);
 Console.WriteLine(typeof(CsvExportWriter).FullName);
+var accessParser = DialectRuntime.CreateParser(
+    DialectRuntime.Tokenize("SELECT TOP 1 [name] FROM [orders]", SqlDialect.Access).ToArray(),
+    SqlDialect.Access);
+Console.WriteLine(accessParser.Parse() is SelectStatement && accessParser.Errors.Count == 0);
 "@ | Set-Content -NoNewline (Join-Path $consumerRoot 'Program.cs')
 
 dotnet build (Join-Path $consumerRoot 'PackageConsumer.csproj') --configuration $Configuration

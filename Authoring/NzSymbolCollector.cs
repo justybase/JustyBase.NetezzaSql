@@ -627,13 +627,10 @@ internal sealed class NzSymbolCollector
         string.Equals(NormalizedTokenText(token), name, StringComparison.OrdinalIgnoreCase);
 
     private static bool IsIdentifierToken(Token<NzToken> token) =>
-        token.Kind is NzToken.Identifier or NzToken.QuotedIdentifier or NzToken.MySqlBacktickIdentifier;
+        token.Kind.IsIdentifierLike();
 
     private static string NormalizedTokenText(Token<NzToken> token)
-    {
-        var val = token.ToStringValue();
-        return val.Length >= 2 && val[0] == '"' && val[^1] == '"' ? val[1..^1] : val;
-    }
+        => token.ToIdentifierText();
 
     private static int FindTokenIndex(Token<NzToken>[] tokens, int startIndex, int endIndex,
         Func<Token<NzToken>, bool> predicate)

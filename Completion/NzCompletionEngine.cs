@@ -98,7 +98,7 @@ public class NzCompletionEngine
         var filterPartial = partialWord;
         if (contextTokens.Length > 0 &&
             contextTokens[^1].ToStringValue().Equals(partialWord, StringComparison.OrdinalIgnoreCase) &&
-            contextTokens[^1].Kind is not NzToken.Identifier and not NzToken.QuotedIdentifier)
+            !contextTokens[^1].Kind.IsIdentifierLike())
         {
             filterPartial = string.Empty;
         }
@@ -441,7 +441,7 @@ public class NzCompletionEngine
 
         if (tokens.Length >= 2 &&
             tokens[^1].Kind == NzToken.Dot &&
-            (tokens[^2].Kind == NzToken.Identifier || tokens[^2].Kind == NzToken.QuotedIdentifier || IsKeywordUsableAsName(tokens[^2].Kind)))
+            (tokens[^2].Kind.IsIdentifierLike() || IsKeywordUsableAsName(tokens[^2].Kind)))
         {
             return CompletionContext.QualifiedReference;
         }
@@ -547,7 +547,7 @@ public class NzCompletionEngine
                     _ => ctx
                 };
             }
-            else if (t is NzToken.Identifier or NzToken.QuotedIdentifier or NzToken.NumberLiteral
+            else if (t.IsIdentifierLike() || t is NzToken.NumberLiteral
                       or NzToken.StringLiteral or NzToken.Null or NzToken.Multiply)
             {
                 ctx = ctx switch
@@ -591,7 +591,7 @@ public class NzCompletionEngine
             }
 
             if (completedIndex >= 0 &&
-                tokens[completedIndex].Kind is NzToken.Identifier or NzToken.QuotedIdentifier &&
+                tokens[completedIndex].Kind.IsIdentifierLike() &&
                 (completedIndex == 0 || tokens[completedIndex - 1].Kind != NzToken.Comma))
             {
                 return CompletionContext.FromClauseTail;
@@ -648,7 +648,7 @@ public class NzCompletionEngine
                 return hasRightHandOperand;
             }
 
-            if (t is NzToken.Identifier or NzToken.QuotedIdentifier or NzToken.NumberLiteral
+            if (t.IsIdentifierLike() || t is NzToken.NumberLiteral
                 or NzToken.StringLiteral or NzToken.Null or NzToken.Multiply)
             {
                 hasRightHandOperand = true;
@@ -721,34 +721,34 @@ public class NzCompletionEngine
             return (null, null);
 
         int i = tokens.Length - 1;
-        if (tokens[i].Kind is NzToken.Identifier or NzToken.QuotedIdentifier)
+        if (tokens[i].Kind.IsIdentifierLike())
             i--;
 
         if (i >= 1 &&
             tokens[i].Kind == NzToken.Dot &&
             tokens[i - 1].Kind == NzToken.Dot &&
             i - 2 >= 0 &&
-            tokens[i - 2].Kind is NzToken.Identifier or NzToken.QuotedIdentifier)
+            tokens[i - 2].Kind.IsIdentifierLike())
         {
-            return (tokens[i - 2].ToStringValue(), null);
+            return (tokens[i - 2].ToIdentifierText(), null);
         }
 
         if (i >= 2 &&
             tokens[i].Kind == NzToken.Dot &&
-            tokens[i - 1].Kind is NzToken.Identifier or NzToken.QuotedIdentifier &&
+            tokens[i - 1].Kind.IsIdentifierLike() &&
             tokens[i - 2].Kind == NzToken.Dot &&
             i - 3 >= 0 &&
-            tokens[i - 3].Kind is NzToken.Identifier or NzToken.QuotedIdentifier)
+            tokens[i - 3].Kind.IsIdentifierLike())
         {
-            return (tokens[i - 3].ToStringValue(), tokens[i - 1].ToStringValue());
+            return (tokens[i - 3].ToIdentifierText(), tokens[i - 1].ToIdentifierText());
         }
 
         if (i >= 1 &&
             tokens[i].Kind == NzToken.Dot &&
-            tokens[i - 1].Kind is NzToken.Identifier or NzToken.QuotedIdentifier &&
+            tokens[i - 1].Kind.IsIdentifierLike() &&
             (i < 2 || tokens[i - 2].Kind != NzToken.Dot))
         {
-            return (null, tokens[i - 1].ToStringValue());
+            return (null, tokens[i - 1].ToIdentifierText());
         }
 
         return (null, null);
@@ -997,10 +997,10 @@ public class NzCompletionEngine
         for (int i = tokens.Length - 1; i > 0; i--)
         {
             if (tokens[i].Kind == NzToken.Dot &&
-                (tokens[i - 1].Kind is NzToken.Identifier or NzToken.QuotedIdentifier
+                (tokens[i - 1].Kind.IsIdentifierLike()
                  || IsKeywordUsableAsName(tokens[i - 1].Kind)))
             {
-                return tokens[i - 1].ToStringValue();
+                return tokens[i - 1].ToIdentifierText();
             }
         }
         return string.Empty;
@@ -1068,7 +1068,7 @@ public class NzCompletionEngine
             if (!inFromOrJoin && !afterUpdate)
                 continue;
 
-            if (k == NzToken.Identifier)
+            if (k.IsIdentifierLike())
             {
                 var (tableName, schema, database, alias, consumed) = ParseTableReference(tokens, i);
                 if (tableName is not null)
@@ -1096,21 +1096,21 @@ public class NzCompletionEngine
         bool afterDoubleDot = false;
 
         // Consume up to 3 dot-separated path parts: table, schema.table, db.schema.table, db..table
-        while (i < tokens.Length && tokens[i].Kind == NzToken.Identifier)
+        while (i < tokens.Length && tokens[i].Kind.IsIdentifierLike())
         {
             if (firstIdent is null)
-                firstIdent = tokens[i].ToStringValue();
+                firstIdent = tokens[i].ToIdentifierText();
             else if (secondIdent is null)
-                secondIdent = tokens[i].ToStringValue();
+                secondIdent = tokens[i].ToIdentifierText();
             else
-                thirdIdent = tokens[i].ToStringValue();
+                thirdIdent = tokens[i].ToIdentifierText();
             i++;
 
             bool consumed = false;
 
             // Single dot: schema.table or db.schema.table part separator
             if (i < tokens.Length && tokens[i].Kind == NzToken.Dot &&
-                i + 1 < tokens.Length && tokens[i + 1].Kind == NzToken.Identifier)
+                i + 1 < tokens.Length && tokens[i + 1].Kind.IsIdentifierLike())
             {
                 i++;
                 consumed = true;
@@ -1120,7 +1120,7 @@ public class NzCompletionEngine
             // Double dot (db..table)
             if (i < tokens.Length && tokens[i].Kind == NzToken.Dot &&
                 i + 1 < tokens.Length && tokens[i + 1].Kind == NzToken.Dot &&
-                i + 2 < tokens.Length && tokens[i + 2].Kind == NzToken.Identifier)
+                i + 2 < tokens.Length && tokens[i + 2].Kind.IsIdentifierLike())
             {
                 afterDoubleDot = true;
                 secondIdent = null;
@@ -1167,9 +1167,9 @@ public class NzCompletionEngine
         if (i < tokens.Length && tokens[i].Kind == NzToken.As)
             i++;
 
-        if (i < tokens.Length && tokens[i].Kind == NzToken.Identifier)
+        if (i < tokens.Length && tokens[i].Kind.IsIdentifierLike())
         {
-            var candidate = tokens[i].ToStringValue();
+            var candidate = tokens[i].ToIdentifierText();
             if (!IsClauseKeyword(candidate))
             {
                 alias = candidate;
@@ -1187,9 +1187,9 @@ public class NzCompletionEngine
         for (int i = 0; i < tokens.Length - 1; i++)
         {
             if (tokens[i].Kind == NzToken.Into &&
-                tokens[i + 1].Kind is NzToken.Identifier or NzToken.QuotedIdentifier)
+                tokens[i + 1].Kind.IsIdentifierLike())
             {
-                tableName = tokens[i + 1].ToStringValue();
+                tableName = tokens[i + 1].ToIdentifierText();
                 break;
             }
         }
@@ -1237,28 +1237,28 @@ public class NzCompletionEngine
     {
         string? first = null, second = null, third = null;
         int i = start;
-        while (i < tokens.Length && tokens[i].Kind is NzToken.Identifier or NzToken.QuotedIdentifier)
+        while (i < tokens.Length && tokens[i].Kind.IsIdentifierLike())
         {
-            if (first is null) first = tokens[i].ToStringValue();
-            else if (second is null) second = tokens[i].ToStringValue();
-            else { third = tokens[i].ToStringValue(); i++; break; }
+            if (first is null) first = tokens[i].ToIdentifierText();
+            else if (second is null) second = tokens[i].ToIdentifierText();
+            else { third = tokens[i].ToIdentifierText(); i++; break; }
             i++;
         }
 
         if (first is null) return (new CompletionAliasResolver.TablePath(string.Empty, null, null), 0);
 
         if (i < tokens.Length && tokens[i].Kind == NzToken.Dot &&
-            i + 1 < tokens.Length && tokens[i + 1].Kind is NzToken.Identifier or NzToken.QuotedIdentifier)
+            i + 1 < tokens.Length && tokens[i + 1].Kind.IsIdentifierLike())
         {
-            second ??= tokens[i + 1].ToStringValue();
+            second ??= tokens[i + 1].ToIdentifierText();
             i += 2;
         }
 
         if (i < tokens.Length && tokens[i].Kind == NzToken.Dot &&
             i + 1 < tokens.Length && tokens[i + 1].Kind == NzToken.Dot &&
-            i + 2 < tokens.Length && tokens[i + 2].Kind is NzToken.Identifier or NzToken.QuotedIdentifier)
+            i + 2 < tokens.Length && tokens[i + 2].Kind.IsIdentifierLike())
         {
-            third = tokens[i + 2].ToStringValue();
+            third = tokens[i + 2].ToIdentifierText();
             i += 3;
         }
 

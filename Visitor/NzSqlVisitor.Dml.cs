@@ -59,15 +59,23 @@ public partial class NzSqlVisitor
         ValidateUpdateStructure(stmt);
         _scope.EnterScope();
 
-        // Register target table with alias
-        var source = new TableSource(stmt.Position, stmt.Target, null, stmt.Alias);
-        Visit(source);
-
-        // Visit FROM clause first so its tables are in scope for SET/WHERE
-        if (stmt.From is not null)
+        // Access joined UPDATE keeps the target and joins in one reference.
+        if (stmt.AccessTargetReference is not null)
         {
-            foreach (var tr in stmt.From)
-                Visit(tr);
+            Visit(stmt.AccessTargetReference);
+        }
+        else
+        {
+            // Register target table with alias
+            var source = new TableSource(stmt.Position, stmt.Target, null, stmt.Alias);
+            Visit(source);
+
+            // Visit FROM clause first so its tables are in scope for SET/WHERE
+            if (stmt.From is not null)
+            {
+                foreach (var tr in stmt.From)
+                    Visit(tr);
+            }
         }
 
         // Validate SET columns and expressions
@@ -89,13 +97,20 @@ public partial class NzSqlVisitor
         ValidateDeleteStructure(stmt);
         _scope.EnterScope();
 
-        var source = new TableSource(stmt.Position, stmt.Target, null, stmt.Alias);
-        Visit(source);
-
-        if (stmt.From is not null)
+        if (stmt.AccessTargetReference is not null)
         {
-            foreach (var tableRef in stmt.From)
-                Visit(tableRef);
+            Visit(stmt.AccessTargetReference);
+        }
+        else
+        {
+            var source = new TableSource(stmt.Position, stmt.Target, null, stmt.Alias);
+            Visit(source);
+
+            if (stmt.From is not null)
+            {
+                foreach (var tableRef in stmt.From)
+                    Visit(tableRef);
+            }
         }
 
         // Validate WHERE

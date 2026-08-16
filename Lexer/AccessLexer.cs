@@ -28,6 +28,8 @@ public static class AccessLexer
             .Match(Span.Regex(@"^#[^#]*#"), NzToken.AccessDateLiteral)
             // Access double-quoted strings (must precede the shared "quoted identifier")
             .Match(Span.Regex(@"^""(?:[^""]|"""")*"""), NzToken.StringLiteral)
+            .Match(Span.Regex(@"^@[A-Za-z_][A-Za-z0-9_]*"), NzToken.AccessNamedParameter)
+            .Match(Span.Regex(@"^:[A-Za-z_][A-Za-z0-9_]*"), NzToken.AccessNamedParameter)
             .Match(Span.EqualTo("&"), NzToken.AccessAmpersand)
             .Match(NzLexer.Kw("TOP"), NzToken.AccessTop)
             .Match(NzLexer.Kw("PERCENT"), NzToken.AccessPercent)

@@ -169,7 +169,7 @@ public static class NzHoverService
             return $"**{full}()**";
         }
 
-        if (token.Kind is not (NzToken.Identifier or NzToken.QuotedIdentifier or NzToken.MySqlBacktickIdentifier))
+        if (!token.Kind.IsIdentifierLike())
         {
             string? keywordDoc = token.Kind switch
             {
@@ -185,7 +185,7 @@ public static class NzHoverService
                 : $"**{word.ToUpperInvariant()}**  \n{keywordDoc}";
         }
 
-        var name = token.ToStringValue();
+        var name = token.ToStringValue().UnquoteIdentifier();
         if (IsDataType(name, catalog))
             return GetDataTypeDetail(name);
 
@@ -201,17 +201,17 @@ public static class NzHoverService
 
         bool isColumnRef = index >= 2 &&
             allTokens[index - 1].Kind == NzToken.Dot &&
-            allTokens[index - 2].Kind == NzToken.Identifier;
+            allTokens[index - 2].Kind.IsIdentifierLike();
 
         if (isColumnRef)
         {
-            var tableName = allTokens[index - 2].ToStringValue();
+            var tableName = allTokens[index - 2].ToIdentifierText();
             return ResolveColumnRef(name, tableName, schema);
         }
 
         if (index >= 2 &&
             allTokens[index - 1].Kind == NzToken.Dot &&
-            allTokens[index - 2].Kind == NzToken.Identifier &&
+            allTokens[index - 2].Kind.IsIdentifierLike() &&
             index + 1 < allTokens.Length &&
             allTokens[index + 1].Kind == NzToken.Dot)
         {
@@ -239,9 +239,9 @@ public static class NzHoverService
                 return string.Join("\n", lines);
             }
 
-            if (index >= 2 && allTokens[index - 1].Kind == NzToken.Dot && allTokens[index - 2].Kind == NzToken.Identifier)
+            if (index >= 2 && allTokens[index - 1].Kind == NzToken.Dot && allTokens[index - 2].Kind.IsIdentifierLike())
             {
-                var qualifier = allTokens[index - 2].ToStringValue();
+                var qualifier = allTokens[index - 2].ToIdentifierText();
                 var qualifiedInfo = schema.GetTable(null, qualifier, name);
                 if (qualifiedInfo?.Columns is not null && qualifiedInfo.Columns.Count > 0)
                 {

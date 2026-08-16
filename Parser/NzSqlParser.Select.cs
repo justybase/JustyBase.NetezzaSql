@@ -75,7 +75,8 @@ public partial class NzSqlParser
             {
                 return new SelectStatement(stmt.Position, stmt.Modifier, stmt.SelectList, stmt.From,
                     stmt.Where, stmt.GroupBy, stmt.Having, stmt.OrderBy, stmt.Limit,
-                    setOps, compoundSelects, stmt.With, stmt.HasInto, stmt.OffsetFetch);
+                    setOps, compoundSelects, stmt.With, stmt.HasInto, stmt.OffsetFetch,
+                    stmt.TopTokens, stmt.DistinctOn, stmt.SqliteWindowTokens, stmt.AccessOptions);
             }
             return stmt;
         }
@@ -163,7 +164,8 @@ public partial class NzSqlParser
         {
             query = new SelectStatement(query.Position, query.Modifier, query.SelectList, query.From,
                 query.Where, query.GroupBy, query.Having, query.OrderBy, query.Limit,
-                query.SetOperations, compoundSelects, query.With, query.HasInto, query.OffsetFetch);
+                query.SetOperations, compoundSelects, query.With, query.HasInto, query.OffsetFetch,
+                query.TopTokens, query.DistinctOn, query.SqliteWindowTokens, query.AccessOptions);
         }
 
         return new CteDefinition(SourcePosition.FromToken(Peek()), name, columns, query);
@@ -443,16 +445,16 @@ public partial class NzSqlParser
             {
                 _pos = savedPos; // backtrack
                 var subquery = ParseSubqueryExpression();
-                var subAlias = ParseAliasName();
-                return new SelectItem(subquery.Position, subquery, subAlias);
+                var subAlias = ParseAliasName(out var subAliasQuote);
+                return new SelectItem(subquery.Position, subquery, subAlias, subAliasQuote);
             }
             _pos = savedPos; // backtrack if not subquery
         }
 
         var expr = ParseExpression();
-        string? alias = ParseAliasName();
+        string? alias = ParseAliasName(out var aliasQuote);
 
-        return new SelectItem(expr.Position, expr, alias);
+        return new SelectItem(expr.Position, expr, alias, aliasQuote);
     }
 
     private Expression ParseSubqueryExpression()
@@ -463,14 +465,19 @@ public partial class NzSqlParser
         return new SubqueryExpression(FromToken(lp), query);
     }
 
-    protected string? ParseAliasName()
+    protected string? ParseAliasName() => ParseAliasName(out _);
+
+    protected string? ParseAliasName(out char? quote)
     {
+        quote = null;
         if (Peek().Kind == NzToken.As)
         {
             Advance();
             if (IsContextualIdentifier(Peek().Kind))
             {
-                return StripQuotes(Advance().ToStringValue());
+                var token = Advance();
+                quote = IdentifierQuote(token.Kind);
+                return StripQuotes(token.ToStringValue());
             }
             _errors.Add(new ValidationError("Expected identifier after AS", "error",
                 SourcePosition.FromToken(Peek()), "PARSE001"));
@@ -478,7 +485,9 @@ public partial class NzSqlParser
         }
         if (IsContextualIdentifier(Peek().Kind))
         {
-            return StripQuotes(Advance().ToStringValue());
+            var token = Advance();
+            quote = IdentifierQuote(token.Kind);
+            return StripQuotes(token.ToStringValue());
         }
         return null;
     }
@@ -489,6 +498,8 @@ public partial class NzSqlParser
             return value[1..^1];
         if (value.Length >= 2 && value[0] == '`' && value[^1] == '`')
             return value[1..^1].Replace("``", "`", StringComparison.Ordinal);
+        if (value.Length >= 2 && value[0] == '[' && value[^1] == ']')
+            return value[1..^1].Replace("]]", "]", StringComparison.Ordinal);
         return value;
     }
 
@@ -563,12 +574,14 @@ public partial class NzSqlParser
                 Expect(NzToken.RParen);
 
                 string? funcAlias = null;
+                char? funcAliasQuote = null;
                 SourcePosition? funcAliasPosition = null;
                 if (Peek().Kind == NzToken.As)
                 {
                     Advance();
                     var aliasToken = ExpectNameToken();
-                    funcAlias = aliasToken.ToStringValue();
+                    funcAlias = StripQuotes(aliasToken.ToStringValue());
+                    funcAliasQuote = IdentifierQuote(aliasToken.Kind);
                     funcAliasPosition = FromToken(aliasToken);
                 }
                 else if (IsContextualIdentifier(Peek().Kind))
@@ -577,7 +590,8 @@ public partial class NzSqlParser
                     if (nxt != NzToken.LParen)
                     {
                         var aliasToken = Advance();
-                        funcAlias = aliasToken.ToStringValue();
+                        funcAlias = StripQuotes(aliasToken.ToStringValue());
+                        funcAliasQuote = IdentifierQuote(aliasToken.Kind);
                         funcAliasPosition = FromToken(aliasToken);
                     }
                 }
@@ -585,7 +599,8 @@ public partial class NzSqlParser
                 ParseTableSourceSuffix(ref funcAlias, ref funcAliasPosition);
 
                 return new TableSource(FromToken(tableTok), null, null, funcAlias,
-                    FunctionSource: true, AliasPosition: funcAliasPosition);
+                    FunctionSource: true, AliasPosition: funcAliasPosition,
+                    AliasQuote: funcAliasQuote);
             }
             _pos--; // backtrack: not TABLE WITH FINAL, treat Table as table name
         }
@@ -596,34 +611,40 @@ public partial class NzSqlParser
             var query = ParseSelectStatement();
             Expect(NzToken.RParen);
             string? alias = null;
+            char? aliasQuote = null;
             SourcePosition? aliasPosition = null;
             if (IsContextualIdentifier(Peek().Kind) && !IsStartWith())
             {
                 var aliasToken = Advance();
-                alias = aliasToken.ToStringValue();
+                alias = StripQuotes(aliasToken.ToStringValue());
+                aliasQuote = IdentifierQuote(aliasToken.Kind);
                 aliasPosition = FromToken(aliasToken);
             }
             else if (Peek().Kind == NzToken.As)
             {
                 Advance();
                 var aliasToken = ExpectNameToken();
-                alias = aliasToken.ToStringValue();
+                alias = StripQuotes(aliasToken.ToStringValue());
+                aliasQuote = IdentifierQuote(aliasToken.Kind);
                 aliasPosition = FromToken(aliasToken);
             }
             ParseTableSourceSuffix(ref alias, ref aliasPosition);
-            return new TableSource(FromToken(lp), null, query, alias, AliasPosition: aliasPosition);
+            return new TableSource(FromToken(lp), null, query, alias,
+                AliasPosition: aliasPosition, AliasQuote: aliasQuote);
         }
 
         var (table, firstToken) = ParseTableName();
         var tablePos = FromToken(firstToken);
         string? tableAlias = null;
+        char? tableAliasQuote = null;
         SourcePosition? tableAliasPosition = null;
 
         if (Peek().Kind == NzToken.As)
         {
             Advance();
             var aliasToken = ExpectNameToken();
-            tableAlias = aliasToken.ToStringValue();
+            tableAlias = StripQuotes(aliasToken.ToStringValue());
+            tableAliasQuote = IdentifierQuote(aliasToken.Kind);
             tableAliasPosition = FromToken(aliasToken);
         }
         else if (IsContextualIdentifier(Peek().Kind) && !IsStartWith())
@@ -633,7 +654,8 @@ public partial class NzSqlParser
             if (nxt != NzToken.Dot && nxt != NzToken.LParen)
             {
                 var aliasToken = Advance();
-                tableAlias = aliasToken.ToStringValue();
+                tableAlias = StripQuotes(aliasToken.ToStringValue());
+                tableAliasQuote = IdentifierQuote(aliasToken.Kind);
                 tableAliasPosition = FromToken(aliasToken);
             }
         }
@@ -641,7 +663,8 @@ public partial class NzSqlParser
         ParseTableSourceSuffix(ref tableAlias, ref tableAliasPosition);
         TryParseTableHints();
 
-        return new TableSource(tablePos, table, null, tableAlias, AliasPosition: tableAliasPosition);
+        return new TableSource(tablePos, table, null, tableAlias,
+            AliasPosition: tableAliasPosition, AliasQuote: tableAliasQuote);
     }
 
     /// <summary>
@@ -735,8 +758,10 @@ public partial class NzSqlParser
     protected virtual (TableName Table, Token<NzToken> FirstToken) ParseTableName()
     {
         var parts = new List<string?>();
+        var quotes = new List<char?>();
         var first = ExpectNameToken();
-        parts.Add(first.ToStringValue());
+        parts.Add(StripQuotes(first.ToStringValue()));
+        quotes.Add(IdentifierQuote(first.Kind));
 
         while (Peek().Kind == NzToken.Dot)
         {
@@ -751,19 +776,25 @@ public partial class NzSqlParser
                         Peek(), "PAR001");
                 }
                 parts.Add(null); // null = empty schema
+                quotes.Add(null);
                 Advance(); // consume second dot
-                parts.Add(ExpectNameToken().ToStringValue());
+                var last = ExpectNameToken();
+                parts.Add(StripQuotes(last.ToStringValue()));
+                quotes.Add(IdentifierQuote(last.Kind));
                 break;
             }
-            parts.Add(ExpectNameToken().ToStringValue());
+            var next = ExpectNameToken();
+            parts.Add(StripQuotes(next.ToStringValue()));
+            quotes.Add(IdentifierQuote(next.Kind));
         }
 
         var table = parts switch
         {
-            [var a] => new TableName(a!),
-            [var a, var b] => new TableName(b!, Schema: a),
-            [var a, null, var c] => new TableName(c!, Database: a),
-            [var a, var b, var c] => new TableName(c!, Schema: b, Database: a),
+            [var a] => new TableName(a!, NameQuote: quotes[0]),
+            [var a, var b] => new TableName(b!, Schema: a, NameQuote: quotes[1], SchemaQuote: quotes[0]),
+            [var a, null, var c] => new TableName(c!, Database: a, NameQuote: quotes[2], DatabaseQuote: quotes[0]),
+            [var a, var b, var c] => new TableName(c!, Schema: b, Database: a,
+                NameQuote: quotes[2], SchemaQuote: quotes[1], DatabaseQuote: quotes[0]),
             _ => new TableName(parts[^1]!)
         };
 
@@ -784,7 +815,9 @@ public partial class NzSqlParser
             or NzToken.MssqlVariable or NzToken.MssqlBracketedIdentifier
             or NzToken.MySqlBacktickIdentifier
             // SQLite-only tokens (never emitted by the other lexers).
-            or NzToken.SqliteBracketedIdentifier)
+            or NzToken.SqliteBracketedIdentifier
+            // Access-only quoted identifiers.
+            or NzToken.AccessBracketedIdentifier or NzToken.AccessBacktickIdentifier)
         {
             return Advance();
         }
@@ -814,5 +847,7 @@ public partial class NzSqlParser
         or NzToken.Into or NzToken.Values or NzToken.Set or NzToken.Join
         or NzToken.Inner or NzToken.Left or NzToken.Right or NzToken.Full
         or NzToken.Cross or NzToken.Natural or NzToken.On or NzToken.Union
-        or NzToken.Intersect or NzToken.Except or NzToken.MinusSet or NzToken.Semicolon;
+        or NzToken.Intersect or NzToken.Except or NzToken.MinusSet
+        or NzToken.AccessTop or NzToken.AccessPercent or NzToken.AccessDistinctRow
+        or NzToken.AccessTransform or NzToken.AccessPivot or NzToken.Semicolon;
 }

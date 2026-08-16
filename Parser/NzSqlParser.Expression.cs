@@ -56,7 +56,7 @@ public partial class NzSqlParser
                 isNot = true;
             }
             var op = Advance();
-            var binop = opKind switch
+            var binop = op.Kind switch
             {
                 NzToken.EqualsOp => BinaryOperator.Equals,
                 NzToken.NotEquals => BinaryOperator.NotEquals,
@@ -134,7 +134,8 @@ public partial class NzSqlParser
             var high = ParseAdditive();
             left = new BetweenExpression(left.Position, left, isNot, low, high);
         }
-        else if (opKind == NzToken.In || (opKind == NzToken.Not && Peek(1).Kind == NzToken.In))
+        else if (!StopInExpression &&
+                 (opKind == NzToken.In || (opKind == NzToken.Not && Peek(1).Kind == NzToken.In)))
         {
             var isNot = false;
             if (opKind == NzToken.Not)
@@ -181,10 +182,12 @@ public partial class NzSqlParser
                 var op = Advance();
                 left = new BinaryExpression(FromToken(op), BinaryOperator.Minus, left, ParseMultiplicative());
             }
-            else if (k == NzToken.Concat)
+            else if (k is NzToken.Concat or NzToken.AccessAmpersand)
             {
                 var op = Advance();
-                left = new BinaryExpression(FromToken(op), BinaryOperator.Concat, left, ParseMultiplicative());
+                left = new BinaryExpression(
+                    FromToken(op), BinaryOperator.Concat, left, ParseMultiplicative(),
+                    op.Kind == NzToken.AccessAmpersand ? "&" : null);
             }
             else if (k is NzToken.PostgreSqlJsonArrow or NzToken.PostgreSqlJsonTextArrow
                 or NzToken.PostgreSqlJsonPath or NzToken.PostgreSqlJsonTextPath)
@@ -271,6 +274,9 @@ public partial class NzSqlParser
         if (t.Kind == NzToken.StringLiteral)
             return new Literal(FromToken(Advance()), LiteralKind.String, t.ToStringValue());
 
+        if (t.Kind == NzToken.AccessDateLiteral)
+            return new Literal(FromToken(Advance()), LiteralKind.Date, t.ToStringValue());
+
         if (t.Kind == NzToken.Null)
             return new Literal(FromToken(Advance()), LiteralKind.Null, "NULL");
 
@@ -355,6 +361,9 @@ public partial class NzSqlParser
         if (t.Kind == NzToken.Parameter)
             return new ParameterExpression(FromToken(Advance()));
 
+        if (t.Kind == NzToken.AccessNamedParameter)
+            return new ParameterExpression(FromToken(Advance()), t.ToStringValue());
+
         // Dialect hook: Oracle qualified function calls and bind variables.
         if (TryParseDialectPrimary() is { } dialectExpr)
             return dialectExpr;
@@ -378,12 +387,15 @@ public partial class NzSqlParser
                 if (Peek().Kind == NzToken.Multiply)
                 {
                     var star = Advance();
-                    return new ColumnReference(FromToken(id), idStr, "*");
+                    return new ColumnReference(
+                        FromToken(id), idStr, "*", null, IdentifierQuote(id.Kind));
                 }
                 var col = ExpectNameToken();
-                return new ColumnReference(FromToken(id), idStr, StripQuotes(col.ToStringValue()));
+                return new ColumnReference(
+                    FromToken(id), idStr, StripQuotes(col.ToStringValue()),
+                    IdentifierQuote(col.Kind), IdentifierQuote(id.Kind));
             }
-            return new ColumnReference(FromToken(id), null, idStr);
+            return new ColumnReference(FromToken(id), null, idStr, IdentifierQuote(id.Kind));
         }
 
         // Check for keyword typo in expression context

@@ -31,7 +31,10 @@ VS Code, a connection manager, or query execution.
 | PostgreSQL dialect lexer | `src/dialects/postgresql/sql/lexer.ts` | `PostgreSqlLexer` (JSON operators, LATERAL, RETURNING, conflict/array tokens and unsupported Netezza token) | supported |
 | PostgreSQL dialect parser | `src/dialects/postgresql/sql/parser.ts` | `PostgreSqlSqlParser`; strict schema.table names, DISTINCT ON, LATERAL, arrays, JSON operators, casts, ON CONFLICT and RETURNING | supported |
 | PostgreSQL SQL authoring and quality rules | `extensions/postgresql/src/postgresqlSqlAuthoring.ts` | `PostgreSqlSqlCatalog` and empty `PostgreSqlLintRules` | supported |
-| ANSI authoring base and dialect overlays | `src/sql/authoring/baseProfiles.ts` plus dialect authoring profiles | `AnsiSqlCatalog` composed with Netezza, Oracle, Db2, MSSQL, MySQL and PostgreSQL overlays; signatures are merged case-insensitively | supported |
+| Access / Jet / ACE dialect lexer | UCanAccess SQL lexer/translator corpus | `AccessLexer` with bracket/backtick identifiers, Access dates, `&`, TOP/PERCENT, DISTINCTROW, TRANSFORM and PIVOT tokens | supported |
+| Access / Jet / ACE parser and DDL | UCanAccess SQL grammar/translator corpus | `AccessSqlParser`; Access TOP/DISTINCTROW, PARAMETERS, crosstab queries, Access index DDL and owner-access options | supported |
+| Access SQL authoring and quality rules | UCanAccess function/type metadata | `AccessSqlCatalog` and `AccessLintRules` through `DialectRuntime` | supported |
+| ANSI authoring base and dialect overlays | `src/sql/authoring/baseProfiles.ts` plus dialect authoring profiles | `AnsiSqlCatalog` composed with Netezza, Oracle, Db2, MSSQL, MySQL, PostgreSQL and Access overlays; signatures are merged case-insensitively | supported |
 | Common MERGE grammar | shared SQL parser and dialect parser entry points | `MergeStatement` with matched update/delete and not-matched insert clauses in all supported dialects | supported |
 | ANSI OFFSET/FETCH | Oracle and Db2 select parsers; Netezza probe/fixtures | `OffsetFetchClause` preserves OFFSET-only, FIRST/NEXT, PERCENT, ONLY and WITH TIES; legacy `LimitClause` remains compatible | supported |
 | Dialect dispatch | — | `DialectRuntime` (`Tokenize`/`CreateParser`/`QualityRules`/`AuthoringCatalog`) | supported |
@@ -65,7 +68,7 @@ offsets are preserved by the lexer and parser.
   (not in `src/dialects/oracle`); they are composed per document in the C# LSP
   through `SqlDialect` (`Dialects/SqlDialect.cs`) with `--dialect` startup
   argument or the `justy/setDialect` request (`netezza` | `oracle` | `db2` |
-  `mssql` | `mysql` | `postgresql`).
+  `mssql` | `mysql` | `postgresql` | `access`).
 - q-quoted strings (`q'[...]'`) tokenize as `q` identifier + string literal in
   both the TS and C# lexers; embedded quote handling is preserved only in the
   linter's statement scanner (`OracleLintHelpers.StatementEnd`).

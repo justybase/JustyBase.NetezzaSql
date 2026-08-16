@@ -59,9 +59,9 @@ public static class CompletionAliasResolver
             if (k == NzToken.Dot)
                 continue;
 
-            if (k is NzToken.Identifier or NzToken.QuotedIdentifier)
+            if (k.IsIdentifierLike())
             {
-                var name = tokens[i].ToStringValue();
+                var name = tokens[i].ToIdentifierText();
                 // Only match alias while still in FROM/JOIN/UPDATE table context.
                 // Otherwise identifiers after WHERE (e.g. NO_SUCH_ALIAS) would
                 // falsely resolve against a leaked previousIdentifier.
@@ -133,21 +133,21 @@ public static class CompletionAliasResolver
         bool afterDoubleDot = false;
 
         // Consume up to 3 dot-separated path parts: table, schema.table, db.schema.table, db..table
-        while (i < tokens.Length && tokens[i].Kind is NzToken.Identifier or NzToken.QuotedIdentifier)
+        while (i < tokens.Length && tokens[i].Kind.IsIdentifierLike())
         {
             if (firstIdent is null)
-                firstIdent = tokens[i].ToStringValue();
+                firstIdent = tokens[i].ToIdentifierText();
             else if (secondIdent is null)
-                secondIdent = tokens[i].ToStringValue();
+                secondIdent = tokens[i].ToIdentifierText();
             else
-                thirdIdent = tokens[i].ToStringValue();
+                thirdIdent = tokens[i].ToIdentifierText();
             i++;
 
             bool consumed = false;
 
             // Single dot: schema.table or db.schema.table part separator
             if (i < tokens.Length && tokens[i].Kind == NzToken.Dot &&
-                i + 1 < tokens.Length && tokens[i + 1].Kind is NzToken.Identifier or NzToken.QuotedIdentifier)
+                i + 1 < tokens.Length && tokens[i + 1].Kind.IsIdentifierLike())
             {
                 i++;
                 consumed = true;
@@ -157,7 +157,7 @@ public static class CompletionAliasResolver
             // Double dot (db..table)
             if (i < tokens.Length && tokens[i].Kind == NzToken.Dot &&
                 i + 1 < tokens.Length && tokens[i + 1].Kind == NzToken.Dot &&
-                i + 2 < tokens.Length && tokens[i + 2].Kind is NzToken.Identifier or NzToken.QuotedIdentifier)
+                i + 2 < tokens.Length && tokens[i + 2].Kind.IsIdentifierLike())
             {
                 afterDoubleDot = true;
                 secondIdent = null;
@@ -202,9 +202,9 @@ public static class CompletionAliasResolver
         if (i < tokens.Length && tokens[i].Kind == NzToken.As)
             i++;
 
-        if (i < tokens.Length && tokens[i].Kind is NzToken.Identifier or NzToken.QuotedIdentifier)
+        if (i < tokens.Length && tokens[i].Kind.IsIdentifierLike())
         {
-            var candidate = tokens[i].ToStringValue();
+            var candidate = tokens[i].ToIdentifierText();
             if (!IsClauseKeyword(candidate))
             {
                 alias = candidate;

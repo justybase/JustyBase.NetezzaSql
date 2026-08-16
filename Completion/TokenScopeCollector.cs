@@ -65,9 +65,9 @@ public class TokenScopeCollector
 
                 while (j < tokens.Length)
                 {
-                    if (tokens[j].Kind == NzToken.Identifier)
+                    if (tokens[j].Kind.IsIdentifierLike())
                     {
-                        var cteName = tokens[j].ToStringValue();
+                        var cteName = tokens[j].ToIdentifierText();
                         int cteNamePos = j;
 
                         // Extract columns for this CTE
@@ -116,9 +116,9 @@ public class TokenScopeCollector
                 if (!isTemp) continue;
                 if (j < tokens.Length && tokens[j].Kind != NzToken.Table) continue;
                 j++;
-                if (j >= tokens.Length || tokens[j].Kind != NzToken.Identifier) continue;
+                if (j >= tokens.Length || !tokens[j].Kind.IsIdentifierLike()) continue;
 
-                var tableName = tokens[j].ToStringValue();
+                var tableName = tokens[j].ToIdentifierText();
                 var columns = ExtractCteColumnsForEntry(tokens, j);
                 if (_schema is not null)
                 {
@@ -277,9 +277,9 @@ public class TokenScopeCollector
             bool valid = true;
             while (j < tokens.Length && valid)
             {
-                if (tokens[j].Kind == NzToken.Identifier)
+                if (tokens[j].Kind.IsIdentifierLike())
                 {
-                    cols.Add(tokens[j].ToStringValue());
+                    cols.Add(tokens[j].ToIdentifierText());
                     j++;
                     if (j < tokens.Length && tokens[j].Kind == NzToken.Comma) j++;
                     else if (j < tokens.Length && tokens[j].Kind == NzToken.RParen) return cols;
@@ -318,7 +318,7 @@ public class TokenScopeCollector
                 if (wk < bodyEnd && tokens[wk].Kind == NzToken.Recursive) wk++;
                 while (wk < bodyEnd && wk < tokens.Length)
                 {
-                    if (tokens[wk].Kind == NzToken.Identifier)
+                    if (tokens[wk].Kind.IsIdentifierLike())
                     {
                         wk++;
                         if (wk < bodyEnd && tokens[wk].Kind == NzToken.LParen && IsColumnListStart(tokens, wk))
@@ -382,26 +382,26 @@ public class TokenScopeCollector
 
         for (int i = end - 1; i > start; i--)
         {
-            if (tokens[i].Kind == NzToken.As && i + 1 < end && tokens[i + 1].Kind == NzToken.Identifier)
-                return tokens[i + 1].ToStringValue();
+            if (tokens[i].Kind == NzToken.As && i + 1 < end && tokens[i + 1].Kind.IsIdentifierLike())
+                return tokens[i + 1].ToIdentifierText();
             if (tokens[i].Kind == NzToken.As) break;
         }
 
-        if (start == end - 1 && tokens[start].Kind == NzToken.Identifier)
-            return tokens[start].ToStringValue();
+        if (start == end - 1 && tokens[start].Kind.IsIdentifierLike())
+            return tokens[start].ToIdentifierText();
 
-        if (end - start >= 2 && tokens[end - 1].Kind == NzToken.Identifier)
+        if (end - start >= 2 && tokens[end - 1].Kind.IsIdentifierLike())
         {
             bool hasDot = false, allOk = true;
             for (int i = start; i < end; i++)
             {
                 if (tokens[i].Kind == NzToken.Dot) hasDot = true;
-                else if (tokens[i].Kind != NzToken.Identifier) { allOk = false; break; }
+                else if (!tokens[i].Kind.IsIdentifierLike()) { allOk = false; break; }
             }
             if (allOk && hasDot)
             {
                 for (int i = end - 1; i >= start; i--)
-                    if (tokens[i].Kind == NzToken.Identifier) return tokens[i].ToStringValue();
+                    if (tokens[i].Kind.IsIdentifierLike()) return tokens[i].ToIdentifierText();
             }
         }
         return null;
@@ -440,7 +440,7 @@ private List<string> ResolveStarFromBody(Token<NzToken>[] tokens, int cteNameInd
             if (wk < bodyEnd && tokens[wk].Kind == NzToken.Recursive) wk++;
             while (wk < bodyEnd && wk < tokens.Length)
             {
-                if (tokens[wk].Kind == NzToken.Identifier)
+                if (tokens[wk].Kind.IsIdentifierLike())
                 {
                     wk++;
                     if (wk < bodyEnd && tokens[wk].Kind == NzToken.LParen && IsColumnListStart(tokens, wk))
@@ -484,12 +484,12 @@ private List<string> ResolveStarFromBody(Token<NzToken>[] tokens, int cteNameInd
 
             if (sk == NzToken.Multiply) { hasStar = true; break; }
 
-            if (sk == NzToken.Identifier && s + 2 < bodyEnd
+            if (sk.IsIdentifierLike() && s + 2 < bodyEnd
                 && tokens[s + 1].Kind == NzToken.Dot
                 && tokens[s + 2].Kind == NzToken.Multiply)
             {
                 hasStar = true;
-                starQualifier = tokens[s].ToStringValue();
+                starQualifier = tokens[s].ToIdentifierText();
                 break;
             }
         }
@@ -548,9 +548,9 @@ private void BuildNestedCtes(Token<NzToken>[] tokens, int bodyStart, int bodyEnd
         if (j < bodyEnd && tokens[j].Kind == NzToken.Recursive) j++;
         while (j < bodyEnd && j < tokens.Length)
         {
-            if (tokens[j].Kind == NzToken.Identifier)
+            if (tokens[j].Kind.IsIdentifierLike())
             {
-                var name = tokens[j].ToStringValue();
+                var name = tokens[j].ToIdentifierText();
                 if (!result.ContainsKey(name))
                     result[name] = Array.Empty<string>();
                 j++;
@@ -576,9 +576,9 @@ private void BuildNestedCtes(Token<NzToken>[] tokens, int bodyStart, int bodyEnd
         if (j < bodyEnd && tokens[j].Kind == NzToken.Recursive) j++;
         while (j < bodyEnd && j < tokens.Length)
         {
-            if (tokens[j].Kind == NzToken.Identifier)
+            if (tokens[j].Kind.IsIdentifierLike())
             {
-                var name = tokens[j].ToStringValue();
+                var name = tokens[j].ToIdentifierText();
                 var cols = ExtractCteColumnsForEntry(tokens, j);
                 // Resolve * in this nested CTE by scanning its body
                 var starCols = ResolveStarInNestedBody(tokens, j, result);
@@ -637,7 +637,7 @@ private List<string> ResolveStarInNestedBody(Token<NzToken>[] tokens, int cteNam
             if (wk < bodyEnd && tokens[wk].Kind == NzToken.Recursive) wk++;
             while (wk < bodyEnd && wk < tokens.Length)
             {
-                if (tokens[wk].Kind == NzToken.Identifier) { wk++; /* skip */ }
+                if (tokens[wk].Kind.IsIdentifierLike()) { wk++; /* skip */ }
                 else wk++;
             }
             k = wk - 1;
@@ -692,20 +692,20 @@ private List<string> ResolveStarInNestedBody(Token<NzToken>[] tokens, int cteNam
     private static string? ExtractTableName(Token<NzToken>[] tokens, int fromPos, int end)
     {
         int tp = fromPos;
-        if (tp >= end || tp >= tokens.Length || tokens[tp].Kind != NzToken.Identifier)
+        if (tp >= end || tp >= tokens.Length || !tokens[tp].Kind.IsIdentifierLike())
             return null;
 
-        var first = tokens[tp].ToStringValue();
+        var first = tokens[tp].ToIdentifierText();
         if (tp + 1 < end && tokens[tp + 1].Kind == NzToken.Dot)
         {
             if (tp + 2 < end && tokens[tp + 2].Kind == NzToken.Dot)
-                return tp + 3 < end ? tokens[tp + 3].ToStringValue() : null;
-            if (tp + 2 < end && tokens[tp + 2].Kind == NzToken.Identifier)
+                return tp + 3 < end ? tokens[tp + 3].ToIdentifierText() : null;
+            if (tp + 2 < end && tokens[tp + 2].Kind.IsIdentifierLike())
             {
-                var last = tokens[tp + 2].ToStringValue();
+                var last = tokens[tp + 2].ToIdentifierText();
                 if (tp + 3 < end && tokens[tp + 3].Kind == NzToken.Dot
-                    && tp + 4 < end && tokens[tp + 4].Kind == NzToken.Identifier)
-                    return tokens[tp + 4].ToStringValue();
+                    && tp + 4 < end && tokens[tp + 4].Kind.IsIdentifierLike())
+                    return tokens[tp + 4].ToIdentifierText();
                 return last;
             }
         }
@@ -715,7 +715,7 @@ private List<string> ResolveStarInNestedBody(Token<NzToken>[] tokens, int cteNam
     private static bool IsColumnListStart(Token<NzToken>[] tokens, int pos)
     {
         if (pos >= tokens.Length || tokens[pos].Kind != NzToken.LParen) return false;
-        return pos + 1 < tokens.Length && tokens[pos + 1].Kind == NzToken.Identifier;
+        return pos + 1 < tokens.Length && tokens[pos + 1].Kind.IsIdentifierLike();
     }
 
     private static void SkipBalancedParens(Token<NzToken>[] tokens, ref int pos)

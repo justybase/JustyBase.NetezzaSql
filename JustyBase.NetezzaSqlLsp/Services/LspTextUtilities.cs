@@ -83,26 +83,33 @@ internal static class LspTextUtilities
             return value[1..^1];
         if (value.Length >= 2 && value[0] == '`' && value[^1] == '`')
             return value[1..^1].Replace("``", "`", StringComparison.Ordinal);
+        if (value.Length >= 2 && value[0] == '[' && value[^1] == ']')
+            return value[1..^1].Replace("]]", "]", StringComparison.Ordinal);
         return value;
     }
 
     public static bool IsIdentifierToken(Token<NzToken> token) =>
-        token.Kind is NzToken.Identifier or NzToken.QuotedIdentifier or NzToken.MySqlBacktickIdentifier;
+        token.Kind.IsIdentifierLike();
 
     public static string NormalizedTokenText(Token<NzToken> token) =>
         StripQuotes(token.ToStringValue());
 
     public static string FormatRenameReplacement(string originalText, string newName)
     {
-        if (originalText.Length < 2 || originalText[0] != originalText[^1]
-            || originalText[0] is not ('`' or '"'))
+        if (originalText.Length < 2
+            || originalText[0] is not ('`' or '"' or '[')
+            || originalText[^1] != (originalText[0] == '[' ? ']' : originalText[0]))
             return newName;
 
         var quote = originalText[0];
-        if (newName.Length >= 2 && newName[0] == quote && newName[^1] == quote)
+        var closingQuote = quote == '[' ? ']' : quote;
+        if (newName.Length >= 2 && newName[0] == quote && newName[^1] == closingQuote)
             return newName;
 
         var delimiter = quote.ToString();
-        return $"{delimiter}{newName.Replace(delimiter, delimiter + delimiter, StringComparison.Ordinal)}{delimiter}";
+        var escaped = quote == '['
+            ? newName.Replace("]", "]]", StringComparison.Ordinal)
+            : newName.Replace(delimiter, delimiter + delimiter, StringComparison.Ordinal);
+        return quote == '[' ? $"[{escaped}]" : $"{delimiter}{escaped}{delimiter}";
     }
 }

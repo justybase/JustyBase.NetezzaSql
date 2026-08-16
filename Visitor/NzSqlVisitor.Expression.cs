@@ -1,4 +1,5 @@
 using JustyBase.NetezzaSqlParser.Ast;
+using JustyBase.NetezzaSqlParser.Authoring;
 
 namespace JustyBase.NetezzaSqlParser.Visitor;
 
@@ -75,6 +76,10 @@ public partial class NzSqlVisitor
 
         // Special built-in values
         if (cr.Qualifier is null && SpecialBuiltinValues.Contains(upperName)) return;
+
+        // Access PARAMETERS declarations are scalar names, not columns from
+        // the current table scope.
+        if (cr.Qualifier is null && _accessParameterNames.Contains(upperName)) return;
 
         // ORDER BY can reference SELECT output aliases
         if (_inOrderBy && cr.Qualifier is null)
@@ -216,7 +221,8 @@ public partial class NzSqlVisitor
         }
 
         // Validate function name is known
-        if (!KnownFunctions.Contains(upper) && fc.Name.Length > 0)
+        if (!_catalog.TryGetFunction(fc.Name, out _) &&
+            !KnownFunctions.Contains(fc.Name) && fc.Name.Length > 0)
         {
             AddError($"Function '{fc.Name}' is not recognized", "error", "SQL011", fc.Position);
         }
@@ -285,12 +291,17 @@ public partial class NzSqlVisitor
         }
     }
 
-    private static bool IsAggregateInWhere(FunctionCall fc)
+    private bool IsAggregateInWhere(FunctionCall fc)
     {
         var upper = fc.Name.ToUpperInvariant();
 
         // Always-aggregate functions (STRING_AGG, ARRAY_AGG, etc.) — always rejected in WHERE
         if (AlwaysAggregateFunctions.Contains(upper)) return true;
+
+        if (!AggregateFunctions.Contains(upper) &&
+            _catalog.TryGetFunction(fc.Name, out var catalogFunction) &&
+            catalogFunction.Category == NetezzaFunctionCategory.Aggregate)
+            return true;
 
         // Functions that can be scalar or aggregate (MIN, MAX, SUM, etc.)
         // Only reject when used as true aggregate: DISTINCT, *, or single-arg
@@ -323,7 +334,9 @@ public partial class NzSqlVisitor
         }
 
         // SQL013: validate type name
-        if (!string.IsNullOrEmpty(type.Name) && !KnownDataTypes.Contains(upper))
+        if (!string.IsNullOrEmpty(type.Name) &&
+            !_catalog.TryGetDataType(type.Name, out _) &&
+            !KnownDataTypes.Contains(type.Name))
         {
             AddError($"Unrecognized data type '{type.Name}'", "error", "SQL013", pos);
             return;

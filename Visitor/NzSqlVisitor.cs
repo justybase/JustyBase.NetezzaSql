@@ -1,4 +1,5 @@
 using JustyBase.NetezzaSqlParser.Ast;
+using JustyBase.NetezzaSqlParser.Authoring;
 
 namespace JustyBase.NetezzaSqlParser.Visitor;
 
@@ -11,6 +12,8 @@ public partial class NzSqlVisitor
     private readonly ScopeBuilder _scope;
     private readonly List<ValidationError> _errors = new();
     private readonly ISchemaProvider? _schema;
+    private readonly ISqlAuthoringCatalog _catalog;
+    private readonly HashSet<string> _accessParameterNames = new(StringComparer.OrdinalIgnoreCase);
 
     // Context tracking
     private bool _inSelectList;
@@ -44,10 +47,11 @@ public partial class NzSqlVisitor
     // Multi-statement scope: persists tables/views across statements in a script
     private Dictionary<string, TableInfo>? _multiStatementScope;
 
-    public NzSqlVisitor(ISchemaProvider? schema = null)
+    public NzSqlVisitor(ISchemaProvider? schema = null, ISqlAuthoringCatalog? catalog = null)
     {
         _scope = new ScopeBuilder();
         _schema = schema;
+        _catalog = catalog ?? NetezzaSqlAuthoringCatalog.Instance;
         _selectOutputAliasesStack.Push(new HashSet<string>(StringComparer.OrdinalIgnoreCase));
     }
 
@@ -58,6 +62,7 @@ public partial class NzSqlVisitor
     {
         _scope.Reset();
         _errors.Clear();
+        _accessParameterNames.Clear();
         _inSelectList = false;
         _selectListAliasesSoFar.Clear();
         _selectOutputAliasesStack.Clear();
@@ -110,6 +115,32 @@ public partial class NzSqlVisitor
     {
         switch (stmt)
         {
+            case AccessParameterizedStatement s:
+                var savedAccessParameters = _accessParameterNames.ToArray();
+                foreach (var declaration in s.Parameters.Declarations)
+                {
+                    _accessParameterNames.Add(declaration.Name);
+                    CheckTypeLength(declaration.Type, declaration.Position);
+                }
+                Visit(s.Body);
+                _accessParameterNames.Clear();
+                foreach (var parameter in savedAccessParameters)
+                    _accessParameterNames.Add(parameter);
+                break;
+            case AccessCrosstabStatement s:
+                Visit(s.RowQuery);
+                foreach (var item in s.TransformItems)
+                    Visit(item.Expression);
+                Visit(s.PivotExpression);
+                if (s.InValues is not null)
+                {
+                    foreach (var value in s.InValues)
+                        Visit(value);
+                }
+                break;
+            case AccessCreateIndexStatement:
+            case AccessDropIndexStatement:
+                break;
             case SelectStatement s: Visit(s); break;
             case InsertStatement s: Visit(s); break;
             case UpdateStatement s: Visit(s); break;

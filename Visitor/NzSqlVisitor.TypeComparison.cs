@@ -46,7 +46,9 @@ public partial class NzSqlVisitor
                 break;
             }
             case Literal l when l.Kind is not LiteralKind.Null:
-                operands.Add((l.Kind == LiteralKind.Number ? SqlTypeFamily.Numeric : l.Kind == LiteralKind.String ? SqlTypeFamily.String : SqlTypeFamily.Unknown, l.Position));
+                operands.Add((l.Kind == LiteralKind.Number ? SqlTypeFamily.Numeric :
+                    l.Kind == LiteralKind.String ? SqlTypeFamily.String :
+                    l.Kind == LiteralKind.Date ? SqlTypeFamily.DateTime : SqlTypeFamily.Unknown, l.Position));
                 break;
             case BinaryExpression b when IsArithmeticOperator(b.Operator):
                 CollectArithmeticOperands(b.Left, operands);
@@ -102,6 +104,7 @@ public partial class NzSqlVisitor
         ColumnReference column => ClassifyColumnType(ResolveColumnDataType(column)),
         Literal literal when literal.Kind == LiteralKind.Number => SqlTypeFamily.Numeric,
         Literal literal when literal.Kind == LiteralKind.String => SqlTypeFamily.String,
+        Literal literal when literal.Kind == LiteralKind.Date => SqlTypeFamily.DateTime,
         CastExpression cast => ClassifyColumnType(cast.TargetType.Name),
         CastFunctionExpression castFunction => ClassifyColumnType(castFunction.TargetType.Name),
         _ => SqlTypeFamily.Unknown
@@ -135,6 +138,7 @@ public partial class NzSqlVisitor
         if (upper.Contains("CHAR") || upper is "TEXT" or "CLOB" or "NCLOB" or "NCHAR" or "NVARCHAR")
             return SqlTypeFamily.String;
         if (upper is "DATE" or "TIME" or "TIMESTAMP" or "TIMESTAMPTZ" or "TIMETZ" or "INTERVAL"
+            or "DATETIME" or "DATE/TIME"
             || upper.StartsWith("TIMESTAMP", StringComparison.Ordinal))
             return SqlTypeFamily.DateTime;
         if (upper is "INT" or "INT1" or "INT2" or "INT4" or "INT8" or "INTEGER" or "BIGINT"

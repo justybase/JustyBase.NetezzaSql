@@ -197,17 +197,19 @@ public partial class NzSqlParser
         return new UpdateStatement(FromToken(updateTok), table, alias, setItems, from, where);
     }
 
-    private UpdateSetItem ParseUpdateSetItem()
+    protected UpdateSetItem ParseUpdateSetItem()
     {
         // Parse qualified or unqualified column reference
         var colTok = ExpectNameToken();
         string? qualifier = null;
+        char? qualifierQuote = null;
         string colName;
         var colPos = FromToken(colTok);
 
         if (Peek().Kind == NzToken.Dot)
         {
             qualifier = StripQuotes(colTok.ToStringValue());
+            qualifierQuote = IdentifierQuote(colTok.Kind);
             Advance();
             colTok = ExpectNameToken();
             colName = StripQuotes(colTok.ToStringValue());
@@ -219,7 +221,10 @@ public partial class NzSqlParser
 
         Expect(NzToken.EqualsOp);
         var value = ParseExpression();
-        var colRef = new ColumnReference(colPos, qualifier, colName);
+        var colRef = new ColumnReference(
+            colPos, qualifier, colName,
+            IdentifierQuote(colTok.Kind),
+            qualifierQuote);
         return new UpdateSetItem(colPos, colRef, value);
     }
 

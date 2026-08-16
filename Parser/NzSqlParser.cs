@@ -12,6 +12,12 @@ public partial class NzSqlParser
     protected readonly List<ValidationError> _errors = new();
     private static readonly KeywordTypoChecker _typoChecker = new();
 
+    /// <summary>
+    /// Dialects may reserve IN as a clause marker instead of an expression
+    /// operator. Access uses this for the PIVOT ... IN (...) tail.
+    /// </summary>
+    protected virtual bool StopInExpression => false;
+
     public NzSqlParser(Token<NzToken>[] tokens)
     {
         _tokens = tokens;
@@ -67,6 +73,7 @@ public partial class NzSqlParser
         NzToken.From or NzToken.Where or NzToken.GroupBy or NzToken.Having
             or NzToken.OrderBy or NzToken.Limit or NzToken.Offset or NzToken.Into or NzToken.Fetch
             or NzToken.Union or NzToken.Intersect or NzToken.Except or NzToken.MinusSet
+            or NzToken.AccessPivot
             or NzToken.Semicolon => true,
         _ => false
     };
@@ -77,6 +84,7 @@ public partial class NzSqlParser
         NzToken.From, NzToken.Where, NzToken.GroupBy, NzToken.Having,
         NzToken.OrderBy, NzToken.Limit, NzToken.Offset, NzToken.Fetch,
         NzToken.Union, NzToken.Intersect, NzToken.Except, NzToken.MinusSet,
+        NzToken.AccessPivot,
         NzToken.And, NzToken.Or, NzToken.Then, NzToken.Else, NzToken.End,
         NzToken.Unknown
     };
@@ -124,7 +132,18 @@ public partial class NzSqlParser
         or NzToken.MySqlBacktickIdentifier
         or NzToken.MssqlTop or NzToken.MssqlOutput or NzToken.MssqlProc
         // SQLite-only tokens (never emitted by the other lexers).
-        or NzToken.SqliteBracketedIdentifier;
+        or NzToken.SqliteBracketedIdentifier
+        // Access-only identifiers.
+        or NzToken.AccessBracketedIdentifier or NzToken.AccessBacktickIdentifier;
+
+    protected static char? IdentifierQuote(NzToken kind) => kind switch
+    {
+        NzToken.QuotedIdentifier => '"',
+        NzToken.MySqlBacktickIdentifier or NzToken.AccessBacktickIdentifier => '`',
+        NzToken.MssqlBracketedIdentifier or NzToken.AccessBracketedIdentifier
+            or NzToken.SqliteBracketedIdentifier => '[',
+        _ => null
+    };
 
     protected bool IsSetOperationStart() => Peek().Kind is NzToken.Union or NzToken.Intersect or NzToken.Except or NzToken.MinusSet
         || (Peek().Kind == NzToken.Identifier &&
@@ -134,7 +153,7 @@ public partial class NzSqlParser
     {
         NzToken.Where or NzToken.GroupBy or NzToken.OrderBy or NzToken.Having
             or NzToken.Limit or NzToken.Offset or NzToken.Fetch or NzToken.Union or NzToken.Intersect
-            or NzToken.Except or NzToken.MinusSet or NzToken.Semicolon => true,
+            or NzToken.Except or NzToken.MinusSet or NzToken.AccessPivot or NzToken.Semicolon => true,
         _ => false
     };
 

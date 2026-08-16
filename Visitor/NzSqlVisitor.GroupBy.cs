@@ -1,4 +1,5 @@
 using JustyBase.NetezzaSqlParser.Ast;
+using JustyBase.NetezzaSqlParser.Authoring;
 
 namespace JustyBase.NetezzaSqlParser.Visitor;
 
@@ -163,7 +164,7 @@ public partial class NzSqlVisitor
         }
     }
 
-    private static bool SelectItemHasTopLevelAggregate(SelectItem item) =>
+    private bool SelectItemHasTopLevelAggregate(SelectItem item) =>
         ExpressionContainsAggregate(item.Expression);
 
     private static bool SelectItemHasWindowFunction(Expression expr) =>
@@ -220,7 +221,7 @@ public partial class NzSqlVisitor
         _ => false
     };
 
-    private static bool ExpressionContainsAggregate(Expression expr) => expr switch
+    private bool ExpressionContainsAggregate(Expression expr) => expr switch
     {
         FunctionCall fc when fc.Over is not null =>
             fc.Arguments?.Any(ExpressionContainsAggregate) == true,
@@ -275,11 +276,15 @@ public partial class NzSqlVisitor
         _ => false
     };
 
-    private static bool IsAggregateFunction(FunctionCall fc)
+    private bool IsAggregateFunction(FunctionCall fc)
     {
         if (fc.Over is not null) return false;
         var upper = fc.Name.ToUpperInvariant();
         if (AlwaysAggregateFunctions.Contains(upper)) return true;
+        if (!AggregateFunctions.Contains(upper) &&
+            _catalog.TryGetFunction(fc.Name, out var catalogFunction) &&
+            catalogFunction.Category == NetezzaFunctionCategory.Aggregate)
+            return true;
         if (!AggregateFunctions.Contains(upper)) return false;
         if (fc.Distinct || fc.StarArgument) return true;
         return (fc.Arguments?.Count ?? 0) <= 1;

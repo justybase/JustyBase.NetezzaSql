@@ -69,7 +69,7 @@ public static class LintService
                         continue;
                     }
 
-                    var visitor = new NzSqlVisitor(schema);
+                    var visitor = new NzSqlVisitor(schema, DialectRuntime.AuthoringCatalog(dialect));
                     visitor.Visit(stmt);
 
                     foreach (var err in visitor.Errors)

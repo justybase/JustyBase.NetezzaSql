@@ -13,6 +13,9 @@ The parser includes Netezza-oriented support for:
 - expressions, joins, CTEs, window clauses, casts, parameters, and function calls;
 - NZPLSQL procedure blocks, variables, control flow, exceptions, and transaction statements;
 - Netezza-specific commands such as GROOM, GENERATE STATISTICS, DISTRIBUTE, and ORGANIZE.
+- Microsoft Access / Jet / ACE query forms including `TOP`, `DISTINCTROW`,
+  `TRANSFORM` / `PIVOT`, `PARAMETERS`, bracketed identifiers, `&` concatenation,
+  `#...#` date literals, and Access `CREATE INDEX` / `DROP INDEX` statements.
 
 The exact accepted grammar is defined by the parser and regression corpus. Unsupported or partially supported syntax produces parser diagnostics rather than being silently treated as valid SQL.
 

@@ -15,6 +15,9 @@ internal static class NzSemanticTokenKnown
         "VARRAY", "RECORD", "REFTABLE",
         "NATIONAL CHARACTER", "NATIONAL CHAR", "NATIONAL CHARACTER VARYING",
         "LONG VARCHAR", "LONG NVARCHAR",
+        "YESNO", "BYTE", "SHORT", "LONG", "COUNTER", "AUTOINCREMENT",
+        "SINGLE", "CURRENCY", "MONEY", "DATE/TIME", "DATETIME", "MEMO",
+        "OLEOBJECT", "GUID", "UNIQUEIDENTIFIER",
     };
 
     public static readonly HashSet<string> FunctionNames = new(StringComparer.Ordinal)
@@ -48,6 +51,16 @@ internal static class NzSemanticTokenKnown
         "TRANSLATE", "TRIM", "TRUNC", "UNICHR", "UNICODE", "UNICODES",
         "UPPER", "VARIANCE", "VAR_POP", "VAR_SAMP", "VERSION",
         "WEEKS_BETWEEN", "WIDTH_BUCKET", "YEAR", "YEARS_BETWEEN",
+        "NZ", "IIF", "SWITCH", "DATEVALUE", "TIMEVALUE", "CDATE", "DATESERIAL",
+        "TIMESERIAL", "DATEADD", "DATEDIFF", "DATEPART", "WEEKDAY", "WEEKDAYNAME",
+        "MONTHNAME", "MINUTE", "SECOND", "INSTRREV", "MID", "ASC", "CHR", "STRCONV",
+        "STRCOMP", "STRREVERSE", "UCASE", "LCASE", "LTRIM", "RTRIM", "SPACE", "STRING",
+        "LEN", "VAL", "FIX", "SGN", "SIGN", "CLNG", "CSIGN", "SQR", "SIN", "COS", "TAN",
+        "ASIN", "ACOS", "ATN", "LOG10", "RND", "ISDATE", "ISNUMERIC", "CSTR", "CBOOL",
+        "CBYTE", "CINT", "CDBL", "CSNG", "CCUR", "CDEC", "CVAR", "PMT", "NPER", "PV",
+        "FV", "SLN", "SYD", "DDB", "DCOUNT", "DSUM", "DAVG", "DMIN", "DMAX", "DFIRST",
+        "DLAST", "DLOOKUP", "DSTDEV", "DSTDEVP", "DVAR", "DVARP", "FIRST", "LAST", "STDEV",
+        "STDEVP", "VAR", "VARP", "PARTITION", "LBOUND", "UBOUND", "EVAL",
     };
 
     public const int LargeDocumentCharLimit = SqlPerformancePolicy.SemanticFullParseCharLimit;
