@@ -171,7 +171,7 @@ public sealed class NzSemanticTokenClassifier
         {
             if (_coordinator is not null)
                 _ = _coordinator.GetOrCreate(documentUri ?? "semantic-default", _dialect).Parse(sql);
-            scopeCollector = new TokenScopeCollector(_schema);
+            scopeCollector = new TokenScopeCollector(_schema, _dialect);
             scopeCollector.Collect(tokens, sql.Length);
             aliasNames = BuildAliasNames(tokens);
             tableNames = BuildTableNames(tokens);

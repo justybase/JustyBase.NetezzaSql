@@ -65,7 +65,7 @@ public class NzCompletionEngine
         _schema = schema;
         _parsingCoordinator = parsingCoordinator;
         _catalog = catalog ?? NetezzaSqlAuthoringCatalog.Instance;
-        _wildcardResolver = new CompletionWildcardResolver(schema);
+        _wildcardResolver = new CompletionWildcardResolver(schema, dialect);
         _dialect = dialect;
     }
 
@@ -83,7 +83,7 @@ public class NzCompletionEngine
         _lastFullTokens = fullTokens;
         var astScope = new CompletionScopeProvider(_schema, _dialect).TryBuild(sql);
 
-        _lastScopeCollector = new TokenScopeCollector(_schema);
+        _lastScopeCollector = new TokenScopeCollector(_schema, _dialect);
         _lastScopeCollector.Collect(fullTokens, sql.Length);
 
         if (_wildcardResolver.TryResolveWildcardSnippet(sql, cursorPosition, _lastScopeCollector, astScope, fullTokens) is { } wildcard)
@@ -859,7 +859,7 @@ public class NzCompletionEngine
             // Try schema provider first
             if (_schema is not null)
             {
-                var info = _schema.GetTable(database, schema, tableName);
+                var info = CompletionSchemaLookup.GetTable(_schema, _dialect, database, schema, tableName);
                 if (info?.Columns is { Count: > 0 })
                 {
                     foreach (var col in info.Columns)
@@ -896,7 +896,7 @@ public class NzCompletionEngine
             // Try as direct table name
             if (_schema is not null)
             {
-                var directInfo = _schema.GetTable(null, null, qualifier);
+                var directInfo = CompletionSchemaLookup.GetTable(_schema, _dialect, null, null, qualifier);
                 if (directInfo?.Columns is { Count: > 0 })
                 {
                     foreach (var col in directInfo.Columns)
@@ -942,7 +942,8 @@ public class NzCompletionEngine
                                    ?? CompletionAliasResolver.ResolveTablePath(tokens, resolvedName);
                 if (resolvedPath is { } path)
                 {
-                    var pathInfo = _schema.GetTable(path.Database, path.Schema, path.Name);
+                    var pathInfo = CompletionSchemaLookup.GetTable(
+                        _schema, _dialect, path.Database, path.Schema, path.Name);
                     if (pathInfo?.Columns is { Count: > 0 })
                     {
                         foreach (var col in pathInfo.Columns)
@@ -951,7 +952,7 @@ public class NzCompletionEngine
                     }
                 }
 
-                var info = _schema.GetTable(null, null, resolvedName);
+                var info = CompletionSchemaLookup.GetTable(_schema, _dialect, null, null, resolvedName);
                 if (info?.Columns is { Count: > 0 })
                 {
                     foreach (var col in info.Columns)
@@ -964,7 +965,7 @@ public class NzCompletionEngine
         // Try as a direct table name
         if (_schema is not null)
         {
-            var directInfo = _schema.GetTable(null, null, qualifier);
+            var directInfo = CompletionSchemaLookup.GetTable(_schema, _dialect, null, null, qualifier);
             if (directInfo?.Columns is { Count: > 0 })
             {
                 foreach (var col in directInfo.Columns)
@@ -980,7 +981,7 @@ public class NzCompletionEngine
         var tablePath = CompletionAliasResolver.ResolveTablePath(tokens, qualifier);
         if (tablePath is not { } path) return false;
 
-        var info = _schema.GetTable(path.Database, path.Schema, path.Name);
+        var info = CompletionSchemaLookup.GetTable(_schema, _dialect, path.Database, path.Schema, path.Name);
         // Empty column list means deferred hydration — treat as miss so the host can lazy-load.
         if (info?.Columns is not { Count: > 0 }) return false;
 
@@ -1195,7 +1196,7 @@ public class NzCompletionEngine
         }
 
         if (tableName is null) return;
-        var table = _schema.GetTable(null, null, tableName);
+        var table = CompletionSchemaLookup.GetTable(_schema, _dialect, null, null, tableName);
         if (table?.Columns is null) return;
 
         foreach (var col in table.Columns)
@@ -1208,7 +1209,9 @@ public class NzCompletionEngine
         if (AlterTableCompletion.PhaseNeedsTableColumns(phase))
         {
             var tableName = ExtractAlterTableName(tokens);
-            if (tableName is not null && _schema?.GetTable(null, null, tableName)?.Columns is { } cols)
+            if (_schema is not null
+                && tableName is not null
+                && CompletionSchemaLookup.GetTable(_schema, _dialect, null, null, tableName)?.Columns is { } cols)
             {
                 foreach (var col in cols)
                     list.Add(CreateColumnItem(col, tableName, priority: 5));

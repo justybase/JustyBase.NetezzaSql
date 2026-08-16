@@ -1,5 +1,6 @@
 using JustyBase.NetezzaSqlParser.Ast;
 using JustyBase.NetezzaSqlParser.Completion;
+using JustyBase.NetezzaSqlParser.Dialects;
 using JustyBase.NetezzaSqlParser.Lexer;
 using JustyBase.NetezzaSqlParser.Visitor;
 
@@ -502,6 +503,30 @@ public sealed class NzCompletionEngineTests
         var i = _engine.GetCompletions("SELECT * FROM just_data.accounts a WHERE a.", 43);
         Assert.Contains(i, x => x.Label == "acc_id" && x.Detail == "a.acc_id");
         Assert.Contains(i, x => x.Label == "acc_name" && x.Detail == "a.acc_name");
+    }
+
+    [Fact]
+    public void Sqlite_unqualified_table_prefers_main_schema_for_alias_columns()
+    {
+        var schema = new InMemorySchemaProvider();
+        schema.AddTable(new TableInfo("orders", Schema: "aux", Columns:
+        [
+            new ColumnInfo("aux_id")
+        ]));
+        schema.AddTable(new TableInfo("orders", Schema: "main", Columns:
+        [
+            new ColumnInfo("id"), new ColumnInfo("user_id")
+        ]));
+        var engine = new NzCompletionEngine(schema, dialect: SqlDialect.Sqlite);
+
+        var qualifiedSql = "SELECT * FROM main.orders o WHERE o.";
+        var unqualifiedSql = "SELECT * FROM orders o WHERE o.";
+        var qualified = engine.GetCompletions(qualifiedSql, qualifiedSql.Length);
+        var unqualified = engine.GetCompletions(unqualifiedSql, unqualifiedSql.Length);
+
+        Assert.Contains(qualified, x => x.Label == "id" && x.Detail == "o.id");
+        Assert.Contains(unqualified, x => x.Label == "id" && x.Detail == "o.id");
+        Assert.DoesNotContain(unqualified, x => x.Label == "aux_id");
     }
 
     [Fact]

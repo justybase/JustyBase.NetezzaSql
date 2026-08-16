@@ -1,4 +1,5 @@
 using JustyBase.NetezzaSqlParser.Ast;
+using JustyBase.NetezzaSqlParser.Dialects;
 using JustyBase.NetezzaSqlParser.Lexer;
 using JustyBase.NetezzaSqlParser.Visitor;
 using Superpower.Model;
@@ -12,10 +13,14 @@ namespace JustyBase.NetezzaSqlParser.Completion;
 public sealed class CompletionWildcardResolver
 {
     private readonly ISchemaProvider? _schema;
+    private readonly SqlDialect _dialect;
 
-    public CompletionWildcardResolver(ISchemaProvider? schema = null)
+    public CompletionWildcardResolver(
+        ISchemaProvider? schema = null,
+        SqlDialect dialect = SqlDialect.Netezza)
     {
         _schema = schema;
+        _dialect = dialect;
     }
 
     public CompletionItem? TryResolveWildcardSnippet(
@@ -147,7 +152,8 @@ public sealed class CompletionWildcardResolver
                 if (resolvedPath is not null && TrySchemaColumns(resolvedPath.Value, result))
                     return result;
 
-                if (_schema?.GetTable(null, null, resolvedName)?.Columns is { } aliasCols)
+                if (_schema is not null
+                    && CompletionSchemaLookup.GetTable(_schema, _dialect, null, null, resolvedName)?.Columns is { } aliasCols)
                 {
                     result.AddRange(aliasCols.Select(c => c.Name));
                     return result;
@@ -161,7 +167,7 @@ public sealed class CompletionWildcardResolver
 
         if (_schema is not null && path.Schema is null && path.Database is null)
         {
-            var table = _schema.GetTable(null, null, path.Name);
+            var table = CompletionSchemaLookup.GetTable(_schema, _dialect, null, null, path.Name);
             if (table?.Columns is not null)
                 result.AddRange(table.Columns.Select(c => c.Name));
         }
@@ -173,7 +179,7 @@ public sealed class CompletionWildcardResolver
     {
         if (_schema is null) return false;
 
-        var table = _schema.GetTable(path.Database, path.Schema, path.Name);
+        var table = CompletionSchemaLookup.GetTable(_schema, _dialect, path.Database, path.Schema, path.Name);
         if (table?.Columns is not { Count: > 0 }) return false;
 
         result.AddRange(table.Columns.Select(c => c.Name));

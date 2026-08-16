@@ -1,4 +1,5 @@
 using JustyBase.NetezzaSqlParser.Lexer;
+using JustyBase.NetezzaSqlParser.Dialects;
 using JustyBase.NetezzaSqlParser.Visitor;
 using Superpower.Model;
 
@@ -21,15 +22,19 @@ namespace JustyBase.NetezzaSqlParser.Completion;
 public class TokenScopeCollector
 {
     private readonly ISchemaProvider? _schema;
+    private readonly SqlDialect _dialect;
     private readonly List<ScopeEntry> _scopes = new();
     private readonly Dictionary<string, IReadOnlyList<string>> _globalEntries = new(StringComparer.OrdinalIgnoreCase);
     private int _sqlLength;
 
     private record ScopeEntry(int Start, int End, Dictionary<string, IReadOnlyList<string>> Bindings, bool OpenEnded);
 
-    public TokenScopeCollector(ISchemaProvider? schema)
+    public TokenScopeCollector(
+        ISchemaProvider? schema,
+        SqlDialect dialect = SqlDialect.Netezza)
     {
         _schema = schema;
+        _dialect = dialect;
     }
 
     public bool HasAny() => _scopes.Count > 0 || _globalEntries.Count > 0;
@@ -522,7 +527,7 @@ private List<string> ResolveStarFromBody(Token<NzToken>[] tokens, int cteNameInd
         // Schema lookup
         if (_schema is not null)
         {
-            var info = _schema.GetTable(null, null, tableName);
+            var info = CompletionSchemaLookup.GetTable(_schema, _dialect, null, null, tableName);
             if (info?.Columns is { Count: > 0 })
                 return info.Columns.Select(c => c.Name).ToList();
         }
@@ -680,7 +685,7 @@ private List<string> ResolveStarInNestedBody(Token<NzToken>[] tokens, int cteNam
         // Check schema
         if (_schema is not null)
         {
-            var info = _schema.GetTable(null, null, tableName);
+            var info = CompletionSchemaLookup.GetTable(_schema, _dialect, null, null, tableName);
             if (info?.Columns is { Count: > 0 })
                 return info.Columns.Select(c => c.Name).ToList();
         }

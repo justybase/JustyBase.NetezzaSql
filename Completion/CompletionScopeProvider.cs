@@ -44,7 +44,7 @@ public class CompletionScopeProvider
         if (parser.Errors.Count > 0) return null;
 
         var builder = new ScopeBuilder();
-        var walker = new ScopeWalker(builder, _schema);
+        var walker = new ScopeWalker(builder, _schema, _dialect);
         walker.Build(stmt);
         return builder;
     }
@@ -66,11 +66,13 @@ internal class ScopeWalker
 {
     private readonly ScopeBuilder _scope;
     private readonly ISchemaProvider? _schema;
+    private readonly SqlDialect _dialect;
 
-    public ScopeWalker(ScopeBuilder scope, ISchemaProvider? schema)
+    public ScopeWalker(ScopeBuilder scope, ISchemaProvider? schema, SqlDialect dialect)
     {
         _scope = scope;
         _schema = schema;
+        _dialect = dialect;
     }
 
     public void Build(Statement stmt)
@@ -194,7 +196,8 @@ internal class ScopeWalker
         // Schema columns
         if (_schema is not null)
         {
-            var info = _schema.GetTable(source.Table.Database, source.Table.Schema, source.Table.Name);
+            var info = CompletionSchemaLookup.GetTable(
+                _schema, _dialect, source.Table.Database, source.Table.Schema, source.Table.Name);
             if (info?.Columns is { Count: > 0 })
             {
                 result.AddRange(info.Columns.Select(c => c.Name));
@@ -302,7 +305,7 @@ internal class ScopeWalker
         IReadOnlyList<ColumnInfo>? columns = null;
         if (_schema is not null)
         {
-            var info = _schema.GetTable(name.Database, name.Schema, name.Name);
+            var info = CompletionSchemaLookup.GetTable(_schema, _dialect, name.Database, name.Schema, name.Name);
             if (info?.Columns is { Count: > 0 })
                 columns = info.Columns;
         }
@@ -316,7 +319,7 @@ internal class ScopeWalker
     private IReadOnlyList<ColumnInfo>? TryGetSchemaColumns(string name)
     {
         if (_schema is null) return null;
-        var info = _schema.GetTable(null, null, name);
+        var info = CompletionSchemaLookup.GetTable(_schema, _dialect, null, null, name);
         return info?.Columns;
     }
 
