@@ -20,17 +20,20 @@ public sealed class EmbeddedChatBackend : ILocalChatBackend
     private readonly LlamaServerManager _serverManager;
     private readonly EmbeddedChatModelCatalog _catalog;
     private readonly IModelStore _chatModelStore;
+    private readonly IEmbeddedChatModelBootstrapService _modelBootstrap;
 
     public EmbeddedChatBackend(
         IChatSettingsStore settingsStore,
         LlamaServerManager serverManager,
         EmbeddedChatModelCatalog catalog,
-        [FromKeyedServices(ChatModelStoreKey)] IModelStore chatModelStore)
+        [FromKeyedServices(ChatModelStoreKey)] IModelStore chatModelStore,
+        IEmbeddedChatModelBootstrapService modelBootstrap)
     {
         _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
         _serverManager = serverManager ?? throw new ArgumentNullException(nameof(serverManager));
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         _chatModelStore = chatModelStore ?? throw new ArgumentNullException(nameof(chatModelStore));
+        _modelBootstrap = modelBootstrap ?? throw new ArgumentNullException(nameof(modelBootstrap));
     }
 
     public string Id => "embedded";
@@ -60,11 +63,7 @@ public sealed class EmbeddedChatBackend : ILocalChatBackend
                 return false;
             }
 
-            if (!_chatModelStore.IsModelPresent)
-            {
-                LastError = "No embedded chat model downloaded — prepare one in Preferences → Embedded AI (Chat).";
-                return false;
-            }
+            await _modelBootstrap.EnsureModelAsync(cancellationToken: ct).ConfigureAwait(false);
 
             var settings = _settingsStore.Settings;
             // Always go through the manager. It compares the requested model path and runtime
@@ -79,9 +78,14 @@ public sealed class EmbeddedChatBackend : ILocalChatBackend
                 ct).ConfigureAwait(false);
             return await PingServerAsync(instance, ct);
         }
+        catch (EmbeddedChatModelLicenseRequiredException ex)
+        {
+            LastError = $"{ex.Message} Open Preferences → AI Chat → Download / prepare.";
+            return false;
+        }
         catch (Exception ex)
         {
-            LastError = $"Embedded llama-server failed to start: {ex.Message}";
+            LastError = $"Embedded model/server preparation failed: {ex.Message}";
             return false;
         }
     }

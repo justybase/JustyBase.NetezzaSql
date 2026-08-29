@@ -227,6 +227,12 @@ public sealed class CodexAppServerClient : IAsyncDisposable, IDisposable
             _threadId = null;
             _threadReady = false;
             _threadMode = null;
+            // When CODEX_HOME had to fall back to %TEMP%, the app-server logout
+            // only clears that fallback copy. Remove the persistent copy too so
+            // a later launch cannot silently restore the old account.
+            var persistentHome = GetPersistentCodexHome();
+            if (!string.Equals(persistentHome, _codexHome, StringComparison.OrdinalIgnoreCase))
+                TryDeleteFile(Path.Combine(persistentHome, "auth.json"));
             return true;
         }
         catch (Exception ex)
@@ -513,7 +519,7 @@ public sealed class CodexAppServerClient : IAsyncDisposable, IDisposable
             sb.AppendLine(context.Trim());
         }
         sb.AppendLine();
-        foreach (var message in messages.Where(m => m != lastUserMessage).TakeLast(10))
+        foreach (var message in messages.Where(m => m != lastUserMessage))
         {
             sb.Append(message.Role.Equals("user", StringComparison.OrdinalIgnoreCase) ? "User: " : "Assistant: ");
             sb.AppendLine(message.Content);
@@ -1010,6 +1016,9 @@ public sealed class CodexAppServerClient : IAsyncDisposable, IDisposable
         return _codexHome = fallbackHome;
     }
 
+    private string GetPersistentCodexHome()
+        => Path.Combine(_environment.ConfigDirectory, "codex");
+
     private static bool CanWriteToDirectory(string directory)
     {
         try
@@ -1047,6 +1056,19 @@ public sealed class CodexAppServerClient : IAsyncDisposable, IDisposable
         catch (IOException)
         {
             // Do not make app-server startup depend on migrating old state.
+        }
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Codex] failed to delete {path}: {ex.Message}");
         }
     }
 

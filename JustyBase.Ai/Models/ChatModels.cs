@@ -470,6 +470,8 @@ public sealed class ChatSession
     public DateTime LastActivityAt { get; set; } = DateTime.Now;
     /// <summary>Optional thread id owned by the official Codex app-server.</summary>
     public string? CodexThreadId { get; set; }
+    /// <summary>Optional SDK session id owned by the GitHub Copilot CLI runtime.</summary>
+    public string? CopilotSessionId { get; set; }
     public List<ChatMessage> Messages { get; set; } = [];
 
     public override string ToString() => string.IsNullOrWhiteSpace(Title) ? "New Chat" : Title;

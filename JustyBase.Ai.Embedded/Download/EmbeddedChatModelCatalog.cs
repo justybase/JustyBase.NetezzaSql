@@ -5,6 +5,7 @@ public static class EmbeddedChatModelIds
 {
     public const string Gemma4_12B = "gemma4-12b-it";
     public const string Qwen36_27B = "qwen3.6-27b";
+    public const string Qwen38_27B = "qwen3.8-27b";
     public const string Devstral2_22B = "devstral-2-22b";
     public const string Qwen36_35BA3B = "qwen3.6-35b-a3b";
     public const string Qwen35_9B = "qwen3.5-9b";
@@ -93,6 +94,18 @@ public sealed class EmbeddedChatModelCatalog : IModelCatalog
             Notes: "High-quality chat — needs 24+ GB VRAM or fast CPU + 32 GB RAM. Unsloth GGUF.",
             ApproxBytes: 18_000_000_000,
             MlxRepoId: "mlx-community/Qwen3.6-27B-4bit",
+            MlxSizeLabel: "~16.1 GB",
+            MlxApproxBytes: 16_081_490_064),
+        new(
+            Id: EmbeddedChatModelIds.Qwen38_27B,
+            DisplayName: "Qwen 3.8 27B (Q4_K_M)",
+            FileName: "Qwen3.8-27B-Q4_K_M.gguf",
+            DownloadUri: new Uri("https://huggingface.co/unsloth/Qwen3.8-27B-GGUF/resolve/main/Qwen3.8-27B-Q4_K_M.gguf?download=true"),
+            ApproxSizeLabel: "~18 GB",
+            SourceModelUrl: new Uri("https://huggingface.co/unsloth/Qwen3.8-27B-GGUF?show_file_info=Qwen3.8-27B-Q4_K_M.gguf"),
+            Notes: "Latest Qwen 3.8 — high-quality chat, 24+ GB VRAM or fast CPU + 32 GB RAM. Unsloth GGUF.",
+            ApproxBytes: 18_000_000_000,
+            MlxRepoId: "mlx-community/Qwen3.8-27B-4bit",
             MlxSizeLabel: "~16.1 GB",
             MlxApproxBytes: 16_081_490_064),
         new(

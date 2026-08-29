@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented here.
 
+## 0.8.3
+
+- Add the GitHub Copilot SDK backend with device-flow sign-in, SQL-only tool
+  permissions, resumable chat sessions, model/reasoning selection, and attachment
+  context support.
+- Add embedded chat model bootstrap and progress reporting, and preserve provider
+  session bindings across application restarts without leaking them across logout.
+- Harden Copilot runtime discovery, session configuration, and authentication cleanup.
+
 ## 0.8.2
 
 - Preserve Access DML joins, quoted aliases/assignments, and index column

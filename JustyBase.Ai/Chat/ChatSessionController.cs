@@ -28,7 +28,14 @@ public sealed class ChatSessionController
         _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-        CurrentSession = new ChatSession();
+        CurrentSession = _settingsStore.Settings.ChatSessions
+            .Where(static session => session.Messages.Count > 0)
+            .OrderByDescending(static session => session.LastActivityAt)
+            .FirstOrDefault()
+            ?? new ChatSession();
+        Messages.AddRange(CurrentSession.Messages);
+        _chatService.SetCodexThreadId(CurrentSession.CodexThreadId);
+        _chatService.SetCopilotSessionId(CurrentSession.CopilotSessionId);
         _chatService.SetToolConfirmationHandler(HandleToolConfirmationAsync);
     }
 
@@ -121,6 +128,7 @@ public sealed class ChatSessionController
         }
 
         _chatService.SetCodexThreadId(CurrentSession.CodexThreadId);
+        _chatService.SetCopilotSessionId(CurrentSession.CopilotSessionId);
         UserMessageAdded?.Invoke(this, userMessage);
 
         var assistantMessage = new ChatMessage
@@ -152,6 +160,7 @@ public sealed class ChatSessionController
             }
 
             CurrentSession.CodexThreadId = _chatService.GetCodexThreadId();
+            CurrentSession.CopilotSessionId = _chatService.GetCopilotSessionId();
 
             assistantMessage.IsStreaming = false;
             stopwatch.Stop();
@@ -217,6 +226,7 @@ public sealed class ChatSessionController
 
         CurrentSession = new ChatSession();
         _chatService.SetCodexThreadId(null);
+        _chatService.SetCopilotSessionId(null);
         Messages.Clear();
         SessionChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -237,6 +247,7 @@ public sealed class ChatSessionController
         CurrentSession = session;
         Messages.AddRange(session.Messages);
         _chatService.SetCodexThreadId(session.CodexThreadId);
+        _chatService.SetCopilotSessionId(session.CopilotSessionId);
         SessionChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -253,6 +264,7 @@ public sealed class ChatSessionController
         {
             CurrentSession = new ChatSession();
             _chatService.SetCodexThreadId(null);
+            _chatService.SetCopilotSessionId(null);
             Messages.Clear();
             SessionChanged?.Invoke(this, EventArgs.Empty);
         }
@@ -267,8 +279,47 @@ public sealed class ChatSessionController
         Messages.Clear();
         CurrentSession = new ChatSession();
         _chatService.SetCodexThreadId(null);
+        _chatService.SetCopilotSessionId(null);
         SessionsChanged?.Invoke(this, EventArgs.Empty);
         SessionChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Removes persisted Codex thread bindings while keeping the local chat
+    /// transcript. A provider thread belongs to the account that created it;
+    /// retaining it after logout could resume a different user's conversation.
+    /// </summary>
+    public bool ForgetCodexThreadBindings()
+    {
+        if (IsStreaming)
+            return false;
+
+        _settingsStore.Update(settings =>
+        {
+            foreach (var session in settings.ChatSessions)
+                session.CodexThreadId = null;
+        });
+        CurrentSession.CodexThreadId = null;
+        _chatService.SetCodexThreadId(null);
+        SessionsChanged?.Invoke(this, EventArgs.Empty);
+        return true;
+    }
+
+    /// <summary>Removes persisted Copilot session bindings but keeps transcripts.</summary>
+    public bool ForgetCopilotSessionBindings()
+    {
+        if (IsStreaming)
+            return false;
+
+        _settingsStore.Update(settings =>
+        {
+            foreach (var session in settings.ChatSessions)
+                session.CopilotSessionId = null;
+        });
+        CurrentSession.CopilotSessionId = null;
+        _chatService.SetCopilotSessionId(null);
+        SessionsChanged?.Invoke(this, EventArgs.Empty);
+        return true;
     }
 
     public void SaveCurrentSession()
@@ -288,6 +339,7 @@ public sealed class ChatSessionController
                 existing.Title = CurrentSession.Title;
                 existing.LastActivityAt = CurrentSession.LastActivityAt;
                 existing.CodexThreadId = CurrentSession.CodexThreadId;
+                existing.CopilotSessionId = CurrentSession.CopilotSessionId;
                 existing.Messages = CurrentSession.Messages;
             }
         });

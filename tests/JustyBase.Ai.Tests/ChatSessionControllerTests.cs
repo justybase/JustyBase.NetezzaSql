@@ -106,6 +106,59 @@ public sealed class ChatSessionControllerTests
         Assert.Equal("hi", controller.Messages[0].Content);
     }
 
+    [Fact]
+    public void Constructor_restores_the_most_recent_saved_session()
+    {
+        var older = new ChatSession
+        {
+            Title = "Older",
+            LastActivityAt = DateTime.Now.AddMinutes(-5),
+            CodexThreadId = "old-thread"
+        };
+        older.Messages.Add(new ChatMessage("old", "user"));
+
+        var recent = new ChatSession
+        {
+            Title = "Recent",
+            LastActivityAt = DateTime.Now,
+            CodexThreadId = "recent-thread",
+            CopilotSessionId = "recent-copilot"
+        };
+        recent.Messages.Add(new ChatMessage("recent", "user"));
+
+        var store = new Store();
+        store.Settings.ChatSessions.AddRange([older, recent]);
+        var fake = new FakeChatService(["ok"]);
+        var controller = new ChatSessionController(fake, store, EmptySimpleLogger.Instance);
+
+        Assert.Same(recent, controller.CurrentSession);
+        Assert.Single(controller.Messages);
+        Assert.Equal("recent", controller.Messages[0].Content);
+        Assert.Equal("recent-thread", fake.GetCodexThreadId());
+        Assert.Equal("recent-copilot", fake.GetCopilotSessionId());
+    }
+
+    [Fact]
+    public void Forget_provider_bindings_keeps_transcripts_but_clears_saved_ids()
+    {
+        var session = new ChatSession { CodexThreadId = "thread", CopilotSessionId = "copilot" };
+        session.Messages.Add(new ChatMessage("keep me", "user"));
+        var store = new Store();
+        store.Settings.ChatSessions.Add(session);
+        var fake = new FakeChatService(["ok"]);
+        var controller = new ChatSessionController(fake, store, EmptySimpleLogger.Instance);
+
+        Assert.True(controller.ForgetCodexThreadBindings());
+        Assert.True(controller.ForgetCopilotSessionBindings());
+
+        Assert.Single(store.Settings.ChatSessions);
+        Assert.Null(store.Settings.ChatSessions[0].CodexThreadId);
+        Assert.Null(store.Settings.ChatSessions[0].CopilotSessionId);
+        Assert.Single(store.Settings.ChatSessions[0].Messages);
+        Assert.Null(fake.GetCodexThreadId());
+        Assert.Null(fake.GetCopilotSessionId());
+    }
+
     private sealed class Store : IChatSettingsStore
     {
         public ChatSettings Settings { get; } = new();
@@ -160,6 +213,22 @@ public sealed class ChatSessionControllerTests
         public Task CancelCurrentRequestAsync() => Task.CompletedTask;
         public void SetCodexThreadId(string? threadId) => _threadId = threadId;
         public string? GetCodexThreadId() => _threadId;
+        public bool IsCopilotAuthenticated => false;
+        public CopilotAccountInfo? CopilotAccount => null;
+        public string? _copilotSessionId;
+        public Task<CopilotAccountInfo?> ReadCopilotAccountAsync(CancellationToken cancellationToken = default) => Task.FromResult<CopilotAccountInfo?>(null);
+        public Task<bool> StartCopilotLoginAsync(CancellationToken cancellationToken = default) => Task.FromResult(false);
+        public Task<bool> LogoutCopilotAsync(CancellationToken cancellationToken = default) => Task.FromResult(false);
+        public void SetCopilotSessionId(string? sessionId) => _copilotSessionId = sessionId;
+        public string? GetCopilotSessionId() => _copilotSessionId;
+        public string? CopilotLoginVerificationCode => null;
+        public string? CopilotLoginVerificationUrl => null;
+#pragma warning disable CS0067 // test fake: the host raises this event, but the fake never logs in
+        public event Action<string, string>? CopilotLoginVerificationCodeAvailable;
+#pragma warning restore CS0067
+#pragma warning disable CS0067 // test fake: model preparation is not exercised here
+        public event Action<JustyBase.Ai.Embedded.Abstractions.FimModelProgress>? EmbeddedModelProgress;
+#pragma warning restore CS0067
         public string? LastReasoningContent { get; set; }
 #pragma warning disable CS0067 // test fake: reasoning channel is exercised by the scripted streams
         public event Action<string>? ReasoningChunkReceived;

@@ -1,7 +1,9 @@
-using JustyBase.Ai.Ports;
+﻿using JustyBase.Ai.Ports;
 using JustyBase.Ai.Models;
 using ChatMessage = JustyBase.Ai.Models.ChatMessage;
 using JustyBase.Ai.Chat;
+using GitHub.Copilot;
+using CopilotChatBackend = JustyBase.Ai.Chat.CopilotClient;
 using Microsoft.Extensions.AI;
 using System.Globalization;
 using System.Runtime.CompilerServices;
@@ -38,11 +40,34 @@ public interface ICopilotChatService
     void SetCodexThreadId(string? threadId);
     string? GetCodexThreadId();
 
+    bool IsCopilotAuthenticated { get; }
+    CopilotAccountInfo? CopilotAccount { get; }
+    Task<CopilotAccountInfo?> ReadCopilotAccountAsync(CancellationToken cancellationToken = default);
+    Task<bool> StartCopilotLoginAsync(CancellationToken cancellationToken = default);
+    Task<bool> LogoutCopilotAsync(CancellationToken cancellationToken = default);
+    void SetCopilotSessionId(string? sessionId);
+    string? GetCopilotSessionId();
+
+    /// <summary>Device-flow user code shown by the Copilot CLI during sign-in, or null.</summary>
+    string? CopilotLoginVerificationCode { get; }
+
+    /// <summary>Device-flow verification URL printed by the Copilot CLI, or null.</summary>
+    string? CopilotLoginVerificationUrl { get; }
+
+    /// <summary>
+    /// Fired the moment the Copilot CLI prints the device-flow code (from stdout or stderr).
+    /// The host surfaces the code in a dialog — the code is not visible anywhere else.
+    /// </summary>
+    event Action<string, string>? CopilotLoginVerificationCodeAvailable;
+
     /// <summary>Reasoning (thinking) text accumulated during the last streaming turn, or null.</summary>
     string? LastReasoningContent { get; }
 
     /// <summary>Fired with each reasoning (thinking) chunk as it streams from a local backend.</summary>
     event Action<string>? ReasoningChunkReceived;
+
+    /// <summary>Fired while an Embedded model is being downloaded or prepared.</summary>
+    event Action<JustyBase.Ai.Embedded.Abstractions.FimModelProgress>? EmbeddedModelProgress;
 }
 
 public sealed class LocalChatService : ICopilotChatService, IAsyncDisposable, IDisposable
@@ -55,7 +80,9 @@ public sealed class LocalChatService : ICopilotChatService, IAsyncDisposable, ID
     private readonly ILocalModelConfigurationService _modelConfiguration;
     private readonly ISystemPromptBuilder _promptBuilder;
     private readonly CodexAppServerClient _codexClient;
+    private readonly CopilotChatBackend _copilotClient;
     private readonly JustyBase.Ai.Embedded.Server.LlamaServerManager? _llamaServerManager;
+    private readonly IEmbeddedChatModelBootstrapService? _embeddedModelBootstrap;
 
     private bool _isConnected;
     public bool IsConnected => _isConnected;
@@ -76,6 +103,7 @@ public sealed class LocalChatService : ICopilotChatService, IAsyncDisposable, ID
     private readonly StringBuilder _activeReasoning = new();
 
     public event Action<string>? ReasoningChunkReceived;
+    public event Action<JustyBase.Ai.Embedded.Abstractions.FimModelProgress>? EmbeddedModelProgress;
 
     private Func<string, string, Task<bool>>? _toolConfirmationHandler;
     private int? _lastSqlHash;
@@ -90,9 +118,11 @@ public sealed class LocalChatService : ICopilotChatService, IAsyncDisposable, ID
         ILocalStateProvider stateProvider,
         ILocalModelConfigurationService modelConfiguration,
         CodexAppServerClient codexClient,
+        CopilotChatBackend copilotClient,
         SqlExecutionErrorStore sqlExecutionErrorStore,
         IUiDispatcher dispatcher,
-        JustyBase.Ai.Embedded.Server.LlamaServerManager? llamaServerManager = null)
+        JustyBase.Ai.Embedded.Server.LlamaServerManager? llamaServerManager = null,
+        IEmbeddedChatModelBootstrapService? embeddedModelBootstrap = null)
     {
         _logger = logger;
         _settingsStore = settingsStore;
@@ -100,12 +130,21 @@ public sealed class LocalChatService : ICopilotChatService, IAsyncDisposable, ID
         _stateProvider = stateProvider;
         _modelConfiguration = modelConfiguration;
         _codexClient = codexClient;
+        _copilotClient = copilotClient;
         _llamaServerManager = llamaServerManager;
+        _embeddedModelBootstrap = embeddedModelBootstrap;
         _promptBuilder = new SystemPromptBuilder();
         _toolExecutor = new LocalToolExecutor(logger, databaseAccessProvider, diagnosticsProvider, sqlExecutionErrorStore, dispatcher);
         _codexClient.SetToolHandler(ExecuteCodexToolAsync, ConfirmCodexToolAsync);
+        _copilotClient.SetToolsProvider(BuildCopilotTools);
+        _copilotClient.LoginVerificationCodeAvailable += (code, url) => CopilotLoginVerificationCodeAvailable?.Invoke(code, url);
+        if (_embeddedModelBootstrap is not null)
+            _embeddedModelBootstrap.ProgressChanged += OnEmbeddedModelProgress;
         WireLocalToolExecutors();
     }
+
+    private void OnEmbeddedModelProgress(JustyBase.Ai.Embedded.Abstractions.FimModelProgress progress)
+        => EmbeddedModelProgress?.Invoke(progress);
 
     /// <summary>Shares the approval-gated local tool executor with the local chat backends.</summary>
     private void WireLocalToolExecutors()
@@ -187,7 +226,7 @@ public sealed class LocalChatService : ICopilotChatService, IAsyncDisposable, ID
     public void SetToolConfirmationHandler(Func<string, string, Task<bool>> handler) => _toolConfirmationHandler = handler;
 
     public IReadOnlyList<(string Id, string DisplayName)> AvailableBackends =>
-        new[] { ("codex", "Codex (ChatGPT)") }
+        new[] { ("codex", "Codex (ChatGPT)"), ("copilot", "GitHub Copilot") }
             .Concat(_clientFactory.Backends.Select(b => (b.Id, b.DisplayName)))
             .ToList();
 
@@ -214,13 +253,55 @@ public sealed class LocalChatService : ICopilotChatService, IAsyncDisposable, ID
     public Task<bool> LogoutCodexAsync(CancellationToken cancellationToken = default)
         => _codexClient.LogoutAsync(cancellationToken);
 
+    public bool IsCopilotAuthenticated => _copilotClient.Account?.IsAuthenticated == true;
+    public CopilotAccountInfo? CopilotAccount => _copilotClient.Account;
+    public string? CopilotLoginVerificationCode => _copilotClient.LoginVerificationCode;
+    public string? CopilotLoginVerificationUrl => _copilotClient.LoginVerificationUrl;
+    public event Action<string, string>? CopilotLoginVerificationCodeAvailable;
+
+    public async Task<CopilotAccountInfo?> ReadCopilotAccountAsync(CancellationToken cancellationToken = default)
+    {
+        var account = await _copilotClient.ReadAccountAsync(cancellationToken).ConfigureAwait(false);
+        if (account is null && !string.IsNullOrWhiteSpace(_copilotClient.LastError))
+            ConnectionError = _copilotClient.LastError;
+        return account;
+    }
+
+    public async Task<bool> StartCopilotLoginAsync(CancellationToken cancellationToken = default)
+    {
+        var started = await _copilotClient.StartLoginAsync(cancellationToken).ConfigureAwait(false);
+        ConnectionError = started ? null : _copilotClient.LastError ?? "GitHub Copilot CLI is unavailable.";
+        return started;
+    }
+
+    public async Task<bool> LogoutCopilotAsync(CancellationToken cancellationToken = default)
+    {
+        var loggedOut = await _copilotClient.LogoutAsync(cancellationToken).ConfigureAwait(false);
+
+        // Provider session ids belong to the account that created them. Clear every
+        // persisted binding as part of the service-level logout path so a subsequent
+        // account cannot resume the previous account's Copilot conversation.
+        _settingsStore.Update(settings =>
+        {
+            foreach (var session in settings.ChatSessions)
+                session.CopilotSessionId = null;
+        });
+        _copilotClient.SetCopilotSessionId(null);
+        return loggedOut;
+    }
+
     public Task CancelCurrentRequestAsync()
         => string.Equals(_activeBackendId, "codex", StringComparison.OrdinalIgnoreCase)
             ? _codexClient.InterruptCurrentTurnAsync()
-            : Task.CompletedTask;
+            : string.Equals(_activeBackendId, "copilot", StringComparison.OrdinalIgnoreCase)
+                ? _copilotClient.InterruptCurrentTurnAsync()
+                : Task.CompletedTask;
 
     public void SetCodexThreadId(string? threadId) => _codexClient.SetThreadId(threadId);
     public string? GetCodexThreadId() => _codexClient.ThreadId;
+
+    public void SetCopilotSessionId(string? sessionId) => _copilotClient.SetCopilotSessionId(sessionId);
+    public string? GetCopilotSessionId() => _copilotClient.CopilotSessionId;
 
     public async Task<bool> SwitchBackendAsync(string backendId)
     {
@@ -246,6 +327,31 @@ public sealed class LocalChatService : ICopilotChatService, IAsyncDisposable, ID
 
             _activeBackend = null;
             _activeBackendId = "codex";
+            _isConnected = true;
+            ConnectionError = null;
+            return true;
+        }
+
+        if (backendId.Equals("copilot", StringComparison.OrdinalIgnoreCase))
+        {
+            var initialized = await _copilotClient.InitializeAsync().ConfigureAwait(false);
+            if (!initialized)
+            {
+                ConnectionError = _copilotClient.LastError ?? "GitHub Copilot CLI is unavailable.";
+                _isConnected = wasConnected;
+                return false;
+            }
+
+            await _copilotClient.ReadAccountAsync().ConfigureAwait(false);
+            if (!IsCopilotAuthenticated)
+            {
+                ConnectionError = "Sign in with GitHub Copilot to use the Copilot backend.";
+                _isConnected = wasConnected;
+                return false;
+            }
+
+            _activeBackend = null;
+            _activeBackendId = "copilot";
             _isConnected = true;
             ConnectionError = null;
             return true;
@@ -322,6 +428,8 @@ public sealed class LocalChatService : ICopilotChatService, IAsyncDisposable, ID
     {
         if (string.Equals(_activeBackendId, "codex", StringComparison.OrdinalIgnoreCase))
             return await _codexClient.ListModelsAsync().ConfigureAwait(false);
+        if (string.Equals(_activeBackendId, "copilot", StringComparison.OrdinalIgnoreCase))
+            return await _copilotClient.ListModelsAsync().ConfigureAwait(false);
         return await _modelConfiguration.GetAvailableModelsAsync(_activeBackend?.Id);
     }
 
@@ -329,6 +437,8 @@ public sealed class LocalChatService : ICopilotChatService, IAsyncDisposable, ID
     {
         if (string.Equals(_activeBackendId, "codex", StringComparison.OrdinalIgnoreCase))
             return await _codexClient.ListReasoningEffortsAsync(modelId).ConfigureAwait(false);
+        if (string.Equals(_activeBackendId, "copilot", StringComparison.OrdinalIgnoreCase))
+            return await _copilotClient.ListReasoningEffortsAsync(modelId).ConfigureAwait(false);
 
         // The embedded llama-server accepts reasoning_effort for models with a thinking
         // chat template (Qwen3-family GGUF). The exact set is model-dependent; expose the
@@ -368,6 +478,7 @@ public sealed class LocalChatService : ICopilotChatService, IAsyncDisposable, ID
         // loads do not reach the embedded streaming branch below, so clearing only there can
         // attach the previous turn's thinking to a later assistant message.
         _activeReasoning.Clear();
+        var promptMessages = LimitPromptHistory(messages);
 
         if (string.Equals(_activeBackendId, "codex", StringComparison.OrdinalIgnoreCase))
         {
@@ -379,7 +490,7 @@ public sealed class LocalChatService : ICopilotChatService, IAsyncDisposable, ID
             var codexSystemPrompt = BuildSystemPrompt(_currentMode);
             var codexResponse = codexSqlFix ? new StringBuilder() : null;
             await foreach (var chunk in _codexClient.SendAsync(
-                messages,
+                promptMessages,
                 modelId,
                 reasoningEffort,
                 _currentMode,
@@ -393,12 +504,69 @@ public sealed class LocalChatService : ICopilotChatService, IAsyncDisposable, ID
 
             if (codexSqlFix && codexResponse is not null && !cancellationToken.IsCancellationRequested)
             {
-                var lastUserMessage = FindLastUserMessage(messages);
+                var lastUserMessage = FindLastUserMessage(promptMessages);
                 if (lastUserMessage is not null)
                 {
                     var fallbackResult = await TryApplyDefaultSqlFixAsync(
                         codexCurrentSql,
                         codexResponse.ToString(),
+                        lastUserMessage.Content).ConfigureAwait(false);
+                    if (!string.IsNullOrWhiteSpace(fallbackResult))
+                        yield return $"\n\n{fallbackResult}";
+                }
+            }
+            yield break;
+        }
+
+        if (string.Equals(_activeBackendId, "copilot", StringComparison.OrdinalIgnoreCase))
+        {
+            var copilotSqlFix = _currentMode == ChatMode.SqlFix;
+            var copilotCurrentSql = copilotSqlFix
+                ? await _toolExecutor.GetCurrentSql().ConfigureAwait(false)
+                : string.Empty;
+            var copilotLastUserMessage = FindLastUserMessage(promptMessages);
+            var copilotContext = await BuildCodexContextAsync(_currentMode).ConfigureAwait(false);
+            if (copilotLastUserMessage is not null)
+            {
+                var attachmentMetadata = _stateProvider.BuildAttachmentMetadataSection(copilotLastUserMessage.Attachments);
+                if (!string.IsNullOrWhiteSpace(attachmentMetadata))
+                {
+                    copilotContext = string.IsNullOrWhiteSpace(copilotContext)
+                        ? attachmentMetadata
+                        : $"{copilotContext}\n\n{attachmentMetadata}";
+                }
+            }
+            var copilotSystemPrompt = BuildSystemPrompt(_currentMode);
+            var copilotResponse = copilotSqlFix ? new StringBuilder() : null;
+
+            void OnCopilotReasoningChunk(string chunk)
+            {
+                _activeReasoning.Append(chunk);
+                ReasoningChunkReceived?.Invoke(chunk);
+            }
+
+            await foreach (var chunk in _copilotClient.SendAsync(
+                promptMessages,
+                modelId,
+                reasoningEffort,
+                _currentMode,
+                copilotSystemPrompt,
+                copilotContext,
+                OnCopilotReasoningChunk,
+                cancellationToken))
+            {
+                copilotResponse?.Append(chunk);
+                yield return chunk;
+            }
+
+            if (copilotSqlFix && copilotResponse is not null && !cancellationToken.IsCancellationRequested)
+            {
+                var lastUserMessage = FindLastUserMessage(promptMessages);
+                if (lastUserMessage is not null)
+                {
+                    var fallbackResult = await TryApplyDefaultSqlFixAsync(
+                        copilotCurrentSql,
+                        copilotResponse.ToString(),
                         lastUserMessage.Content).ConfigureAwait(false);
                     if (!string.IsNullOrWhiteSpace(fallbackResult))
                         yield return $"\n\n{fallbackResult}";
@@ -433,20 +601,40 @@ public sealed class LocalChatService : ICopilotChatService, IAsyncDisposable, ID
         switch (_currentMode)
         {
             case ChatMode.SqlFix:
-                await foreach (var chunk in SendMessageSqlFixAsync(client, messages, cancellationToken))
+                await foreach (var chunk in SendMessageSqlFixAsync(client, promptMessages, cancellationToken))
                     yield return chunk;
                 break;
 
             case ChatMode.Simple:
-                await foreach (var chunk in SendMessagePlainAsync(client, messages, cancellationToken))
+                await foreach (var chunk in SendMessagePlainAsync(client, promptMessages, cancellationToken))
                     yield return chunk;
                 break;
 
             default:
-                await foreach (var chunk in SendMessageWithToolsAsync(client, messages, modelId, cancellationToken))
+                await foreach (var chunk in SendMessageWithToolsAsync(client, promptMessages, modelId, cancellationToken))
                     yield return chunk;
                 break;
         }
+    }
+
+    private List<ChatMessage> LimitPromptHistory(IReadOnlyList<ChatMessage> messages)
+    {
+        var configuredLimit = _settingsStore.Settings.AiChatHistoryLimit;
+        var limit = Math.Clamp(configuredLimit <= 0 ? 10 : configuredLimit, 1, 100);
+        var lastUserMessage = FindLastUserMessage(messages);
+
+        var selected = messages
+            .Where(static message => !message.IsStreaming)
+            .TakeLast(limit)
+            .ToList();
+
+        // The controller keeps the streaming assistant placeholder in the list
+        // while a request is running. Always retain the current user message even
+        // when the configured history limit is very small.
+        if (lastUserMessage is not null && !selected.Contains(lastUserMessage))
+            selected.Add(lastUserMessage);
+
+        return selected;
     }
 
     /// <summary>
@@ -521,7 +709,10 @@ public sealed class LocalChatService : ICopilotChatService, IAsyncDisposable, ID
             new(ChatRole.User, prompt)
         };
 
-        var history = messages.Where(m => m != lastUserMessage).TakeLast(6);
+        // ChatSessionController/LimitPromptHistory already applies the configured
+        // AiChatHistoryLimit. Do not silently replace that setting with a smaller
+        // backend-specific cap here.
+        var history = messages.Where(m => m != lastUserMessage);
         foreach (var msg in history)
             aiMessages.Add(new(msg.Role.Equals("user", StringComparison.OrdinalIgnoreCase) ? ChatRole.User : ChatRole.Assistant, msg.Content));
 
@@ -659,7 +850,7 @@ public sealed class LocalChatService : ICopilotChatService, IAsyncDisposable, ID
         var aiMessages = new List<Microsoft.Extensions.AI.ChatMessage>();
         aiMessages.Add(new(ChatRole.System, BuildSystemPrompt(ChatMode.Simple)));
 
-        var history = messages.Where(m => m != lastUserMessage && !string.IsNullOrWhiteSpace(m.Content)).TakeLast(8);
+        var history = messages.Where(m => m != lastUserMessage && !string.IsNullOrWhiteSpace(m.Content));
         foreach (var msg in history)
             aiMessages.Add(new(msg.Role.Equals("user", StringComparison.OrdinalIgnoreCase) ? ChatRole.User : ChatRole.Assistant, msg.Content));
 
@@ -749,6 +940,53 @@ public sealed class LocalChatService : ICopilotChatService, IAsyncDisposable, ID
             AIFunctionFactory.Create(_toolExecutor.GetTableMetadata),
         ];
     }
+
+    /// <summary>
+    /// Builds the Copilot tool set per chat mode. Read-only tools skip the protocol
+    /// permission prompt; write tools (ApplySqlFix / ExecuteSql) pass through the host
+    /// approval gate inside their own handlers, matching the Codex backend behaviour.
+    /// </summary>
+    internal List<AIFunction> BuildCopilotTools(ChatMode mode)
+    {
+        var all = new List<AIFunction>
+        {
+            DefineCopilotTool(_toolExecutor.GetActiveDatabaseContext),
+            DefineCopilotTool(_toolExecutor.ListSchemas),
+            DefineCopilotTool(_toolExecutor.BrowseSchemaObjects),
+            DefineCopilotTool(_toolExecutor.SearchSchemaObjects),
+            DefineCopilotTool(_toolExecutor.GetObjectDefinition),
+            DefineCopilotTool(_toolExecutor.GetObjectColumns),
+            DefineCopilotTool(_toolExecutor.GetTableMetadata),
+            DefineCopilotTool(_toolExecutor.GetNetezzaReference),
+            DefineCopilotTool(_toolExecutor.GetCurrentSql),
+            DefineCopilotTool(_toolExecutor.GetCurrentSqlEditorContext),
+            DefineCopilotTool(_toolExecutor.GetDiagnostics),
+            DefineCopilotTool(_toolExecutor.GetLastExecutionError),
+            DefineCopilotTool(_toolExecutor.ExportSchema),
+            DefineCopilotTool(ApplySqlFix),
+            DefineCopilotTool(ExecuteSql)
+        };
+
+        return mode switch
+        {
+            ChatMode.Simple => [],
+            ChatMode.SqlFix => all.Where(static f => f.Name is
+                "GetCurrentSql" or
+                "GetCurrentSqlEditorContext" or
+                "GetDiagnostics" or
+                "BrowseSchemaObjects" or
+                "GetObjectColumns" or
+                "GetTableMetadata" or
+                "ApplySqlFix").ToList(),
+            _ => all
+        };
+    }
+
+    private static AIFunction DefineCopilotTool(Delegate method)
+        => CopilotTool.DefineTool(
+            method,
+            toolOptions: new CopilotToolOptions { SkipPermission = true, Defer = CopilotToolDefer.Never },
+            factoryOptions: new AIFunctionFactoryOptions());
 
     private async Task<string> ApplySqlFix(string proposedSql)
     {
@@ -878,7 +1116,7 @@ public sealed class LocalChatService : ICopilotChatService, IAsyncDisposable, ID
                          && !string.IsNullOrWhiteSpace(m.Content)
                          && (m.Role.Equals("user", StringComparison.OrdinalIgnoreCase)
                              || m.Role.Equals("assistant", StringComparison.OrdinalIgnoreCase)))
-                     .TakeLast(10))
+                     )
         {
             var role = msg.Role.Equals("user", StringComparison.OrdinalIgnoreCase)
                 ? ChatRole.User
@@ -1345,6 +1583,7 @@ public sealed class LocalChatService : ICopilotChatService, IAsyncDisposable, ID
 
         _disposed = true;
         await _codexClient.DisposeAsync().ConfigureAwait(false);
+        await _copilotClient.DisposeAsync().ConfigureAwait(false);
         if (_llamaServerManager is not null)
         {
             await _llamaServerManager.DisposeAsync().ConfigureAwait(false);

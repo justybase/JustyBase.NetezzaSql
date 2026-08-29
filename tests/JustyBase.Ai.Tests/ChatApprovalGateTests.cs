@@ -86,6 +86,7 @@ public sealed class ChatApprovalGateTests
         var openAi = new OpenAiCompatibleChatBackend(new TestChatSettingsStore(settings));
         var factory = new LocalChatClientFactory(new ILocalChatBackend[] { openAi, new FakeLocalBackend("embedded", "Embedded") });
         var codex = new CodexAppServerClient(new TestEnvironment(), EmptySimpleLogger.Instance);
+        var copilot = new JustyBase.Ai.Chat.CopilotClient(new TestEnvironment(), EmptySimpleLogger.Instance);
         var service = new LocalChatService(
             EmptySimpleLogger.Instance,
             new TestChatSettingsStore(settings),
@@ -95,6 +96,7 @@ public sealed class ChatApprovalGateTests
             new TestStateProvider(),
             new LocalModelConfigurationService(factory),
             codex,
+            copilot,
             new SqlExecutionErrorStore(),
             new TestDispatcher());
         service.SetActiveSqlContextProvider(() => ("conn1", "db1"));

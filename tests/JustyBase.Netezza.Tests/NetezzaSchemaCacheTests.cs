@@ -129,7 +129,7 @@ public sealed class NetezzaSchemaCacheTests
         {
             if (cache.TryGet("CONN1", $"DB{i % 50}", out var snapshot))
             {
-                hits++;
+                Interlocked.Increment(ref hits);
             }
         });
 

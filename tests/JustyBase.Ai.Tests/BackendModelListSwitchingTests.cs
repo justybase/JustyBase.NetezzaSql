@@ -66,6 +66,7 @@ public sealed class BackendModelListSwitchingTests
         var factory = new LocalChatClientFactory(backends);
         var settings = new ChatSettings();
         var codex = new CodexAppServerClient(new FakeEnvironment(), EmptySimpleLogger.Instance);
+        var copilot = new JustyBase.Ai.Chat.CopilotClient(new FakeEnvironment(), EmptySimpleLogger.Instance);
         return new LocalChatService(
             EmptySimpleLogger.Instance,
             new FakeChatSettingsStore(settings),
@@ -75,6 +76,7 @@ public sealed class BackendModelListSwitchingTests
             new FakeStateProvider(),
             new LocalModelConfigurationService(factory),
             codex,
+            copilot,
             new SqlExecutionErrorStore(),
             new FakeDispatcher());
     }
