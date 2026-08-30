@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented here.
 
-## 0.8.4
+## 0.8.5
 
 - Improve schema-aware completion for active databases, qualified relation paths,
   quoted identifiers, and wildcard column expansion.
