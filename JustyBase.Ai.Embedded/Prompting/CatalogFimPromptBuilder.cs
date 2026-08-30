@@ -20,6 +20,7 @@ public sealed class CatalogFimPromptBuilder : IFimPromptBuilder
         "CodeGemma" => new CodeGemmaFimPromptBuilder(),
         "StarCoder2" => new StarCoderFimPromptBuilder(),
         "Codestral" => new CodestralFimPromptBuilder(),
+        "Zeta" => new ZetaFimPromptBuilder(),
         _ => new QwenFimPromptBuilder(),
     };
 

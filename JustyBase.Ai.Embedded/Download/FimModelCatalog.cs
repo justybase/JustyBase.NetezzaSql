@@ -17,12 +17,14 @@ public static class FimModelIds
 
     public const string Codestral22B = "codestral-22b";
 
+    public const string Zeta21 = "zeta-2.1";
+
     public const string Default = Qwen25Coder3B;
 }
 
 /// <summary>
 /// Catalog of GGUF models for Fill-in-the-Middle served by the bundled llama.cpp llama-server.
-/// llama.cpp has built-in FIM templates for Qwen2.5-Coder, CodeGemma, StarCoder2 and Codestral.
+/// llama.cpp has built-in FIM templates for Qwen2.5-Coder, CodeGemma, StarCoder2, Codestral and Zeta.
 /// </summary>
 public sealed class FimModelCatalog : IModelCatalog
 {
@@ -172,6 +174,20 @@ public sealed class FimModelCatalog : IModelCatalog
             MlxRepoId: "mlx-community/Codestral-22B-v0.1-4bit",
             MlxSizeLabel: "~12.5 GB",
             MlxApproxBytes: 12_517_773_853),
+
+        new(
+            Id: FimModelIds.Zeta21,
+            DisplayName: "Zeta 2.1 (Q4_K_M) — edit prediction",
+            FileName: "zeta-2.1.Q4_K_M.gguf",
+            DownloadUri: new Uri("https://huggingface.co/mradermacher/zeta-2.1-GGUF/resolve/main/zeta-2.1.Q4_K_M.gguf?download=true"),
+            ApproxSizeLabel: "~5.1 GB",
+            SourceModelUrl: new Uri("https://huggingface.co/zed-industries/zeta-2.1"),
+            Notes: "Zed Zeta 2.1 — 8B edit-prediction / next-edit (Seed-Coder-8B-Base finetune, SPM FIM <[fim-prefix]>). Apache-2.0.",
+            ApproxBytes: 5_071_410_080,
+            Family: "Zeta",
+            MlxRepoId: "slxnxl/zeta-2.1-mlx-4bit",
+            MlxSizeLabel: "~4.7 GB",
+            MlxApproxBytes: 4_653_244_290),
     ];
 
     public ModelDescriptor Resolve(string? modelId)

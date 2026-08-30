@@ -55,8 +55,11 @@ public sealed class MlxFimProvider : ICompletionProvider, IDisposable
             return null;
         }
 
-        var fim = FimTemplateTokens.ForFamily(_modelStore.CurrentModel.Family);
-        var prompt = string.Concat(fim.Prefix, request.Prefix, fim.Suffix, request.Suffix, fim.Middle);
+        var family = _modelStore.CurrentModel.Family;
+        var fim = FimTemplateTokens.ForFamily(family);
+        var prompt = family is not null && family.Contains("Zeta", StringComparison.OrdinalIgnoreCase)
+            ? string.Concat(fim.Suffix, request.Suffix, fim.Prefix, request.Prefix, fim.Middle)
+            : string.Concat(fim.Prefix, request.Prefix, fim.Suffix, request.Suffix, fim.Middle);
 
         var raw = await _completions.CompleteAsync(
             instance.Endpoint,
