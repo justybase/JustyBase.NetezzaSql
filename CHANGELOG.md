@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented here.
 
+## 0.8.4
+
+- Improve schema-aware completion for active databases, qualified relation paths,
+  quoted identifiers, and wildcard column expansion.
+- Preserve active-database context in linting and visitor table lookups.
+- Add regression coverage for qualified completion and linter behavior.
+
 ## 0.8.3
 
 - Add the GitHub Copilot SDK backend with device-flow sign-in, SQL-only tool

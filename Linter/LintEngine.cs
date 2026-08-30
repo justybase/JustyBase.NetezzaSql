@@ -19,7 +19,8 @@ public readonly record struct LintConfig(
     CancellationToken CancellationToken = default,
     IReadOnlyList<LintRule>? AdditionalRules = null,
     IDictionary<string, RuleSeverityConfig>? RuleSeverities = null,
-    SqlDialect Dialect = SqlDialect.Netezza
+    SqlDialect Dialect = SqlDialect.Netezza,
+    string? ActiveDatabase = null
 );
 
 /// <summary>
@@ -320,7 +321,10 @@ public sealed class LintEngine : IDisposable
         {
             ct.ThrowIfCancellationRequested();
 
-            var visitor = new NzSqlVisitor(schema, DialectRuntime.AuthoringCatalog(_dialect));
+            var visitor = new NzSqlVisitor(
+                schema,
+                DialectRuntime.AuthoringCatalog(_dialect),
+                config.ActiveDatabase);
             visitor.SeedMultiStatementScope(scriptScope.Values);
 
             if (dirtySet.Count == 0 || dirtySet.Contains(stmtIndex))

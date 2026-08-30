@@ -172,7 +172,7 @@ public partial class NzSqlVisitor
     public void Visit(CommentStatement stmt)
     {
         LookupTableOnly(stmt.Object, stmt.Position);
-        if (stmt.Column is not null && _schema?.GetTable(stmt.Object.Database, stmt.Object.Schema, stmt.Object.Name)?.Columns is { } columns
+        if (stmt.Column is not null && GetSchemaTable(stmt.Object)?.Columns is { } columns
             && !columns.Any(column => column.Name.Equals(stmt.Column, StringComparison.OrdinalIgnoreCase)))
             AddError($"Column '{stmt.Column}' does not exist on relation '{stmt.Object.Name}'", "error", "SQL030", stmt.Position);
     }

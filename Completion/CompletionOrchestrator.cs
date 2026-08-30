@@ -73,7 +73,8 @@ public static class CompletionOrchestrator
                 schema,
                 coordinator,
                 catalog: DialectRuntime.AuthoringCatalogOrNull(dialect),
-                dialect: dialect);
+                dialect: dialect,
+                activeDatabase: databaseName);
             engine.SetDocumentUri(documentUri);
             engineItems = engine.GetCompletions(engineSql, engineCursor);
 

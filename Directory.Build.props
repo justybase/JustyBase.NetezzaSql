@@ -3,6 +3,8 @@
     <Deterministic>true</Deterministic>
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- A NuGet audit endpoint outage must not make local compilation fail. -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);NU1900</WarningsNotAsErrors>
     <Authors>Krzysztof Dusko</Authors>
     <PackageDescription>.NET libraries for Netezza SQL parsing, authoring, DDL generation, catalog metadata queries, and UI-agnostic schema/DDL integration.</PackageDescription>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>

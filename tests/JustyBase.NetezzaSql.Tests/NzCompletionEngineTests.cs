@@ -506,6 +506,58 @@ public sealed class NzCompletionEngineTests
     }
 
     [Fact]
+    public void Qualified_database_completion_is_scoped_and_supports_partial_schema_paths()
+    {
+        var schema = new InMemorySchemaProvider();
+        schema.AddTable(new TableInfo("AD_TABLE", "ADMIN", "JUST_DATA"));
+        schema.AddTable(new TableInfo("OTHER_TABLE", "OTHER", "OTHER_DB"));
+        schema.AddTable(new TableInfo("ADMIN_TABLE", "ADMIN", "JUST_DATA"));
+        var engine = new NzCompletionEngine(schema, activeDatabase: "JUST_DATA");
+
+        var schemas = engine.GetCompletions("SELECT * FROM JUST_DATA.", "SELECT * FROM JUST_DATA.".Length);
+        Assert.Contains(schemas, item => item.Label == "ADMIN" && item.Kind == CompletionKind.Schema);
+        Assert.DoesNotContain(schemas, item => item.Label == "OTHER" && item.Kind == CompletionKind.Schema);
+
+        var partialSchemas = engine.GetCompletions("SELECT * FROM JUST_DATA.AD", "SELECT * FROM JUST_DATA.AD".Length);
+        Assert.Contains(partialSchemas, item => item.Label == "ADMIN" && item.Kind == CompletionKind.Schema);
+        Assert.DoesNotContain(partialSchemas, item => item.Label == "OTHER" && item.Kind == CompletionKind.Schema);
+
+        var tables = engine.GetCompletions("SELECT * FROM JUST_DATA.ADMIN.", "SELECT * FROM JUST_DATA.ADMIN.".Length);
+        Assert.Contains(tables, item => item.Label == "AD_TABLE" && item.Kind == CompletionKind.Table);
+        Assert.DoesNotContain(tables, item => item.Label == "OTHER_TABLE");
+    }
+
+    [Fact]
+    public void Unqualified_completion_uses_active_database()
+    {
+        var schema = new InMemorySchemaProvider();
+        schema.AddTable(new TableInfo("LOCAL_TABLE", "ADMIN", "JUST_DATA"));
+        schema.AddTable(new TableInfo("FOREIGN_TABLE", "ADMIN", "OTHER_DB"));
+        var engine = new NzCompletionEngine(schema, activeDatabase: "JUST_DATA");
+
+        var items = engine.GetCompletions("SELECT * FROM ", "SELECT * FROM ".Length);
+        Assert.Contains(items, item => item.Label == "LOCAL_TABLE");
+        Assert.DoesNotContain(items, item => item.Label == "FOREIGN_TABLE");
+    }
+
+    [Fact]
+    public void Double_dot_completion_lists_tables_from_the_requested_database_across_schemas()
+    {
+        var schema = new InMemorySchemaProvider();
+        schema.AddTable(new TableInfo("A_TABLE", "ADMIN", "JUST_DATA"));
+        schema.AddTable(new TableInfo("B_TABLE", "REPORT", "JUST_DATA"));
+        schema.AddTable(new TableInfo("OTHER_TABLE", "ADMIN", "OTHER_DB"));
+        var engine = new NzCompletionEngine(schema, activeDatabase: "JUST_DATA");
+
+        const string sql = "SELECT * FROM JUST_DATA..";
+        var items = engine.GetCompletions(sql, sql.Length);
+
+        Assert.Contains(items, item => item.Label == "A_TABLE");
+        Assert.Contains(items, item => item.Label == "B_TABLE");
+        Assert.DoesNotContain(items, item => item.Label == "OTHER_TABLE");
+    }
+
+    [Fact]
     public void Sqlite_unqualified_table_prefers_main_schema_for_alias_columns()
     {
         var schema = new InMemorySchemaProvider();

@@ -158,14 +158,27 @@ public partial class NzSqlVisitor
         if (_schema is not null)
         {
             var canValidate = tableName.Database is not null || tableName.Schema is not null
+                || _activeDatabase is not null
                 || _schema.CanValidateUnqualifiedTableReferences();
-            if (canValidate && !_schema.TableExists(tableName.Database, tableName.Schema, tableName.Name)
+            if (canValidate && !SchemaTableExists(tableName)
                 && _schema.HasTables())
             {
                 var fullName = FormatName(tableName.Database, tableName.Schema, tableName.Name);
-                AddError($"Relation '{fullName}' does not exist",
-                    "error", "SQL006", pos,
-                    pos.Line, pos.Column + fullName.Length);
+                bool validSchemaTable = _schema.GetTable(_activeDatabase, tableName.Schema, tableName.Name) is not null;
+                bool looksLikeDatabase = tableName.Database is null && tableName.Schema is not null
+                    && _schema.GetDatabases()?.Contains(tableName.Schema, StringComparer.OrdinalIgnoreCase) == true;
+                if (looksLikeDatabase && !validSchemaTable)
+                {
+                    AddError($"Invalid form '{fullName}' — use database..table syntax",
+                        "error", "SQL007", pos,
+                        pos.Line, pos.Column + fullName.Length);
+                }
+                else
+                {
+                    AddError($"Relation '{fullName}' does not exist",
+                        "error", "SQL006", pos,
+                        pos.Line, pos.Column + fullName.Length);
+                }
             }
         }
     }
@@ -209,7 +222,7 @@ public partial class NzSqlVisitor
             // Get columns from schema (only for non-CTE tables)
             if (_schema is not null && !table.IsCte)
             {
-                var schemaTable = _schema.GetTable(table.Database, table.Schema, table.Name);
+                var schemaTable = GetSchemaTable(new TableName(table.Name, table.Schema, table.Database));
                 // Empty list = deferred hydration; keep Columns unset so validation skips (not SQL005).
                 if (schemaTable?.Columns is { Count: > 0 })
                     table = new TableInfo(table.Name, table.Schema, table.Database,
@@ -222,27 +235,27 @@ public partial class NzSqlVisitor
                 var existsInMsScope = _multiStatementScope is not null &&
                     _multiStatementScope.ContainsKey(table.Name.ToUpperInvariant());
                 var canValidate = table.Database is not null || table.Schema is not null
+                    || _activeDatabase is not null
+                    || _schema.CanValidateUnqualifiedTableReferences()
                     || _schema.HasTables();
                 if (!existsInMsScope && canValidate
-                    && !_schema.TableExists(table.Database, table.Schema, table.Name)
+                    && !SchemaTableExists(new TableName(table.Name, table.Schema, table.Database))
                     && _schema.HasTables())
                 {
                     var fullName = FormatName(table.Database, table.Schema, table.Name);
-                    AddError($"Relation '{fullName}' does not exist",
-                        "error", "SQL006", source.Position,
-                        source.Position.Line, source.Position.Column + fullName.Length);
-                }
-                // Detect invalid single-dot form: DB.TABLE (should be DB..TABLE or SCHEMA.TABLE)
-                // Only flag when the first part is a known database name, not a schema
-                if (table.Database is null && table.Schema is not null)
-                {
-                    var databases = _schema.GetDatabases();
-                    if (databases is not null &&
-                        databases.Contains(table.Schema, StringComparer.OrdinalIgnoreCase))
+                    bool validSchemaTable = _schema.GetTable(_activeDatabase, table.Schema, table.Name) is not null;
+                    bool looksLikeDatabase = table.Database is null && table.Schema is not null
+                        && _schema.GetDatabases()?.Contains(table.Schema, StringComparer.OrdinalIgnoreCase) == true;
+                    if (looksLikeDatabase && !validSchemaTable)
                     {
-                        var fullName = FormatName(table.Database, table.Schema, table.Name);
                         AddError($"Invalid form '{fullName}' — use database..table syntax",
                             "error", "SQL007", source.Position,
+                            source.Position.Line, source.Position.Column + fullName.Length);
+                    }
+                    else
+                    {
+                        AddError($"Relation '{fullName}' does not exist",
+                            "error", "SQL006", source.Position,
                             source.Position.Line, source.Position.Column + fullName.Length);
                     }
                 }
@@ -552,7 +565,7 @@ public partial class NzSqlVisitor
         // Try schema provider first
         if (_schema is not null)
         {
-            var info = _schema.GetTable(source.Table.Database, source.Table.Schema, tableName);
+            var info = GetSchemaTable(source.Table);
             if (info?.Columns is not null)
             {
                 foreach (var col in info.Columns)

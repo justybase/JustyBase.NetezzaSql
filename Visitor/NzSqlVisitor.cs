@@ -13,6 +13,7 @@ public partial class NzSqlVisitor
     private readonly List<ValidationError> _errors = new();
     private readonly ISchemaProvider? _schema;
     private readonly ISqlAuthoringCatalog _catalog;
+    private readonly string? _activeDatabase;
     private readonly HashSet<string> _accessParameterNames = new(StringComparer.OrdinalIgnoreCase);
 
     // Context tracking
@@ -47,16 +48,28 @@ public partial class NzSqlVisitor
     // Multi-statement scope: persists tables/views across statements in a script
     private Dictionary<string, TableInfo>? _multiStatementScope;
 
-    public NzSqlVisitor(ISchemaProvider? schema = null, ISqlAuthoringCatalog? catalog = null)
+    public NzSqlVisitor(
+        ISchemaProvider? schema = null,
+        ISqlAuthoringCatalog? catalog = null,
+        string? activeDatabase = null)
     {
         _scope = new ScopeBuilder();
         _schema = schema;
         _catalog = catalog ?? NetezzaSqlAuthoringCatalog.Instance;
+        _activeDatabase = string.IsNullOrWhiteSpace(activeDatabase) ? null : activeDatabase;
         _selectOutputAliasesStack.Push(new HashSet<string>(StringComparer.OrdinalIgnoreCase));
     }
 
     public IReadOnlyList<ValidationError> Errors => _errors;
     public Scope CurrentScope => _scope.CurrentScope;
+
+    private string? EffectiveDatabase(TableName table) => table.Database ?? _activeDatabase;
+
+    private TableInfo? GetSchemaTable(TableName table) =>
+        _schema?.GetTable(EffectiveDatabase(table), table.Schema, table.Name);
+
+    private bool SchemaTableExists(TableName table) =>
+        _schema?.TableExists(EffectiveDatabase(table), table.Schema, table.Name) == true;
 
     public void Reset()
     {

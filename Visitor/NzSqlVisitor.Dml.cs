@@ -13,7 +13,7 @@ public partial class NzSqlVisitor
         Visit(source);
 
         if (stmt.Columns is { Count: > 0 }
-            && _schema?.GetTable(stmt.Target.Database, stmt.Target.Schema, stmt.Target.Name)?.Columns is { } targetColumns)
+            && GetSchemaTable(stmt.Target)?.Columns is { } targetColumns)
         {
             foreach (var column in stmt.Columns)
             {

@@ -27,20 +27,31 @@ public sealed class SqlValidator : IDisposable
     /// parser and semantic validation pipeline.
     /// </summary>
     public LintResult Validate(string sql, string? documentUri = null,
-        int? metadataEpoch = null, CancellationToken cancellationToken = default)
+        int? metadataEpoch = null, CancellationToken cancellationToken = default,
+        string? activeDatabase = null)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         return _engine.RunFullLint(new LintConfig(
-            sql, SchemaProvider, documentUri, metadataEpoch, cancellationToken));
+            Sql: sql,
+            Schema: SchemaProvider,
+            DocumentUri: ScopedDocumentUri(documentUri, activeDatabase),
+            MetadataEpoch: metadataEpoch,
+            CancellationToken: cancellationToken,
+            ActiveDatabase: activeDatabase));
     }
 
     public LintResult Validate(string sql, ISchemaProvider schemaProvider,
         string? documentUri = null, int? metadataEpoch = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, string? activeDatabase = null)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         return _engine.RunFullLint(new LintConfig(
-            sql, schemaProvider, documentUri, metadataEpoch, cancellationToken));
+            Sql: sql,
+            Schema: schemaProvider,
+            DocumentUri: ScopedDocumentUri(documentUri, activeDatabase),
+            MetadataEpoch: metadataEpoch,
+            CancellationToken: cancellationToken,
+            ActiveDatabase: activeDatabase));
     }
 
     /// <summary>
@@ -48,15 +59,26 @@ public sealed class SqlValidator : IDisposable
     /// caches for the supplied document URI.
     /// </summary>
     public LintResult ValidateIncremental(string sql, string documentUri,
-        int? metadataEpoch = null, CancellationToken cancellationToken = default)
+        int? metadataEpoch = null, CancellationToken cancellationToken = default,
+        string? activeDatabase = null)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         return _engine.RunIncrementalLint(new LintConfig(
-            sql, SchemaProvider, documentUri, metadataEpoch, cancellationToken));
+            Sql: sql,
+            Schema: SchemaProvider,
+            DocumentUri: ScopedDocumentUri(documentUri, activeDatabase),
+            MetadataEpoch: metadataEpoch,
+            CancellationToken: cancellationToken,
+            ActiveDatabase: activeDatabase));
     }
 
     /// <summary>Gets the rule registry used by this validator.</summary>
     public QualityRuleRegistry Registry => _engine.Registry;
+
+    private static string? ScopedDocumentUri(string? documentUri, string? activeDatabase) =>
+        string.IsNullOrWhiteSpace(activeDatabase)
+            ? documentUri
+            : $"{documentUri}|database:{activeDatabase}";
 
     public void Dispose()
     {

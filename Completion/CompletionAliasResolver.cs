@@ -114,14 +114,28 @@ public static class CompletionAliasResolver
 
     public static TablePath ParseQualifierPath(string qualifierText)
     {
-        var parts = qualifierText.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var parts = qualifierText.Split('.', StringSplitOptions.None)
+            .Select(part => part.Trim())
+            .ToArray();
         if (parts.Length == 0)
             return new TablePath(qualifierText, null, null);
         if (parts.Length == 1)
-            return new TablePath(parts[0].Trim('"', '[', ']'), null, null);
+            return new TablePath(Unquote(parts[0]), null, null);
         if (parts.Length == 2)
-            return new TablePath(parts[1].Trim('"', '[', ']'), parts[0].Trim('"', '[', ']'), null);
-        return new TablePath(parts[^1].Trim('"', '[', ']'), parts[^2].Trim('"', '[', ']'), parts[0].Trim('"', '[', ']'));
+            return new TablePath(Unquote(parts[1]), Unquote(parts[0]), null);
+        if (parts.Length == 3 && parts[1].Length == 0)
+            return new TablePath(Unquote(parts[2]), null, Unquote(parts[0]));
+        return new TablePath(Unquote(parts[^1]), Unquote(parts[^2]), Unquote(parts[0]));
+    }
+
+    private static string Unquote(string value)
+    {
+        value = value.Trim();
+        if (value.Length >= 2 && value[0] == '"' && value[^1] == '"')
+            return value[1..^1].Replace("\"\"", "\"");
+        if (value.Length >= 2 && value[0] == '[' && value[^1] == ']')
+            return value[1..^1].Replace("]]", "]");
+        return value;
     }
 
     public static (TablePath Path, string? Alias, int Consumed) ParseTablePathAt(Token<NzToken>[] tokens, int start)

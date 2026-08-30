@@ -14,13 +14,16 @@ public sealed class CompletionWildcardResolver
 {
     private readonly ISchemaProvider? _schema;
     private readonly SqlDialect _dialect;
+    private readonly string? _activeDatabase;
 
     public CompletionWildcardResolver(
         ISchemaProvider? schema = null,
-        SqlDialect dialect = SqlDialect.Netezza)
+        SqlDialect dialect = SqlDialect.Netezza,
+        string? activeDatabase = null)
     {
         _schema = schema;
         _dialect = dialect;
+        _activeDatabase = string.IsNullOrWhiteSpace(activeDatabase) ? null : activeDatabase;
     }
 
     public CompletionItem? TryResolveWildcardSnippet(
@@ -153,7 +156,7 @@ public sealed class CompletionWildcardResolver
                     return result;
 
                 if (_schema is not null
-                    && CompletionSchemaLookup.GetTable(_schema, _dialect, null, null, resolvedName)?.Columns is { } aliasCols)
+                    && CompletionSchemaLookup.GetTable(_schema, _dialect, _activeDatabase, null, resolvedName)?.Columns is { } aliasCols)
                 {
                     result.AddRange(aliasCols.Select(c => c.Name));
                     return result;
@@ -167,7 +170,7 @@ public sealed class CompletionWildcardResolver
 
         if (_schema is not null && path.Schema is null && path.Database is null)
         {
-            var table = CompletionSchemaLookup.GetTable(_schema, _dialect, null, null, path.Name);
+            var table = CompletionSchemaLookup.GetTable(_schema, _dialect, _activeDatabase, null, path.Name);
             if (table?.Columns is not null)
                 result.AddRange(table.Columns.Select(c => c.Name));
         }
@@ -179,7 +182,7 @@ public sealed class CompletionWildcardResolver
     {
         if (_schema is null) return false;
 
-        var table = CompletionSchemaLookup.GetTable(_schema, _dialect, path.Database, path.Schema, path.Name);
+        var table = CompletionSchemaLookup.GetTable(_schema, _dialect, path.Database ?? _activeDatabase, path.Schema, path.Name);
         if (table?.Columns is not { Count: > 0 }) return false;
 
         result.AddRange(table.Columns.Select(c => c.Name));

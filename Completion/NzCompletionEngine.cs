@@ -44,8 +44,15 @@ public class NzCompletionEngine
     private readonly CompletionWildcardResolver _wildcardResolver;
     private readonly ISqlAuthoringCatalog _catalog;
     private readonly SqlDialect _dialect;
+    private readonly string? _activeDatabase;
     private string? _documentUri;
     private int _cursorPosition;
+
+    private TableInfo? LookupTable(string? database, string? schema, string tableName) =>
+        _schema is null
+            ? null
+            : CompletionSchemaLookup.GetTable(
+                _schema, _dialect, database ?? _activeDatabase, schema, tableName);
 
     /// <summary>
     /// Position-aware scope collector for CTE/alias/temp-table resolution.
@@ -60,13 +67,15 @@ public class NzCompletionEngine
         ISchemaProvider? schema = null,
         DocumentParsingCoordinator? parsingCoordinator = null,
         ISqlAuthoringCatalog? catalog = null,
-        SqlDialect dialect = SqlDialect.Netezza)
+        SqlDialect dialect = SqlDialect.Netezza,
+        string? activeDatabase = null)
     {
         _schema = schema;
         _parsingCoordinator = parsingCoordinator;
         _catalog = catalog ?? NetezzaSqlAuthoringCatalog.Instance;
-        _wildcardResolver = new CompletionWildcardResolver(schema, dialect);
+        _wildcardResolver = new CompletionWildcardResolver(schema, dialect, activeDatabase);
         _dialect = dialect;
+        _activeDatabase = string.IsNullOrWhiteSpace(activeDatabase) ? null : activeDatabase;
     }
 
     public void SetDocumentUri(string? documentUri) => _documentUri = documentUri;
@@ -127,8 +136,10 @@ public class NzCompletionEngine
             case CompletionContext.AfterFrom:
             case CompletionContext.FromList:
             {
+                if (TryAddQualifiedPathCompletions(suggestions, statementPrefix, partialWord))
+                    break;
                 var fromScope = TryGetFromClauseObjectScope(contextTokens);
-                AddTablesAndViews(suggestions, fromScope.Database, fromScope.Schema);
+                AddTablesAndViews(suggestions, fromScope.Database ?? _activeDatabase, fromScope.Schema);
                 AddCtes(suggestions, fullTokens, astScope);
                 break;
             }
@@ -176,9 +187,11 @@ public class NzCompletionEngine
 
             case CompletionContext.AfterJoin:
             {
+                if (TryAddQualifiedPathCompletions(suggestions, statementPrefix, partialWord))
+                    break;
                 AddKeywords(suggestions, SqlContext.JoinKeywords);
                 var joinScope = TryGetFromClauseObjectScope(contextTokens);
-                AddTablesAndViews(suggestions, joinScope.Database, joinScope.Schema);
+                AddTablesAndViews(suggestions, joinScope.Database ?? _activeDatabase, joinScope.Schema);
                 AddCtes(suggestions, fullTokens, astScope);
                 break;
             }
@@ -259,6 +272,9 @@ public class NzCompletionEngine
                 var qualifier = ExtractQualifier(contextTokens);
                 // Prefer schema/table path completion when qualifier is a known database or schema;
                 // otherwise fall back to alias/column resolution.
+                if (IsRelationQualifierContext(contextTokens)
+                    && TryAddQualifiedPathCompletions(suggestions, statementPrefix, partialWord))
+                    break;
                 if (!AddObjectsForQualifier(suggestions, qualifier))
                     AddColumnsForAlias(suggestions, fullTokens, qualifier, astScope);
                 break;
@@ -604,6 +620,26 @@ public class NzCompletionEngine
     private static bool IsTrailingWhitespace(string sql, int cursorPosition)
         => cursorPosition > 0 && cursorPosition <= sql.Length && char.IsWhiteSpace(sql[cursorPosition - 1]);
 
+    private static bool IsRelationQualifierContext(Token<NzToken>[] tokens)
+    {
+        bool inRelation = false;
+        foreach (var token in tokens)
+        {
+            var kind = token.Kind;
+            if (kind is NzToken.From or NzToken.Join or NzToken.Update)
+            {
+                inRelation = true;
+                continue;
+            }
+
+            if (kind is NzToken.Where or NzToken.On or NzToken.GroupBy
+                or NzToken.OrderBy or NzToken.Having or NzToken.Set)
+                inRelation = false;
+        }
+
+        return inRelation;
+    }
+
     private static bool IsSelect(NzToken t) => t == NzToken.Select;
     private static bool IsFrom(NzToken t) => t == NzToken.From;
     private static bool IsWhere(NzToken t) => t == NzToken.Where;
@@ -672,6 +708,7 @@ public class NzCompletionEngine
     private void AddTablesAndViews(List<CompletionItem> list, string? database = null, string? schema = null)
     {
         if (_schema is null) return;
+        database ??= _activeDatabase;
         var names = _schema.GetTableNames(database, schema);
         if (names is null) return;
         foreach (var (name, kind) in names)
@@ -683,6 +720,7 @@ public class NzCompletionEngine
     private void AddTables(List<CompletionItem> list, string? database = null, string? schema = null)
     {
         if (_schema is null) return;
+        database ??= _activeDatabase;
         var names = _schema.GetTableNames(database, schema);
         if (names is null) return;
         foreach (var (name, kind) in names)
@@ -695,6 +733,7 @@ public class NzCompletionEngine
     private void AddViews(List<CompletionItem> list, string? database = null, string? schema = null)
     {
         if (_schema is null) return;
+        database ??= _activeDatabase;
         var names = _schema.GetTableNames(database, schema);
         if (names is null) return;
         foreach (var (name, kind) in names)
@@ -775,8 +814,8 @@ public class NzCompletionEngine
             }
         }
 
-        // Check if qualifier is a known schema name → suggest tables/views in that schema.
-        var tables = _schema.GetTableNames(null, qualifier);
+        // Check if qualifier is a known schema name in the active database.
+        var tables = _schema.GetTableNames(_activeDatabase, qualifier);
         if (tables is { Count: > 0 })
         {
             foreach (var (name, kind) in tables)
@@ -785,6 +824,115 @@ public class NzCompletionEngine
         }
 
         return false;
+    }
+
+    private bool TryAddQualifiedPathCompletions(
+        List<CompletionItem> list,
+        string statementPrefix,
+        string partialWord)
+    {
+        if (_schema is null)
+            return false;
+
+        string? fragment = CompletionFragment.GetLastWordFromText(statementPrefix, statementPrefix.Length);
+        if (string.IsNullOrWhiteSpace(fragment) || !fragment.Contains('.'))
+            return false;
+
+        bool endsWithDot = fragment.EndsWith(".", StringComparison.Ordinal);
+        bool isDoubleDotPath = fragment.Contains("..", StringComparison.Ordinal);
+        string pathText = endsWithDot ? fragment[..^1] : fragment;
+        var rawParts = pathText.Split('.', StringSplitOptions.None)
+            .Select(part => part.Trim())
+            .ToArray();
+        if (rawParts.Length == 0)
+            return false;
+
+        string prefix = endsWithDot ? string.Empty : Unquote(rawParts[^1]);
+        string? database = null;
+        string? schema = null;
+
+        if (rawParts.Length == 1)
+        {
+            string first = Unquote(rawParts[0]);
+            if (_schema.GetDatabases()?.Contains(first, StringComparer.OrdinalIgnoreCase) == true)
+                database = first;
+            else
+                schema = first;
+        }
+        else if (rawParts.Length >= 3 && rawParts[1].Length == 0)
+        {
+            database = Unquote(rawParts[0]);
+        }
+        else if (rawParts.Length >= 3)
+        {
+            database = Unquote(rawParts[0]);
+            schema = Unquote(rawParts[1]);
+        }
+        else
+        {
+            string first = Unquote(rawParts[0]);
+            // X.Y is schema.table first. A known database is used as the
+            // database path only when X is not a schema in the active DB.
+            if (_schema.GetDatabases()?.Contains(first, StringComparer.OrdinalIgnoreCase) == true)
+                database = first;
+            else
+                schema = first;
+
+            if (database is not null && rawParts.Length == 2 && endsWithDot
+                && rawParts[1].Length > 0)
+                schema = Unquote(rawParts[1]);
+        }
+
+        if (!endsWithDot)
+        {
+            if (database is not null && schema is null)
+            {
+                foreach (string schemaName in _schema.GetSchemas(database)
+                             ?.Where(name => name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                         ?? [])
+                    list.Add(new CompletionItem(schemaName, CompletionKind.Schema, Priority: 2));
+                return list.Count > 0;
+            }
+
+            return false;
+        }
+
+        if (database is not null && schema is not null)
+        {
+            AddTablesAndViews(list, database, schema);
+            return list.Count > 0;
+        }
+
+        if (database is not null)
+        {
+            if (isDoubleDotPath)
+            {
+                AddTablesAndViews(list, database, null);
+                return list.Count > 0;
+            }
+
+            foreach (string schemaName in _schema.GetSchemas(database) ?? [])
+                list.Add(new CompletionItem(schemaName, CompletionKind.Schema, Priority: 2));
+            return list.Count > 0;
+        }
+
+        if (schema is not null)
+        {
+            AddTablesAndViews(list, _activeDatabase, schema);
+            return list.Count > 0;
+        }
+
+        return false;
+    }
+
+    private static string Unquote(string value)
+    {
+        value = value.Trim();
+        if (value.Length >= 2 && value[0] == '"' && value[^1] == '"')
+            return value[1..^1].Replace("\"\"", "\"");
+        if (value.Length >= 2 && value[0] == '[' && value[^1] == ']')
+            return value[1..^1].Replace("]]", "]");
+        return value;
     }
 
     private void AddFunctions(List<CompletionItem> list)
@@ -859,7 +1007,7 @@ public class NzCompletionEngine
             // Try schema provider first
             if (_schema is not null)
             {
-                var info = CompletionSchemaLookup.GetTable(_schema, _dialect, database, schema, tableName);
+                var info = LookupTable(database, schema, tableName);
                 if (info?.Columns is { Count: > 0 })
                 {
                     foreach (var col in info.Columns)
@@ -896,7 +1044,7 @@ public class NzCompletionEngine
             // Try as direct table name
             if (_schema is not null)
             {
-                var directInfo = CompletionSchemaLookup.GetTable(_schema, _dialect, null, null, qualifier);
+                var directInfo = LookupTable(null, null, qualifier);
                 if (directInfo?.Columns is { Count: > 0 })
                 {
                     foreach (var col in directInfo.Columns)
@@ -942,8 +1090,7 @@ public class NzCompletionEngine
                                    ?? CompletionAliasResolver.ResolveTablePath(tokens, resolvedName);
                 if (resolvedPath is { } path)
                 {
-                    var pathInfo = CompletionSchemaLookup.GetTable(
-                        _schema, _dialect, path.Database, path.Schema, path.Name);
+                    var pathInfo = LookupTable(path.Database, path.Schema, path.Name);
                     if (pathInfo?.Columns is { Count: > 0 })
                     {
                         foreach (var col in pathInfo.Columns)
@@ -952,7 +1099,7 @@ public class NzCompletionEngine
                     }
                 }
 
-                var info = CompletionSchemaLookup.GetTable(_schema, _dialect, null, null, resolvedName);
+                var info = LookupTable(null, null, resolvedName);
                 if (info?.Columns is { Count: > 0 })
                 {
                     foreach (var col in info.Columns)
@@ -965,7 +1112,7 @@ public class NzCompletionEngine
         // Try as a direct table name
         if (_schema is not null)
         {
-            var directInfo = CompletionSchemaLookup.GetTable(_schema, _dialect, null, null, qualifier);
+            var directInfo = LookupTable(null, null, qualifier);
             if (directInfo?.Columns is { Count: > 0 })
             {
                 foreach (var col in directInfo.Columns)
@@ -1196,7 +1343,7 @@ public class NzCompletionEngine
         }
 
         if (tableName is null) return;
-        var table = CompletionSchemaLookup.GetTable(_schema, _dialect, null, null, tableName);
+        var table = LookupTable(null, null, tableName);
         if (table?.Columns is null) return;
 
         foreach (var col in table.Columns)
@@ -1211,7 +1358,7 @@ public class NzCompletionEngine
             var tableName = ExtractAlterTableName(tokens);
             if (_schema is not null
                 && tableName is not null
-                && CompletionSchemaLookup.GetTable(_schema, _dialect, null, null, tableName)?.Columns is { } cols)
+                && LookupTable(null, null, tableName)?.Columns is { } cols)
             {
                 foreach (var col in cols)
                     list.Add(CreateColumnItem(col, tableName, priority: 5));

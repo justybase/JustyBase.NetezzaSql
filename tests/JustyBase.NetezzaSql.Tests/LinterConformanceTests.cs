@@ -187,6 +187,25 @@ public sealed class LinterConformanceTests
     }
 
     [Fact]
+    public void Engine_Resolves_two_part_names_in_active_database_before_SQL007()
+    {
+        using var engine = new LintEngine();
+        var schema = new InMemorySchemaProvider();
+        schema.AddTable(new JustyBase.NetezzaSqlParser.Ast.TableInfo("T", "ADMIN", "JUST_DATA"));
+        schema.AddTable(new JustyBase.NetezzaSqlParser.Ast.TableInfo("T", "ADMIN", "OTHER_DB"));
+
+        var valid = engine.RunFullLint(new LintConfig(
+            "SELECT * FROM ADMIN.T", schema, "two-part-valid", ActiveDatabase: "JUST_DATA"));
+        Assert.DoesNotContain(valid.Issues, issue => issue.RuleId is "SQL006" or "SQL007");
+
+        var invalid = engine.RunFullLint(new LintConfig(
+            "SELECT * FROM JUST_DATA.T", schema, "two-part-invalid", ActiveDatabase: "JUST_DATA"));
+        Assert.DoesNotContain(invalid.Issues, issue => issue.RuleId == "SQL006");
+        Assert.Contains(invalid.Issues, issue => issue.RuleId == "SQL007");
+        Assert.Equal(1, invalid.Issues.Count(issue => issue.RuleId is "SQL006" or "SQL007"));
+    }
+
+    [Fact]
     public void Visitor_ReportsReferenceSemanticParityDiagnostics()
     {
         using var engine = new LintEngine();
