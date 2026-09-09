@@ -31,8 +31,10 @@ public sealed class CatalogSqlSurfaceCoverageTests
             CatalogSql.GetOrganizeSql(database),
             CatalogSql.GetDescSql(database),
             CatalogSql.GetLegacyProcSql(database),
+            CatalogSql.GetLegacyProcedureSourceSearchSql(database, "proc'name_%"),
             CatalogSql.GetLegacySynonymSql(database),
             CatalogSql.GetLegacyViewSql(database),
+            CatalogSql.GetLegacyViewSourceSearchSql(database, "view'name_%"),
             CatalogSql.GetLegacyExternalSql(database),
             CatalogSql.GetTableColumnsSql(database, "admin", "orders"),
             CatalogSql.GetDistributionKeysSql(database, "admin", "orders"),
@@ -54,6 +56,17 @@ public sealed class CatalogSqlSurfaceCoverageTests
         });
         Assert.Contains("proc''name", queries[9], StringComparison.Ordinal);
         Assert.Contains("view''name", queries[12], StringComparison.Ordinal);
+        Assert.Contains("PROC''NAME~_~%", queries[19], StringComparison.Ordinal);
+        Assert.Contains("VIEW''NAME~_~%", queries[22], StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    public void SourceSearchQueries_reject_empty_search_text(string searchText)
+    {
+        Assert.Throws<ArgumentException>(() => CatalogSql.GetLegacyViewSourceSearchSql("sample", searchText));
+        Assert.Throws<ArgumentException>(() => CatalogSql.GetLegacyProcedureSourceSearchSql("sample", searchText));
     }
 
     [Fact]

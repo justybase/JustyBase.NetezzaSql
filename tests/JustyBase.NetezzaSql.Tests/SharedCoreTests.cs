@@ -24,6 +24,25 @@ public sealed class SharedCoreTests
         Assert.Contains(risks, risk => risk.Kind == SqlRiskKind.MissingDistribute && risk.IsBlocking);
     }
 
+    [Theory]
+    [InlineData("DROP TABLE SALES.ORDERS")]
+    [InlineData("DROP VIEW SALES.ORDERS")]
+    [InlineData("DROP SESSION 123")]
+    public void RiskAnalyzer_detects_all_drop_statements(string sql)
+    {
+        var risks = new SqlRiskAnalysisService().Analyze(sql);
+
+        Assert.Contains(risks, risk => risk.Kind == SqlRiskKind.UnsafeDrop && risk.IsBlocking);
+    }
+
+    [Fact]
+    public void RiskAnalyzer_does_not_detect_drop_in_literals_or_comments()
+    {
+        var risks = new SqlRiskAnalysisService().Analyze("SELECT 'DROP TABLE T'; -- DROP TABLE T");
+
+        Assert.DoesNotContain(risks, risk => risk.Kind == SqlRiskKind.UnsafeDrop);
+    }
+
     [Fact]
     public void AvaloniaDialect_normalizes_legacy_directives_and_collects_sleep()
     {

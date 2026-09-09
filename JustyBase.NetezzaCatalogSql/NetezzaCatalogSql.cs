@@ -670,10 +670,53 @@ public static partial class NetezzaCatalogSql
         return $"SELECT SCHEMA,OWNER,VIEWNAME,DEFINITION,DESCRIPTION FROM {database}.._V_VIEW WHERE OBJTYPE IN ('SYSTEM VIEW','VIEW') AND DATABASE = '{EscapeSqlLiteral(database)}'";
     }
 
+    public static string GetLegacyViewSourceSearchSql(string database, string searchText)
+        => GetLegacySourceSearchSql(
+            database,
+            searchText,
+            "VIEW",
+            "VIEWNAME",
+            "DEFINITION",
+            "_V_VIEW");
+
+    public static string GetLegacyProcedureSourceSearchSql(string database, string searchText)
+        => GetLegacySourceSearchSql(
+            database,
+            searchText,
+            "PROCEDURE",
+            "PROCEDURE",
+            "PROCEDURESOURCE",
+            "_V_PROCEDURE");
+
     public static string GetLegacyExternalSql(string database)
     {
         database = NormalizeDatabaseIdentifier(database);
         string databaseLiteral = EscapeSqlLiteral(database);
         return $"SELECT E.SCHEMA,E.OWNER,E.TABLENAME,E.EXTOBJNAME,T.DESCRIPTION\r\nFROM {database}.._V_EXTOBJECT E\r\nJOIN {database}.._V_TABLE T ON T.OBJID = E.OBJID\r\nWHERE E.DATABASE = '{databaseLiteral}' AND T.DATABASE = '{databaseLiteral}'";
     }
+
+    private static string GetLegacySourceSearchSql(
+        string database,
+        string searchText,
+        string objectType,
+        string objectNameColumn,
+        string sourceColumn,
+        string catalogView)
+    {
+        database = NormalizeDatabaseIdentifier(database);
+        ArgumentException.ThrowIfNullOrWhiteSpace(searchText);
+
+        string pattern = EscapeSqlLikePattern(searchText.ToUpperInvariant());
+        string databaseLiteral = EscapeSqlLiteral(
+            NetezzaSqlIdentifier.UnquotedDatabase(database));
+
+        return $"SELECT '{objectType}' AS \"Type\", {objectNameColumn} AS \"Name\", DATABASE AS \"Db\", DESCRIPTION AS \"Desc\", OWNER AS \"Schema\" FROM {database}..{catalogView} WHERE UPPER({sourceColumn}) LIKE '%{pattern}%' ESCAPE '~' AND DATABASE = '{databaseLiteral}'";
+    }
+
+    private static string EscapeSqlLikePattern(string value)
+        => value
+            .Replace("~", "~~", StringComparison.Ordinal)
+            .Replace("%", "~%", StringComparison.Ordinal)
+            .Replace("_", "~_", StringComparison.Ordinal)
+            .Replace("'", "''", StringComparison.Ordinal);
 }

@@ -654,6 +654,27 @@ public class RuleNZ024_TrailingComma : LintRule
     }
 }
 
+// ====== NZ025: RANDOM distribution ======
+public class RuleNZ025_RandomDistribution : LintRule
+{
+    public override string Id => "NZ025";
+    public override string Name => "Random Distribution";
+    public override string Description =>
+        "DISTRIBUTE ON RANDOM can cause data movement and uneven workload; choose a suitable hash distribution when possible";
+    public override LintSeverity DefaultSeverity => LintSeverity.Warning;
+    public override RuleCost Cost => RuleCost.Cheap;
+    public override int Priority => 75;
+
+    public override IEnumerable<LintIssue> Check(string sql)
+    {
+        foreach (Match m in Regex.Matches(sql, @"\bDISTRIBUTE\s+ON\s+RANDOM\b", RegexOptions.IgnoreCase))
+        {
+            if (LintHelpers.IsInsideStringOrComment(sql, m.Index)) continue;
+            yield return new LintIssue(Id, $"{Id}: {Description}", DefaultSeverity, m.Index, m.Index + m.Length);
+        }
+    }
+}
+
 // ====== All rules registry ======
 public static class NzLintRules
 {
@@ -682,7 +703,8 @@ public static class NzLintRules
         new RuleNZ021_DoubleComma(),
         new RuleNZ022_WhereWithoutFrom(),
         new RuleNZ023_KeywordTypo(),
-        new RuleNZ024_TrailingComma()
+        new RuleNZ024_TrailingComma(),
+        new RuleNZ025_RandomDistribution()
     };
 
     public static LintSeverity MapSeverity(RuleSeverityConfig config) => config switch

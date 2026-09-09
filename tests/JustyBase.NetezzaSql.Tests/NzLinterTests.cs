@@ -166,6 +166,20 @@ public sealed class NzLinterTests : IDisposable
     }
 
     [Fact]
+    public void NZ025_RandomDistribution_Detected()
+    {
+        var issues = _engine.RunCheapRules("CREATE TABLE t (id INT) DISTRIBUTE ON RANDOM");
+        Assert.Contains(issues, i => i.RuleId == "NZ025");
+    }
+
+    [Fact]
+    public void NZ025_RandomDistribution_InsideCommentOrString_Ignored()
+    {
+        var issues = _engine.RunCheapRules("SELECT 'DISTRIBUTE ON RANDOM' AS text; -- DISTRIBUTE ON RANDOM");
+        Assert.DoesNotContain(issues, i => i.RuleId == "NZ025");
+    }
+
+    [Fact]
     public void Strings_IgnoreStructuralDeleteRule()
     {
         var issues = RunParserDiagnostics("SELECT 'DELETE FROM' AS msg FROM t");
@@ -175,9 +189,9 @@ public sealed class NzLinterTests : IDisposable
     [Fact]
     public void AllRules_AreDefined()
     {
-        Assert.Equal(24, NzLintRules.AllRules.Count);
+        Assert.Equal(25, NzLintRules.AllRules.Count);
         var ids = NzLintRules.AllRules.Select(r => r.Id).ToList();
-        for (int i = 1; i <= 24; i++)
+        for (int i = 1; i <= 25; i++)
         {
             var expected = $"NZ{i:D3}";
             Assert.Contains(expected, ids);

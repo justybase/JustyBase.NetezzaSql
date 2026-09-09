@@ -4,7 +4,8 @@ public enum SqlRiskKind
 {
     UnsafeUpdateDelete,
     MissingDistribute,
-    SelectInto
+    SelectInto,
+    UnsafeDrop
 }
 
 /// <summary>A warning that must be acknowledged before the statement is run.</summary>
@@ -54,6 +55,13 @@ public sealed partial class SqlRiskAnalysisService
                     SqlRiskKind.MissingDistribute,
                     "CREATE TABLE without a DISTRIBUTE option."));
             }
+
+            if (DropRegex().IsMatch(trimmed))
+            {
+                risks.Add(new SqlRisk(
+                    SqlRiskKind.UnsafeDrop,
+                    "DROP permanently removes a database object or session."));
+            }
         }
 
         return risks;
@@ -73,6 +81,9 @@ public sealed partial class SqlRiskAnalysisService
 
     [System.Text.RegularExpressions.GeneratedRegex(@"\bSELECT\b[\s\S]*?\bINTO\b\s+[A-Za-z_""\[]", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant)]
     private static partial System.Text.RegularExpressions.Regex SelectIntoRegex();
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"^\s*DROP\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant)]
+    private static partial System.Text.RegularExpressions.Regex DropRegex();
 }
 
 internal static class SqlTextMasker

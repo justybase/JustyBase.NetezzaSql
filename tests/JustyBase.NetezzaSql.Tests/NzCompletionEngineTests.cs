@@ -381,6 +381,41 @@ public sealed class NzCompletionEngineTests
         Assert.Equal(1, items.Count(x => x.Label.Equals("DIMDATE", StringComparison.OrdinalIgnoreCase)));
     }
 
+    [Fact]
+    public void Quoted_relation_identifiers_resolve_schema_table_and_alias_columns()
+    {
+        var schema = new InMemorySchemaProvider();
+        schema.AddTable(new TableInfo(
+            "Order Details",
+            Schema: "Sales Data",
+            Database: "DB1",
+            Columns: [new ColumnInfo("Order Id"), new ColumnInfo("MixedCase")]));
+        var engine = new NzCompletionEngine(schema);
+        var sql = "SELECT * FROM \"Sales Data\".\"Order Details\" od WHERE od.";
+
+        var items = engine.GetCompletions(sql, sql.Length);
+
+        Assert.Contains(items, item => item.Label == "Order Id" && item.Detail == "od.Order Id");
+        Assert.Contains(items, item => item.Label == "MixedCase" && item.Detail == "od.MixedCase");
+    }
+
+    [Fact]
+    public void Quoted_table_in_database_double_dot_reference_resolves_alias_columns()
+    {
+        var schema = new InMemorySchemaProvider();
+        schema.AddTable(new TableInfo(
+            "Quoted Table",
+            Schema: "ADMIN",
+            Database: "DB1",
+            Columns: [new ColumnInfo("MixedCase")]));
+        var engine = new NzCompletionEngine(schema);
+        var sql = "SELECT * FROM DB1..\"Quoted Table\" qt WHERE qt.";
+
+        var items = engine.GetCompletions(sql, sql.Length);
+
+        Assert.Contains(items, item => item.Label == "MixedCase" && item.Detail == "qt.MixedCase");
+    }
+
     // ====== New tests: AS alias resolution ======
 
     [Fact]

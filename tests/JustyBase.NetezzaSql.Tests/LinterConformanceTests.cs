@@ -31,6 +31,7 @@ public sealed class LinterConformanceTests
     [InlineData("NZ022", "SELECT a WHERE a = 1;")]
     [InlineData("NZ023", "SELEC 1 FROM t;")]
     [InlineData("NZ024", "SELECT a, FROM t;")]
+    [InlineData("NZ025", "CREATE TABLE t (id INT) DISTRIBUTE ON RANDOM;")]
     public void CheapRule_ReportsItsReferenceTrigger(string id, string sql)
     {
         using var engine = new LintEngine();
@@ -44,7 +45,7 @@ public sealed class LinterConformanceTests
     public void Registry_ContainsAllReferenceNetezzaRuleIds()
     {
         using var engine = new LintEngine();
-        var expected = Enumerable.Range(1, 24).Select(number => "NZ" + number.ToString("000"))
+        var expected = Enumerable.Range(1, 25).Select(number => "NZ" + number.ToString("000"))
             .Concat(Enumerable.Range(101, 8).Select(number => "NZ" + number))
             .Concat(Enumerable.Range(1, 20).Select(number => "NZP" + number.ToString("000")))
             .Concat(Enumerable.Range(22, 9).Select(number => "NZP" + number.ToString("000")));
