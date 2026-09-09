@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented here.
 
+## 0.8.7
+
+- Complete Legacy Netezza catalog source search, schema refresh, column caching,
+  quoted-identifier completion, and destructive SQL risk handling.
+- Add `DROP` risk diagnostics and the `NZ025` random-distribution lint rule.
+
 ## 0.8.6
 
 - Add support for legacy script variables in identifiers, `LIMIT`/`OFFSET` clauses,
