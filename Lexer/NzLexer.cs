@@ -301,6 +301,7 @@ public static class NzLexer
         .Match(Span.Regex(@"^\{[a-zA-Z_][a-zA-Z0-9_]*\}"), NzToken.BracesOnlyVariable)
         .Match(Span.Regex(@"^\$\d+"), NzToken.DollarNumber)
         .Match(Span.Regex(@"^\$[a-zA-Z_][a-zA-Z0-9_]*"), NzToken.DollarIdentifier)
+        .Match(Span.Regex(@"^&[a-zA-Z_][a-zA-Z0-9_]*"), NzToken.AmpersandIdentifier)
 
         // Quoted identifier
         .Match(Span.Regex(@"^""[^""]*"""), NzToken.QuotedIdentifier)

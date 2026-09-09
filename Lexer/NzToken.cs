@@ -403,6 +403,9 @@ public enum NzToken
     SqliteWithout,                // WITHOUT
     SqliteBlobLiteral,            // X'...' hex blob literal
 
+    // Legacy script variable token appended to preserve existing enum values.
+    AmpersandIdentifier,          // &variable
+
     // Short aliases retained for consumers that use generic operator names.
     JsonTextPath = PostgreSqlJsonTextPath,
     JsonPath = PostgreSqlJsonPath,

@@ -383,7 +383,8 @@ public record TableName(
     bool MySqlDatabaseQualified = false,
     char? NameQuote = null,
     char? SchemaQuote = null,
-    char? DatabaseQuote = null
+    char? DatabaseQuote = null,
+    bool IsScriptVariable = false
 );
 
 public record JoinClause(
@@ -421,7 +422,11 @@ public record LimitClause(
     LimitClauseSyntax Syntax = LimitClauseSyntax.Limit,
     // SQLite: raw LIMIT clause tokens when an operand is a bound parameter
     // or expression that a numeric Limit cannot represent (LIMIT ?).
-    IReadOnlyList<Token<NzToken>>? SqliteTokens = null
+    IReadOnlyList<Token<NzToken>>? SqliteTokens = null,
+    // Script variables (for example LIMIT &LIMIT_CNT) cannot be represented
+    // by the numeric Limit/Offset properties. Preserve their tokens so the
+    // formatter and authoring pipeline can round-trip the original clause.
+    IReadOnlyList<Token<NzToken>>? RawTokens = null
 ) : AstNode(Position);
 
 public enum FetchDirection
@@ -559,7 +564,8 @@ public record ColumnReference(
     string? Qualifier,
     string Name,
     char? NameQuote = null,
-    char? QualifierQuote = null
+    char? QualifierQuote = null,
+    bool IsScriptVariable = false
 ) : Expression(Position);
 
 public record StarExpression(

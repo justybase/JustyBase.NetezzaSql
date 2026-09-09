@@ -355,8 +355,10 @@ public partial class NzSqlParser
             return new ColumnReference(FromToken(Advance()), null, "REFTABLE");
 
         if (t.Kind is NzToken.DollarIdentifier or NzToken.DollarNumber
-            or NzToken.BracedVariable or NzToken.BracesOnlyVariable)
-            return new ColumnReference(FromToken(Advance()), null, t.ToStringValue());
+            or NzToken.BracedVariable or NzToken.BracesOnlyVariable
+            or NzToken.AmpersandIdentifier)
+            return new ColumnReference(FromToken(Advance()), null, t.ToStringValue(),
+                IsScriptVariable: IsScriptVariableToken(t.Kind));
 
         if (t.Kind == NzToken.Parameter)
             return new ParameterExpression(FromToken(Advance()));
@@ -372,6 +374,15 @@ public partial class NzSqlParser
         {
             var id = Advance();
             var idStr = StripQuotes(id.ToStringValue());
+            var isScriptVariable = false;
+            var previous = id;
+            while (IsScriptVariableToken(Peek().Kind) && AreAdjacent(previous, Peek()))
+            {
+                var variable = Advance();
+                idStr += variable.ToStringValue();
+                isScriptVariable = true;
+                previous = variable;
+            }
             if (Peek().Kind == NzToken.StringLiteral)
             {
                 var literal = Advance();
@@ -388,14 +399,16 @@ public partial class NzSqlParser
                 {
                     var star = Advance();
                     return new ColumnReference(
-                        FromToken(id), idStr, "*", null, IdentifierQuote(id.Kind));
+                        FromToken(id), idStr, "*", null, IdentifierQuote(id.Kind), isScriptVariable);
                 }
-                var col = ExpectNameToken();
+                var colPart = ParseNamePart();
                 return new ColumnReference(
-                    FromToken(id), idStr, StripQuotes(col.ToStringValue()),
-                    IdentifierQuote(col.Kind), IdentifierQuote(id.Kind));
+                    FromToken(id), idStr, colPart.Value,
+                    colPart.Quote, IdentifierQuote(id.Kind),
+                    isScriptVariable || colPart.IsScriptVariable);
             }
-            return new ColumnReference(FromToken(id), null, idStr, IdentifierQuote(id.Kind));
+            return new ColumnReference(FromToken(id), null, idStr, IdentifierQuote(id.Kind),
+                IsScriptVariable: isScriptVariable);
         }
 
         // Check for keyword typo in expression context

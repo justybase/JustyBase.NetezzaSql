@@ -260,6 +260,7 @@ public sealed class NzSemanticTokenClassifier
             case NzToken.BracedVariable:
             case NzToken.BracesOnlyVariable:
             case NzToken.DollarIdentifier:
+            case NzToken.AmpersandIdentifier:
                 return (SemanticTokenKind.Variable, SemanticTokenModifiers.None);
             case NzToken.QuotedIdentifier:
                 return (SemanticTokenKind.String, SemanticTokenModifiers.None);

@@ -295,11 +295,21 @@ public partial class NzSqlParser
 
     protected virtual LimitClause ParseLimitClause()
     {
+        var clauseStart = _pos;
         var limitTok = Advance();
         var limitVal = 0;
+        var hasScriptVariable = false;
         if (Peek().Kind != NzToken.NumberLiteral)
         {
-            AddParserError("Expected number after LIMIT", limitTok, "PARSE001");
+            if (IsScriptVariableToken(Peek().Kind))
+            {
+                Advance();
+                hasScriptVariable = true;
+            }
+            else
+            {
+                AddParserError("Expected number after LIMIT", limitTok, "PARSE001");
+            }
         }
         else
         {
@@ -312,11 +322,19 @@ public partial class NzSqlParser
             Advance();
             if (Peek().Kind == NzToken.NumberLiteral)
                 offsetVal = int.Parse(Advance().ToStringValue());
+            else if (IsScriptVariableToken(Peek().Kind))
+            {
+                Advance();
+                hasScriptVariable = true;
+            }
             else
                 AddParserError("Expected number after LIMIT OFFSET", Peek(), "PARSE001");
         }
 
-        return new LimitClause(FromToken(limitTok), limitVal, offsetVal);
+        var rawTokens = hasScriptVariable
+            ? _tokens[clauseStart.._pos]
+            : null;
+        return new LimitClause(FromToken(limitTok), limitVal, offsetVal, RawTokens: rawTokens);
     }
 
     /// <summary>
@@ -759,9 +777,12 @@ public partial class NzSqlParser
     {
         var parts = new List<string?>();
         var quotes = new List<char?>();
-        var first = ExpectNameToken();
-        parts.Add(StripQuotes(first.ToStringValue()));
-        quotes.Add(IdentifierQuote(first.Kind));
+        var dynamicParts = new List<bool>();
+        var firstPart = ParseNamePart();
+        var first = firstPart.FirstToken;
+        parts.Add(firstPart.Value);
+        quotes.Add(firstPart.Quote);
+        dynamicParts.Add(firstPart.IsScriptVariable);
 
         while (Peek().Kind == NzToken.Dot)
         {
@@ -778,14 +799,16 @@ public partial class NzSqlParser
                 parts.Add(null); // null = empty schema
                 quotes.Add(null);
                 Advance(); // consume second dot
-                var last = ExpectNameToken();
-                parts.Add(StripQuotes(last.ToStringValue()));
-                quotes.Add(IdentifierQuote(last.Kind));
+                var lastPart = ParseNamePart();
+                parts.Add(lastPart.Value);
+                quotes.Add(lastPart.Quote);
+                dynamicParts.Add(lastPart.IsScriptVariable);
                 break;
             }
-            var next = ExpectNameToken();
-            parts.Add(StripQuotes(next.ToStringValue()));
-            quotes.Add(IdentifierQuote(next.Kind));
+            var nextPart = ParseNamePart();
+            parts.Add(nextPart.Value);
+            quotes.Add(nextPart.Quote);
+            dynamicParts.Add(nextPart.IsScriptVariable);
         }
 
         var table = parts switch
@@ -798,7 +821,27 @@ public partial class NzSqlParser
             _ => new TableName(parts[^1]!)
         };
 
-        return (table, first);
+        return (table with { IsScriptVariable = dynamicParts.Any(static part => part) }, first);
+    }
+
+    private (string Value, char? Quote, bool IsScriptVariable, Token<NzToken> FirstToken) ParseNamePart()
+    {
+        var first = ExpectNameToken();
+        var value = StripQuotes(first.ToStringValue());
+        var isScriptVariable = IsScriptVariableToken(first.Kind);
+        var previous = first;
+
+        // The lexer intentionally keeps NAME_ and &suffix as separate tokens.
+        // Join only adjacent fragments so whitespace still separates two names.
+        while (IsScriptVariableToken(Peek().Kind) && AreAdjacent(previous, Peek()))
+        {
+            var variable = Advance();
+            value += variable.ToStringValue();
+            isScriptVariable = true;
+            previous = variable;
+        }
+
+        return (value, IdentifierQuote(first.Kind), isScriptVariable, first);
     }
 
     /// <summary>
@@ -817,7 +860,9 @@ public partial class NzSqlParser
             // SQLite-only tokens (never emitted by the other lexers).
             or NzToken.SqliteBracketedIdentifier
             // Access-only quoted identifiers.
-            or NzToken.AccessBracketedIdentifier or NzToken.AccessBacktickIdentifier)
+            or NzToken.AccessBracketedIdentifier or NzToken.AccessBacktickIdentifier
+            // Legacy script variables.
+            or NzToken.AmpersandIdentifier)
         {
             return Advance();
         }

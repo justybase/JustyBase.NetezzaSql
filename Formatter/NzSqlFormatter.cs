@@ -313,7 +313,11 @@ public sealed class NzSqlFormatter
         else if (stmt.Limit is not null)
         {
             NewLine();
-            if (stmt.Limit.SqliteTokens is { Count: > 0 })
+            if (stmt.Limit.RawTokens is { Count: > 0 })
+            {
+                Write(FormatOpaqueTokens(stmt.Limit.RawTokens));
+            }
+            else if (stmt.Limit.SqliteTokens is { Count: > 0 })
             {
                 Write(FormatOpaqueTokens(stmt.Limit.SqliteTokens));
             }

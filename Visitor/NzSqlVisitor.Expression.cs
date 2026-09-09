@@ -45,6 +45,7 @@ public partial class NzSqlVisitor
     private void VisitColumnRef(ColumnReference cr)
     {
         if (_inProcedureContext) return;
+        if (cr.IsScriptVariable) return;
 
         var upperName = cr.Name.ToUpperInvariant();
 

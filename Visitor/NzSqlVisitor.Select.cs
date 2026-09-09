@@ -151,6 +151,9 @@ public partial class NzSqlVisitor
 
     private void LookupTableOnly(TableName tableName, SourcePosition pos)
     {
+        if (tableName.IsScriptVariable)
+            return;
+
         var nameKey = tableName.Name.ToUpperInvariant();
         // Check if table exists in multi-statement scope or schema
         if (_multiStatementScope is not null && _multiStatementScope.ContainsKey(nameKey))
@@ -196,6 +199,7 @@ public partial class NzSqlVisitor
     {
         if (source.Table is not null)
         {
+            var isScriptVariable = source.Table.IsScriptVariable;
             var table = new TableInfo(
                 source.Table.Name, source.Table.Schema, source.Table.Database,
                 IsCte: false, IsTempTable: false, Alias: source.Alias);
@@ -220,7 +224,7 @@ public partial class NzSqlVisitor
             }
 
             // Get columns from schema (only for non-CTE tables)
-            if (_schema is not null && !table.IsCte)
+            if (_schema is not null && !table.IsCte && !isScriptVariable)
             {
                 var schemaTable = GetSchemaTable(new TableName(table.Name, table.Schema, table.Database));
                 // Empty list = deferred hydration; keep Columns unset so validation skips (not SQL005).
@@ -230,7 +234,7 @@ public partial class NzSqlVisitor
             }
 
             // Validate table exists
-            if (_schema is not null && !table.IsCte && !table.IsTempTable)
+            if (_schema is not null && !table.IsCte && !table.IsTempTable && !isScriptVariable)
             {
                 var existsInMsScope = _multiStatementScope is not null &&
                     _multiStatementScope.ContainsKey(table.Name.ToUpperInvariant());
@@ -277,7 +281,7 @@ public partial class NzSqlVisitor
             }
 
             // Check for reserved keyword as unquoted table name
-            if (source.Position.Column > 0 && IsReservedKeyword(table.Name))
+            if (!isScriptVariable && source.Position.Column > 0 && IsReservedKeyword(table.Name))
             {
                 AddError($"Unquoted reserved keyword '{table.Name.ToUpperInvariant()}' cannot be used as table name. Use \"{table.Name.ToUpperInvariant()}\"",
                     "error", "SQL015", source.Position);

@@ -134,7 +134,16 @@ public partial class NzSqlParser
         // SQLite-only tokens (never emitted by the other lexers).
         or NzToken.SqliteBracketedIdentifier
         // Access-only identifiers.
-        or NzToken.AccessBracketedIdentifier or NzToken.AccessBacktickIdentifier;
+        or NzToken.AccessBracketedIdentifier or NzToken.AccessBacktickIdentifier
+        // Legacy script variables are valid identifier-like values in the
+        // authoring grammar. Their dynamic nature is tracked in the AST.
+        or NzToken.AmpersandIdentifier;
+
+    protected static bool IsScriptVariableToken(NzToken kind) =>
+        kind == NzToken.AmpersandIdentifier;
+
+    protected static bool AreAdjacent(Token<NzToken> left, Token<NzToken> right) =>
+        right.Position.Absolute == left.Position.Absolute + left.Span.Length;
 
     protected static char? IdentifierQuote(NzToken kind) => kind switch
     {

@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented here.
 
+## 0.8.6
+
+- Add support for legacy script variables in identifiers, `LIMIT`/`OFFSET` clauses,
+  AST round-tripping, and schema-aware validation.
+- Add regression coverage for script-variable parsing and formatting.
+
 ## 0.8.5
 
 - Improve schema-aware completion for active databases, qualified relation paths,

@@ -20,6 +20,6 @@
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-    <PackageVersion Condition="'$(PackageVersion)' == ''">0.8.5</PackageVersion>
+    <PackageVersion Condition="'$(PackageVersion)' == ''">0.8.6</PackageVersion>
   </PropertyGroup>
 </Project>

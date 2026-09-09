@@ -1736,6 +1736,44 @@ public sealed class NzSqlValidatorNzplsqlTests
     }
 
     [Fact]
+    public void Validate_Variables_AmpersandVariable()
+    {
+        ExpectValid("SELECT &myVar;");
+    }
+
+    [Fact]
+    public void Validate_Variables_AmpersandVariableInLimit()
+    {
+        ExpectValid(
+            "SELECT STATUS FROM TESTDB.PUBLIC.ORDERS WHERE STATUS LIKE &searched LIMIT &limit OFFSET &offset;",
+            _schema);
+    }
+
+    [Fact]
+    public void Validate_Variables_AmpersandVariableAsTableName()
+    {
+        ExpectValid("SELECT &column FROM &table;", _schema);
+    }
+
+    [Fact]
+    public void Validate_Variables_AmpersandVariableInCompositeName()
+    {
+        ExpectValid("SELECT NAME_&suffix FROM TESTDB.PUBLIC.ORDERS;", _schema);
+    }
+
+    [Fact]
+    public void Validate_Variables_AmpersandVariableInDdlName()
+    {
+        ExpectValid("CREATE TABLE NAME_&suffix (ID INT4);", _schema);
+    }
+
+    [Fact]
+    public void Validate_Variables_AmpersandVariableIsNotColumnWithSchema()
+    {
+        ExpectValid("SELECT STATUS FROM TESTDB.PUBLIC.ORDERS WHERE STATUS LIKE &searched;", _schema);
+    }
+
+    [Fact]
     public void Validate_Variables_SingleSemicolon()
     {
         ExpectValid(";");

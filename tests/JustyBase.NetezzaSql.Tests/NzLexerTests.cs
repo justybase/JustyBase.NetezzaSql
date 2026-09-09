@@ -254,6 +254,15 @@ public sealed class NzLexerTests
     }
 
     [Fact]
+    public void Tokenize_AmpersandIdentifier()
+    {
+        var t = T("SELECT &SOME_VAR");
+
+        Assert.Equal(NzToken.AmpersandIdentifier, t[1].Kind);
+        Assert.Equal("&SOME_VAR", t[1].ToStringValue());
+    }
+
+    [Fact]
     public void Tokenize_MixedCaseKeywords()
     {
         var t = T("SeLeCt * FrOm t WhErE x Is NoT NuLl");
