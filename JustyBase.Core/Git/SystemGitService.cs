@@ -137,6 +137,120 @@ public sealed class SystemGitService : IGitService
         return RunAsync(repoPath, ["commit", "-m", message], cancellationToken);
     }
 
+    public Task<GitCommandResult> AmendAsync(string repoPath, string? message, CancellationToken cancellationToken = default)
+    {
+        var args = new List<string> { "commit", "--amend" };
+        if (!string.IsNullOrWhiteSpace(message))
+        {
+            args.Add("-m");
+            args.Add(message.Trim());
+        }
+        else
+        {
+            args.Add("--no-edit");
+        }
+
+        return RunAsync(repoPath, args, cancellationToken);
+    }
+
+    public Task<GitCommandResult> UndoLastCommitAsync(string repoPath, CancellationToken cancellationToken = default) =>
+        RunAsync(repoPath, ["reset", "--soft", "HEAD~1"], cancellationToken);
+
+    public Task<GitCommandResult> ResetAsync(string repoPath, string target, GitResetMode mode, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(target))
+            return Task.FromResult(GitCommandResult.Failure(1, string.Empty, "Reset target is required."));
+
+        string flag = mode == GitResetMode.Hard ? "--hard" : "--mixed";
+        return RunAsync(repoPath, ["reset", flag, target.Trim()], cancellationToken);
+    }
+
+    public Task<GitCommandResult> RevertAsync(string repoPath, string commitHash, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(commitHash))
+            return Task.FromResult(GitCommandResult.Failure(1, string.Empty, "Commit hash is required."));
+
+        return RunAsync(repoPath, ["revert", "--no-edit", commitHash.Trim()], cancellationToken);
+    }
+
+    public Task<GitCommandResult> FetchAsync(string repoPath, CancellationToken cancellationToken = default) =>
+        RunAsync(repoPath, ["fetch"], cancellationToken);
+
+    public Task<GitCommandResult> DeleteBranchAsync(string repoPath, string branchName, bool force, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(branchName))
+            return Task.FromResult(GitCommandResult.Failure(1, string.Empty, "Branch name is required."));
+
+        return RunAsync(repoPath, ["branch", force ? "-D" : "-d", branchName.Trim()], cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<GitStashInfo>> GetStashesAsync(string repoPath, CancellationToken cancellationToken = default)
+    {
+        GitCommandResult result = await RunAsync(
+            repoPath,
+            ["stash", "list", "--format=%gd%x09%gs"],
+            cancellationToken).ConfigureAwait(false);
+
+        if (!result.Succeeded || string.IsNullOrWhiteSpace(result.StandardOutput))
+            return [];
+
+        var stashes = new List<GitStashInfo>();
+        using var reader = new StringReader(result.StandardOutput);
+        while (reader.ReadLine() is { } line)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+
+            string[] parts = line.Split('\t', 2);
+            string stashRef = parts[0].Trim();
+            if (string.IsNullOrEmpty(stashRef))
+                continue;
+
+            string message = parts.Length > 1 ? parts[1].Trim() : stashRef;
+            stashes.Add(new GitStashInfo(stashRef, message));
+        }
+
+        return stashes;
+    }
+
+    public Task<GitCommandResult> StashSaveAsync(string repoPath, string? message, bool includeUntracked, CancellationToken cancellationToken = default)
+    {
+        var args = new List<string> { "stash", "push" };
+        if (includeUntracked)
+            args.Add("-u");
+        if (!string.IsNullOrWhiteSpace(message))
+        {
+            args.Add("-m");
+            args.Add(message.Trim());
+        }
+
+        return RunAsync(repoPath, args, cancellationToken);
+    }
+
+    public Task<GitCommandResult> StashPopAsync(string repoPath, string stashRef, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(stashRef))
+            return Task.FromResult(GitCommandResult.Failure(1, string.Empty, "Stash ref is required."));
+
+        return RunAsync(repoPath, ["stash", "pop", stashRef.Trim()], cancellationToken);
+    }
+
+    public Task<GitCommandResult> StashApplyAsync(string repoPath, string stashRef, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(stashRef))
+            return Task.FromResult(GitCommandResult.Failure(1, string.Empty, "Stash ref is required."));
+
+        return RunAsync(repoPath, ["stash", "apply", stashRef.Trim()], cancellationToken);
+    }
+
+    public Task<GitCommandResult> StashDropAsync(string repoPath, string stashRef, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(stashRef))
+            return Task.FromResult(GitCommandResult.Failure(1, string.Empty, "Stash ref is required."));
+
+        return RunAsync(repoPath, ["stash", "drop", stashRef.Trim()], cancellationToken);
+    }
+
     public Task<GitCommandResult> PullAsync(string repoPath, CancellationToken cancellationToken = default) =>
         RunAsync(repoPath, ["pull"], cancellationToken);
 
@@ -151,14 +265,24 @@ public sealed class SystemGitService : IGitService
             : [];
     }
 
-    public Task<GitCommandResult> CreateBranchAsync(string repoPath, string branchName, bool checkout, CancellationToken cancellationToken = default)
+    public Task<GitCommandResult> CreateBranchAsync(string repoPath, string branchName, bool checkout, CancellationToken cancellationToken = default, string? startPoint = null)
     {
         if (string.IsNullOrWhiteSpace(branchName))
             return Task.FromResult(GitCommandResult.Failure(1, string.Empty, "Branch name is required."));
 
-        return checkout
-            ? RunAsync(repoPath, ["checkout", "-b", branchName.Trim()], cancellationToken)
-            : RunAsync(repoPath, ["branch", branchName.Trim()], cancellationToken);
+        string name = branchName.Trim();
+        if (checkout)
+        {
+            var args = new List<string> { "checkout", "-b", name };
+            if (!string.IsNullOrWhiteSpace(startPoint))
+                args.Add(startPoint.Trim());
+            return RunAsync(repoPath, args, cancellationToken);
+        }
+
+        var createArgs = new List<string> { "branch", name };
+        if (!string.IsNullOrWhiteSpace(startPoint))
+            createArgs.Add(startPoint.Trim());
+        return RunAsync(repoPath, createArgs, cancellationToken);
     }
 
     public Task<GitCommandResult> CheckoutAsync(string repoPath, string branchName, CancellationToken cancellationToken = default)
@@ -177,13 +301,14 @@ public sealed class SystemGitService : IGitService
         return RunAsync(repoPath, ["merge", "--no-edit", branchName.Trim()], cancellationToken);
     }
 
-    public async Task<IReadOnlyList<GitCommitInfo>> GetCommitsAsync(string repoPath, int maxCount = 50, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<GitCommitInfo>> GetCommitsAsync(string repoPath, int maxCount = 50, CancellationToken cancellationToken = default, int skip = 0)
     {
         int count = Math.Clamp(maxCount, 1, 500);
-        GitCommandResult result = await RunAsync(
-            repoPath,
-            ["log", $"-n{count}", $"--pretty=format:{GitOutputParser.LogFormat}"],
-            cancellationToken).ConfigureAwait(false);
+        int skipCount = Math.Max(0, skip);
+        var args = new List<string> { "log", $"-n{count}", $"--pretty=format:{GitOutputParser.LogFormat}" };
+        if (skipCount > 0)
+            args.Add($"--skip={skipCount}");
+        GitCommandResult result = await RunAsync(repoPath, args, cancellationToken).ConfigureAwait(false);
 
         return result.Succeeded
             ? GitOutputParser.ParseLog(result.StandardOutput)

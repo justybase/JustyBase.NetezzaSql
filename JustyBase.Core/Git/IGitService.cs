@@ -25,19 +25,45 @@ public interface IGitService
 
     Task<GitCommandResult> CommitAsync(string repoPath, string message, CancellationToken cancellationToken = default);
 
+    /// <summary>Amends HEAD with staged changes and/or a new message (<c>git commit --amend</c>).</summary>
+    Task<GitCommandResult> AmendAsync(string repoPath, string? message, CancellationToken cancellationToken = default);
+
+    /// <summary>Undoes the last commit, keeping its changes staged (<c>git reset --soft HEAD~1</c>).</summary>
+    Task<GitCommandResult> UndoLastCommitAsync(string repoPath, CancellationToken cancellationToken = default);
+
+    /// <summary>Resets a ref (commit, branch, HEAD) to a target (<c>git reset --mixed/--hard</c>).</summary>
+    Task<GitCommandResult> ResetAsync(string repoPath, string target, GitResetMode mode, CancellationToken cancellationToken = default);
+
+    /// <summary>Reverts a commit (<c>git revert --no-edit</c>).</summary>
+    Task<GitCommandResult> RevertAsync(string repoPath, string commitHash, CancellationToken cancellationToken = default);
+
+    Task<GitCommandResult> FetchAsync(string repoPath, CancellationToken cancellationToken = default);
+
+    Task<GitCommandResult> DeleteBranchAsync(string repoPath, string branchName, bool force, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<GitStashInfo>> GetStashesAsync(string repoPath, CancellationToken cancellationToken = default);
+
+    Task<GitCommandResult> StashSaveAsync(string repoPath, string? message, bool includeUntracked, CancellationToken cancellationToken = default);
+
+    Task<GitCommandResult> StashPopAsync(string repoPath, string stashRef, CancellationToken cancellationToken = default);
+
+    Task<GitCommandResult> StashApplyAsync(string repoPath, string stashRef, CancellationToken cancellationToken = default);
+
+    Task<GitCommandResult> StashDropAsync(string repoPath, string stashRef, CancellationToken cancellationToken = default);
+
     Task<GitCommandResult> PullAsync(string repoPath, CancellationToken cancellationToken = default);
 
     Task<GitCommandResult> PushAsync(string repoPath, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<GitBranchInfo>> GetBranchesAsync(string repoPath, CancellationToken cancellationToken = default);
 
-    Task<GitCommandResult> CreateBranchAsync(string repoPath, string branchName, bool checkout, CancellationToken cancellationToken = default);
+    Task<GitCommandResult> CreateBranchAsync(string repoPath, string branchName, bool checkout, CancellationToken cancellationToken = default, string? startPoint = null);
 
     Task<GitCommandResult> CheckoutAsync(string repoPath, string branchName, CancellationToken cancellationToken = default);
 
     Task<GitCommandResult> MergeAsync(string repoPath, string branchName, CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<GitCommitInfo>> GetCommitsAsync(string repoPath, int maxCount = 50, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<GitCommitInfo>> GetCommitsAsync(string repoPath, int maxCount = 50, CancellationToken cancellationToken = default, int skip = 0);
 
     Task<IReadOnlyList<GitCommitFile>> GetCommitFilesAsync(string repoPath, string commitHash, CancellationToken cancellationToken = default);
 

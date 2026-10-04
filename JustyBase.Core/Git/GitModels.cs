@@ -96,3 +96,13 @@ public sealed record GitUserIdentity(
     string? Email,
     bool NameIsLocal,
     bool EmailIsLocal);
+
+public enum GitResetMode
+{
+    Mixed,
+    Hard
+}
+
+public sealed record GitStashInfo(
+    string Ref,
+    string Message);
