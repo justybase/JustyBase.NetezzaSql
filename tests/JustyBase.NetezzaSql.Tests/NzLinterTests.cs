@@ -189,12 +189,13 @@ public sealed class NzLinterTests : IDisposable
     [Fact]
     public void AllRules_AreDefined()
     {
-        Assert.Equal(25, NzLintRules.AllRules.Count);
+        Assert.Equal(26, NzLintRules.AllRules.Count);
         var ids = NzLintRules.AllRules.Select(r => r.Id).ToList();
         for (int i = 1; i <= 25; i++)
         {
             var expected = $"NZ{i:D3}";
             Assert.Contains(expected, ids);
         }
+        Assert.Contains("PARW001", ids);
     }
 }

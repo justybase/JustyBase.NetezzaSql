@@ -166,6 +166,7 @@ public partial class NzSqlVisitor
             case AlterTableStatement s: Visit(s); break;
             case DropStatement s: Visit(s); break;
             case TruncateStatement s: Visit(s); break;
+            case LockStatement s: Visit(s); break;
             case CommentStatement s: Visit(s); break;
             case GroomStatement s: Visit(s); break;
             case GenerateStatisticsStatement s: Visit(s); break;
@@ -201,7 +202,6 @@ public partial class NzSqlVisitor
                 Visit(a.Value);
                 break;
             case ProcedureReturnStatement r:
-                _procedureScope?.MarkReturn();
                 if (r.Value is not null) _procedureScope?.MarkExpressionUsed(r.Value);
                 if (r.Value is not null) Visit(r.Value);
                 break;

@@ -189,10 +189,11 @@ public sealed class NzLintParityGateTests : IDisposable
     }
 
     [Fact]
-    public void LintParityGate_SemicolonOnly_ReturnsNoIssues()
+    public void LintParityGate_SemicolonOnly_ReturnsEmptyStatementWarning()
     {
+        // The VS Code contract reports PARW001 for empty statements.
         var issues = RunFull(";");
-        Assert.Empty(issues);
+        Assert.Contains(issues, issue => issue.RuleId == "PARW001");
     }
 
     [Fact]

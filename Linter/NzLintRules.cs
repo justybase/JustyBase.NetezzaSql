@@ -448,8 +448,8 @@ public class RuleNZ018_SelfReferentialJoin : LintRule
         foreach (Match m in Regex.Matches(sql,
             @"\b(?:ON|WHERE|AND|OR)\b[^=!<>]*?\b([\w.]+)\s*=\s*\b\1\b", RegexOptions.IgnoreCase))
         {
-            if (LintHelpers.IsInsideStringOrComment(sql, m.Index)) continue;
             var idStart = m.Value.IndexOf(m.Groups[1].Value);
+            if (LintHelpers.IsInsideStringOrComment(sql, m.Index + idStart)) continue;
             yield return new LintIssue(Id,
                 $"{Id}: {Description} (found '{m.Groups[1].Value}')", DefaultSeverity,
                 m.Index + idStart, m.Index + idStart + m.Groups[1].Value.Length);
@@ -634,6 +634,34 @@ public class RuleNZ023_KeywordTypo : LintRule
     }
 }
 
+// ====== PARW001: Empty statement ======
+public class RulePARW001_EmptyStatement : LintRule
+{
+    public override string Id => "PARW001";
+    public override string Name => "Empty Statement";
+    public override string Description => "Empty statement between semicolons";
+    public override LintSeverity DefaultSeverity => LintSeverity.Warning;
+    public override RuleCost Cost => RuleCost.Cheap;
+    public override int Priority => 20;
+
+    public override IEnumerable<LintIssue> Check(string sql)
+    {
+        var hasContent = false;
+        for (var index = 0; index < sql.Length; index++)
+        {
+            if (sql[index] == ';' && !LintHelpers.IsInsideStringOrComment(sql, index))
+            {
+                if (!hasContent)
+                    yield return new LintIssue(Id, $"{Id}: {Description}", DefaultSeverity, index, index + 1);
+                hasContent = false;
+                continue;
+            }
+            if (!char.IsWhiteSpace(sql[index]))
+                hasContent = true;
+        }
+    }
+}
+
 // ====== NZ024: Trailing comma before FROM/semicolon ======
 public class RuleNZ024_TrailingComma : LintRule
 {
@@ -704,7 +732,8 @@ public static class NzLintRules
         new RuleNZ022_WhereWithoutFrom(),
         new RuleNZ023_KeywordTypo(),
         new RuleNZ024_TrailingComma(),
-        new RuleNZ025_RandomDistribution()
+        new RuleNZ025_RandomDistribution(),
+        new RulePARW001_EmptyStatement()
     };
 
     public static LintSeverity MapSeverity(RuleSeverityConfig config) => config switch

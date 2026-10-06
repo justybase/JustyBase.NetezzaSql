@@ -45,6 +45,22 @@ public partial class NzSqlParser
     private Expression ParseComparison()
     {
         var left = ParseAdditive();
+        if (Peek().Kind == NzToken.Identifier)
+        {
+            var postfix = Peek().ToStringValue();
+            if (string.Equals(postfix, "ISNULL", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(postfix, "NOTNULL", StringComparison.OrdinalIgnoreCase))
+            {
+                var token = Advance();
+                left = new IsExpression(
+                    FromToken(token),
+                    left,
+                    Not: string.Equals(postfix, "NOTNULL", StringComparison.OrdinalIgnoreCase),
+                    Null: true,
+                    Boolean: false,
+                    Unknown: false);
+            }
+        }
         var opKind = Peek().Kind;
 
         if (IsComparisonOp(opKind) || (opKind == NzToken.Not && Peek(1).Kind is NzToken.Like or NzToken.Ilike))
@@ -145,9 +161,12 @@ public partial class NzSqlParser
             }
             Advance(); // IN
             Expect(NzToken.LParen);
-            if (Peek().Kind == NzToken.Select)
+            if (Peek().Kind is NzToken.Select or NzToken.With)
             {
-                var subquery = ParseSelectStatement();
+                WithClause? subqueryWith = null;
+                if (Peek().Kind == NzToken.With)
+                    subqueryWith = ParseWithClause();
+                var subquery = ParseSelectStatement(subqueryWith);
                 Expect(NzToken.RParen);
                 left = new InExpression(left.Position, left, isNot, null, subquery);
             }
@@ -331,13 +350,26 @@ public partial class NzSqlParser
             return new ExtractExpression(FromToken(extract), StripQuotes(field), source);
         }
 
-        // Type literal: INTERVAL 'value' [qualifier]
+        // Netezza interval units belong inside the quoted literal (INTERVAL '1 day').
+        // Keep the broader postfix qualifier form available to dialect parsers which
+        // inherit this grammar but accept standard interval qualifiers.
         if (t.Kind == NzToken.Identifier && t.ToStringValue().Equals("INTERVAL", StringComparison.OrdinalIgnoreCase))
         {
             var iv = Advance();
             if (Peek().Kind == NzToken.StringLiteral)
                 Advance();
-            if (Peek().Kind == NzToken.Identifier)
+            if (StrictNetezzaIntervalSyntax && IsPostfixIntervalQualifier(Peek()))
+            {
+                var qualifier = Advance();
+                if (Peek().Kind == NzToken.Identifier && Peek().ToStringValue().Equals("TO", StringComparison.OrdinalIgnoreCase))
+                {
+                    Advance();
+                    if (IsPostfixIntervalQualifier(Peek()))
+                        Advance();
+                }
+                AddParserError("Netezza interval units must be included inside the quoted interval literal.", qualifier, "PAR001");
+            }
+            else if (!StrictNetezzaIntervalSyntax && Peek().Kind == NzToken.Identifier)
                 Advance();
             return new Literal(FromToken(iv), LiteralKind.String, iv.ToStringValue());
         }
@@ -398,6 +430,8 @@ public partial class NzSqlParser
                 if (Peek().Kind == NzToken.Multiply)
                 {
                     var star = Advance();
+                    if (StrictNetezzaIntervalSyntax && IsComparisonOp(Peek().Kind))
+                        AddParserError("A qualified wildcard is valid only as a select-list item, not as a scalar expression.", star, "PAR001");
                     return new ColumnReference(
                         FromToken(id), idStr, "*", null, IdentifierQuote(id.Kind), isScriptVariable);
                 }
@@ -425,6 +459,11 @@ public partial class NzSqlParser
         SynchronizeTo(SyncTokensExpr);
         return new Literal(FromToken(t), LiteralKind.Null, "NULL");
     }
+
+    private static bool IsPostfixIntervalQualifier(Token<NzToken> token) =>
+        token.Kind == NzToken.Identifier && token.ToStringValue().ToUpperInvariant() is
+            "YEAR" or "YEARS" or "MONTH" or "MONTHS" or "DAY" or "DAYS" or
+            "HOUR" or "HOURS" or "MINUTE" or "MINUTES" or "SECOND" or "SECONDS";
 
     /// <summary>
     /// Dialect hook: parses dialect-specific primary expressions (e.g. Oracle
@@ -759,6 +798,7 @@ public partial class NzSqlParser
         else
         {
             AddParserError("CASE expression must end with END keyword", c, "PAR108");
+            AddParserError("CASE expression must be closed with END", c, "PAR005");
             SynchronizeTo(SyncTokensExpr);
         }
         return new CaseExpression(FromToken(c), caseValue, whens, elseExpr);

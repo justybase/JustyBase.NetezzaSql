@@ -11,6 +11,7 @@ public partial class NzSqlParser
     protected int _pos;
     protected readonly List<ValidationError> _errors = new();
     private static readonly KeywordTypoChecker _typoChecker = new();
+    private readonly bool _strictNetezzaIntervalSyntax;
 
     /// <summary>
     /// Dialects may reserve IN as a clause marker instead of an expression
@@ -18,10 +19,13 @@ public partial class NzSqlParser
     /// </summary>
     protected virtual bool StopInExpression => false;
 
-    public NzSqlParser(Token<NzToken>[] tokens)
+    public NzSqlParser(Token<NzToken>[] tokens, bool strictNetezzaIntervalSyntax = true)
     {
         _tokens = tokens;
+        _strictNetezzaIntervalSyntax = strictNetezzaIntervalSyntax;
     }
+
+    protected bool StrictNetezzaIntervalSyntax => _strictNetezzaIntervalSyntax;
 
     public IReadOnlyList<ValidationError> Errors => GetErrorsSince(0);
 
@@ -226,7 +230,8 @@ public partial class NzSqlParser
             NzToken.Rollback => ParseRollback(),
             NzToken.Call or NzToken.Exec or NzToken.Execute => ParseCall(),
             NzToken.Merge => ParseMerge(),
-            NzToken.Lock or NzToken.Show or NzToken.Copy or NzToken.Reindex
+            NzToken.Lock => ParseLock(),
+            NzToken.Show or NzToken.Copy or NzToken.Reindex
                 or NzToken.Reset or NzToken.Begin or NzToken.Set
                 or NzToken.AtSet => ParseCommandTailFallback(Peek()),
             _ => ReportUnexpectedTopLevelToken()

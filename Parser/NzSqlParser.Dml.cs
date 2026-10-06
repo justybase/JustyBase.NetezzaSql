@@ -54,21 +54,30 @@ public partial class NzSqlParser
 
         if (Peek().Kind == NzToken.With)
         {
-            Advance();
             // Netezza also accepts INSERT ... WITH name (SELECT ...) SELECT ...
             // without the AS keyword in this position.
-            if (Peek().Kind is NzToken.Identifier or NzToken.QuotedIdentifier)
+            if (Peek(1).Kind is NzToken.Identifier or NzToken.QuotedIdentifier
+                && Peek(2).Kind == NzToken.LParen)
             {
                 Advance();
-                if (Peek().Kind == NzToken.LParen)
+                Advance();
+                Advance();
+                ParseSelectStatement();
+                Expect(NzToken.RParen);
+                if (Peek().Kind == NzToken.Select)
+                    sourceQuery = ParseSelectStatement();
+            }
+            else
+            {
+                var with = ParseWithClause();
+                if (Peek().Kind == NzToken.Select)
+                    sourceQuery = ParseSelectStatement(with);
+                else
                 {
-                    Advance();
-                    ParseSelectStatement();
-                    Expect(NzToken.RParen);
+                    AddParserError("Expected SELECT after INSERT WITH clause", Peek(), "PAR117");
+                    return null;
                 }
             }
-            if (Peek().Kind == NzToken.Select)
-                sourceQuery = ParseSelectStatement();
         }
         else if (Peek().Kind == NzToken.Values)
         {

@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Superpower.Model;
 using JustyBase.NetezzaSqlParser.Lexer;
 using JustyBase.NetezzaSqlParser.Ast;
@@ -39,12 +40,23 @@ public partial class NzSqlParser
             _errors.Add(new ValidationError("LANGUAGE clause is required in CREATE PROCEDURE", "error",
                 SourcePosition.FromToken(Peek()), "PARSE001"));
 
-        // AS or IS
-        if (Peek().Kind is NzToken.As or NzToken.Is)
+        // Netezza requires AS; IS is rejected (procedure matrix hdr_is_rejected).
+        if (Peek().Kind == NzToken.As)
+        {
             Advance();
+        }
+        else if (Peek().Kind == NzToken.Is)
+        {
+            _errors.Add(new ValidationError(
+                "IS is not valid after a procedure signature; use AS",
+                "error", SourcePosition.FromToken(Peek()), "PAR001"));
+            Advance();
+        }
         else
-            _errors.Add(new ValidationError("Expected AS or IS after procedure signature", "error",
+        {
+            _errors.Add(new ValidationError("Expected AS after procedure signature", "error",
                 SourcePosition.FromToken(Peek()), "PARSE001"));
+        }
 
         // Procedure body
         var body = ParseProcedureBody();
@@ -76,6 +88,7 @@ public partial class NzSqlParser
     private ProcedureParameter? ParseProcedureArgument()
     {
         var mode = ProcedureParameterMode.In;
+        Token<NzToken>? modeToken = null;
         if (Peek().Kind == NzToken.In)
         {
             Advance();
@@ -84,14 +97,17 @@ public partial class NzSqlParser
             string.Equals(Peek().ToStringValue(), "OUT", StringComparison.OrdinalIgnoreCase)))
         {
             mode = ProcedureParameterMode.Out;
-            Advance();
+            modeToken = Advance();
         }
         else if (Peek().Kind == NzToken.Inout || (Peek().Kind == NzToken.Identifier &&
             string.Equals(Peek().ToStringValue(), "INOUT", StringComparison.OrdinalIgnoreCase)))
         {
             mode = ProcedureParameterMode.InOut;
-            Advance();
+            modeToken = Advance();
         }
+
+        if (modeToken is { } unsupportedMode)
+            AddParserError("Netezza procedure arguments are input-only; OUT and INOUT are not supported.", unsupportedMode, "PAR001");
 
         string? parameterName = null;
         SourcePosition? parameterPosition = null;
@@ -154,9 +170,26 @@ public partial class NzSqlParser
                 hasLanguage = true;
                 Advance();
                 if (Peek().Kind == NzToken.Nzplsql)
+                {
                     Advance();
+                }
+                else if (Peek().Kind is NzToken.Identifier or NzToken.QuotedIdentifier)
+                {
+                    var languageToken = Peek();
+                    var language = languageToken.ToStringValue();
+                    Advance();
+                    // Only LANGUAGE NZPLSQL is accepted (procedure matrix hdr_bad_language_rejected).
+                    if (!string.Equals(language, "NZPLSQL", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _errors.Add(new ValidationError(
+                            $"LANGUAGE {language} is not supported; only LANGUAGE NZPLSQL is accepted",
+                            "error", SourcePosition.FromToken(languageToken), "PAR001"));
+                    }
+                }
                 else
-                    Expect(NzToken.Identifier); // accept any language name
+                {
+                    Expect(NzToken.Identifier);
+                }
             }
             else
             {
@@ -206,7 +239,14 @@ public partial class NzSqlParser
         // Body can be a string literal (inline SQL) or a BEGIN_PROC...END_PROC block
         if (Peek().Kind == NzToken.StringLiteral)
         {
-            Advance(); // consume the string body
+            var bodyToken = Advance(); // consume the string body
+            var bodyText = bodyToken.ToStringValue() ?? string.Empty;
+            if (StringBodyHasUnclosedCase(bodyText))
+            {
+                _errors.Add(new ValidationError(
+                    "CASE expression in a string-body procedure must end with END keyword",
+                    "error", SourcePosition.FromToken(bodyToken), "SQL041"));
+            }
             return new ProcedureBody(SourcePosition.FromToken(startTok), null,
                 new List<ProcedureStatement>(), null);
         }
@@ -272,6 +312,14 @@ public partial class NzSqlParser
             declarations.Count > 0 ? declarations : null,
             statements,
             exceptionHandlers.Count > 0 ? exceptionHandlers : null);
+    }
+
+    private static bool StringBodyHasUnclosedCase(string body)
+    {
+        var opens = Regex.Matches(body, @"\b(?:BEGIN|CASE|IF|LOOP)\b", RegexOptions.IgnoreCase).Count;
+        var closes = Regex.Matches(body, @"\bEND\b", RegexOptions.IgnoreCase).Count;
+        var cases = Regex.Matches(body, @"\bCASE\b", RegexOptions.IgnoreCase).Count;
+        return cases > 0 && opens > closes;
     }
 
     private ProcedureBlockStatement ParseProcedureBlock()
@@ -371,6 +419,7 @@ public partial class NzSqlParser
             case NzToken.Perform:
             {
                 var perform = Advance();
+                AddParserError("PERFORM is not supported in Netezza NZPLSQL.", perform, "PAR001");
                 while (Peek().Kind is not (NzToken.Semicolon or NzToken.Unknown)) Advance();
                 return new ProcedureSqlStatement(SourcePosition.FromToken(perform), new SetStatement(SourcePosition.FromToken(perform)));
             }
@@ -395,6 +444,7 @@ public partial class NzSqlParser
                     if (string.Equals(Peek().ToStringValue(), "PERFORM", StringComparison.OrdinalIgnoreCase))
                     {
                         var tok = Advance();
+                        AddParserError("PERFORM is not supported in Netezza NZPLSQL.", tok, "PAR001");
                         ParseExpression();
                         return new ProcedureCallStatement(SourcePosition.FromToken(tok), new TableName("PERFORM"), null);
                     }
@@ -498,9 +548,13 @@ public partial class NzSqlParser
             Advance();
         }
 
-        // Type — handle VARRAY specially
+        // Type — handle VARRAY and anchored types specially
         DataTypeInfo dataType;
-        if (Peek().Kind == NzToken.Varray)
+        if (TryParseAnchoredType(out var anchoredType))
+        {
+            dataType = anchoredType;
+        }
+        else if (Peek().Kind == NzToken.Varray)
         {
             Advance();
             IReadOnlyList<string>? varrayParams = null;
@@ -539,6 +593,55 @@ public partial class NzSqlParser
         }
 
         return new VariableDeclaration(pos, name, dataType, false, constant, null);
+    }
+
+    /// <summary>
+    /// Parses anchored declaration types: <c>table.column%TYPE</c> and
+    /// <c>table%ROWTYPE</c> (procedure matrix decl_percent_type / decl_rowtype).
+    /// </summary>
+    private bool TryParseAnchoredType(out DataTypeInfo dataType)
+    {
+        dataType = null!;
+        var index = 0;
+        var parts = new List<string>();
+        while (Peek(index).Kind is NzToken.Identifier or NzToken.QuotedIdentifier)
+        {
+            parts.Add(Peek(index).ToStringValue());
+            index++;
+            if (Peek(index).Kind == NzToken.Dot)
+            {
+                index++;
+                continue;
+            }
+            break;
+        }
+
+        if (parts.Count == 0 || Peek(index).Kind != NzToken.Modulo)
+            return false;
+
+        index++;
+        string suffix;
+        if (Peek(index).Kind == NzToken.Type)
+        {
+            suffix = "TYPE";
+        }
+        else if (Peek(index).Kind == NzToken.Identifier
+                 && string.Equals(Peek(index).ToStringValue(), "ROWTYPE", StringComparison.OrdinalIgnoreCase))
+        {
+            suffix = "ROWTYPE";
+        }
+        else
+        {
+            return false;
+        }
+
+        index++;
+        var position = SourcePosition.FromToken(Peek());
+        for (var consumed = 0; consumed < index; consumed++)
+            Advance();
+
+        dataType = new DataTypeInfo(position, $"{string.Join('.', parts)}%{suffix}", null);
+        return true;
     }
 
     // ====== Assignment Statement ======
@@ -754,69 +857,73 @@ public partial class NzSqlParser
             Advance();
             level = RaiseLevel.Notice;
         }
-        else if (Peek().Kind == NzToken.Warning)
-        {
-            Advance();
-            level = RaiseLevel.Notice;
-        }
         else if (Peek().Kind == NzToken.Debug)
         {
             Advance();
             level = RaiseLevel.Debug;
         }
-        else if (Peek().Kind == NzToken.Error1)
-        {
-            Advance();
-            level = RaiseLevel.Error;
-        }
         else
         {
-            if (Peek().Kind == NzToken.Identifier &&
-                (string.Equals(Peek().ToStringValue(), "WARNING", StringComparison.OrdinalIgnoreCase)
-                 || string.Equals(Peek().ToStringValue(), "LOG", StringComparison.OrdinalIgnoreCase)))
+            // Only DEBUG, NOTICE and EXCEPTION severities exist
+            // (procedure matrix raise_warning_rejected / raise_error_rejected).
+            _errors.Add(new ValidationError(
+                "Expected NOTICE, DEBUG or EXCEPTION after RAISE; WARNING and ERROR severities are not supported",
+                "error", SourcePosition.FromToken(Peek()), "PARSE001"));
+            level = RaiseLevel.Notice;
+
+            if (Peek().Kind is NzToken.Warning or NzToken.Error1
+                || (Peek().Kind == NzToken.Identifier
+                    && (IsWord(Peek(), "WARNING") || IsWord(Peek(), "LOG") || IsWord(Peek(), "ERROR"))))
             {
                 Advance();
-                level = RaiseLevel.Notice;
-            }
-            else
-            {
-            _errors.Add(new ValidationError("Expected NOTICE, DEBUG, EXCEPTION, or ERROR after RAISE", "error",
-                SourcePosition.FromToken(Peek()), "PARSE001"));
-            level = RaiseLevel.Notice;
             }
         }
 
-        // Optional message expression
+        // RAISE requires a message string (verified live; procedure matrix raise_no_message_rejected).
         Expression message;
-        if (Peek().Kind != NzToken.Semicolon
-            && Peek().Kind != NzToken.End
-            && Peek().Kind != NzToken.EndProc
-            && Peek().Kind != NzToken.Exception
-            && Peek().Kind != NzToken.Else
-            && Peek().Kind != NzToken.Elsif
-            && Peek().Kind != NzToken.When
-            && Peek().Kind != NzToken.Then)
+        if (Peek().Kind is NzToken.Semicolon or NzToken.End or NzToken.EndProc)
         {
-            message = ParseExpression();
-            // Skip comma-separated additional expressions
-            while (Peek().Kind == NzToken.Comma)
-            {
-                Advance();
-                if (Peek().Kind != NzToken.Semicolon
-                    && Peek().Kind != NzToken.End
-                    && Peek().Kind != NzToken.EndProc)
-                    ParseExpression();
-                else
-                    break;
-            }
-        }
-        else
-        {
+            _errors.Add(new ValidationError(
+                "RAISE requires a message string",
+                "error", SourcePosition.FromToken(Peek()), "PARSE001"));
             message = new Literal(SourcePosition.FromToken(raiseTok), LiteralKind.Null, "NULL");
+            return new ProcedureRaiseStatement(SourcePosition.FromToken(raiseTok), level, message);
+        }
+
+        if (Peek().Kind != NzToken.StringLiteral)
+            AddParserError("Netezza RAISE requires a string literal message.", Peek(), "PAR001");
+        message = ParseExpression();
+        // Skip comma-separated additional expressions
+        while (Peek().Kind == NzToken.Comma)
+        {
+            Advance();
+            if (Peek().Kind != NzToken.Semicolon
+                && Peek().Kind != NzToken.End
+                && Peek().Kind != NzToken.EndProc)
+            {
+                var argument = Peek();
+                var variableToken = argument.Kind is NzToken.Identifier or NzToken.QuotedIdentifier
+                    or NzToken.DollarIdentifier or NzToken.DollarNumber or NzToken.BracedVariable
+                    or NzToken.BracesOnlyVariable;
+                var nextKind = Peek(1).Kind;
+                var simpleVariable = variableToken && nextKind is
+                    NzToken.Comma or NzToken.Semicolon or NzToken.End or NzToken.EndProc or NzToken.Unknown;
+                var simpleRecordField = variableToken && nextKind == NzToken.Dot
+                    && Peek(2).Kind is NzToken.Identifier or NzToken.QuotedIdentifier
+                    && Peek(3).Kind is NzToken.Comma or NzToken.Semicolon or NzToken.End or NzToken.EndProc or NzToken.Unknown;
+                if (!simpleVariable && !simpleRecordField)
+                    AddParserError("Netezza RAISE format arguments must be simple variable references.", argument, "PAR001");
+                ParseExpression();
+            }
+            else
+                break;
         }
 
         return new ProcedureRaiseStatement(SourcePosition.FromToken(raiseTok), level, message);
     }
+
+    private static bool IsWord(Superpower.Model.Token<NzToken> token, string word) =>
+        string.Equals(token.ToStringValue(), word, StringComparison.OrdinalIgnoreCase);
 
     // ====== EXECUTE IMMEDIATE Statement ======
 
@@ -830,7 +937,8 @@ public partial class NzSqlParser
         IReadOnlyList<string>? usingParams = null;
         if (Peek().Kind == NzToken.Using)
         {
-            Advance();
+            var usingToken = Advance();
+            AddParserError("USING parameters are not supported by Netezza EXECUTE IMMEDIATE.", usingToken, "PAR001");
             var usingList = new List<string>();
             var firstExpr = ParseExpression();
             usingList.Add(firstExpr.ToString() ?? "");
@@ -887,6 +995,14 @@ public partial class NzSqlParser
             handlers.Add(ParseWhenClause());
         }
 
+        // EXCEPTION requires at least one WHEN handler (procedure matrix exc_without_handler_rejected).
+        if (handlers.Count == 0)
+        {
+            _errors.Add(new ValidationError(
+                "EXCEPTION requires at least one WHEN handler",
+                "error", SourcePosition.FromToken(Peek()), "PARSE001"));
+        }
+
         return handlers;
     }
 
@@ -894,8 +1010,14 @@ public partial class NzSqlParser
     {
         var whenTok = Expect(NzToken.When);
         var condition = ParseIdentifier();
+        if (!string.Equals(condition, "OTHERS", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(condition, "TRANSACTION_ABORTED", StringComparison.OrdinalIgnoreCase))
+            AddParserError("Unsupported Netezza NZPLSQL exception condition.", whenTok, "PAR001");
         if (Peek().Kind == NzToken.StringLiteral)
+        {
+            AddParserError("SQLSTATE exception conditions are not supported in Netezza NZPLSQL.", Peek(), "PAR001");
             Advance(); // SQLSTATE 'xxxxx' condition literal
+        }
 
         Expect(NzToken.Then);
 

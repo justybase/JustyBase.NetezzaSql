@@ -18,7 +18,7 @@ public partial class NzSqlVisitor
             foreach (var column in stmt.Columns)
             {
                 if (!targetColumns.Any(candidate => candidate.Name.Equals(column, StringComparison.OrdinalIgnoreCase)))
-                    AddError($"Column '{column}' does not exist on relation '{stmt.Target.Name}'", "error", "SQL030", stmt.Position);
+                    AddError($"Column '{column}' does not exist on relation '{stmt.Target.Name}'", "error", "SQL004", stmt.Position);
             }
         }
 

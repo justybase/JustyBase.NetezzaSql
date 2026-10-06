@@ -215,10 +215,10 @@ public partial class NzSqlVisitor
     {
         var upper = fc.Name.ToUpperInvariant();
 
-        // SQL021: Aggregate in WHERE clause
-        if (_inStrictWhere && IsAggregateInWhere(fc))
+        // SQL021: Aggregate or window function in WHERE clause
+        if (_inStrictWhere && (IsAggregateInWhere(fc) || IsWindowFunctionInWhere(fc)))
         {
-            AddError($"Aggregate function '{fc.Name}' cannot be used in WHERE clause", "error", "SQL021", fc.Position);
+            AddError($"Aggregate or window function '{fc.Name}' cannot be used in WHERE clause", "error", "SQL021", fc.Position);
         }
 
         // Validate function name is known
@@ -310,6 +310,15 @@ public partial class NzSqlVisitor
         if (fc.Distinct || fc.StarArgument) return true;
         var argCount = fc.Arguments?.Count ?? 0;
         return argCount <= 1;
+    }
+
+    private bool IsWindowFunctionInWhere(FunctionCall fc)
+    {
+        if (fc.Over is null) return false;
+        var upper = fc.Name.ToUpperInvariant();
+        return upper is "ROW_NUMBER" or "RANK" or "DENSE_RANK" or "NTILE"
+            or "LAG" or "LEAD" or "FIRST_VALUE" or "LAST_VALUE" or "NTH_VALUE"
+            or "PERCENT_RANK" or "CUME_DIST";
     }
 
     private void VisitCase(CaseExpression ce)

@@ -790,6 +790,15 @@ public partial class NzSqlParser
         return new TruncateStatement(FromToken(truncTok), table);
     }
 
+    private LockStatement ParseLock()
+    {
+        var lockTok = Expect(NzToken.Lock);
+        if (Peek().Kind == NzToken.Table) Advance();
+        var (table, _) = ParseTableName();
+        ParseCommandTail();
+        return new LockStatement(FromToken(lockTok), table);
+    }
+
     // ====== EXPLAIN ======
 
     private Statement ParseExplain()
@@ -845,9 +854,13 @@ public partial class NzSqlParser
         if (objectType == "PROCEDURE" && Peek().Kind == NzToken.LParen)
         {
             Advance();
-            while (Peek().Kind != NzToken.RParen && Peek().Kind != NzToken.Unknown)
+            var signatureDepth = 1;
+            while (signatureDepth > 0 && Peek().Kind != NzToken.Unknown)
+            {
+                if (Peek().Kind == NzToken.LParen) signatureDepth++;
+                else if (Peek().Kind == NzToken.RParen) signatureDepth--;
                 Advance();
-            Expect(NzToken.RParen);
+            }
         }
 
         string? columnName = null;

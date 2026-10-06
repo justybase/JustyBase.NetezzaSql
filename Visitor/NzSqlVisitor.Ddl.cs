@@ -14,8 +14,6 @@ public partial class NzSqlVisitor
             foreach (var parameter in stmt.Parameters)
                 _procedureScope.RegisterParameter(parameter);
         }
-        if (stmt.Returns is not null)
-            _procedureScope.SetHasReturns(stmt.Position);
 
         // Validate variable declarations
         if (stmt.Body.Declarations is not null)
@@ -165,6 +163,11 @@ public partial class NzSqlVisitor
     }
 
     public void Visit(TruncateStatement stmt)
+    {
+        LookupTableOnly(stmt.Table, stmt.Position);
+    }
+
+    public void Visit(LockStatement stmt)
     {
         LookupTableOnly(stmt.Table, stmt.Position);
     }

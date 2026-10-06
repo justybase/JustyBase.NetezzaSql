@@ -35,6 +35,13 @@ public partial class NzSqlVisitor
             AddError("WHERE clause without FROM is not valid",
                 "error", "SQL042", stmt.Where.Position);
         }
+
+        if ((stmt.From is null || stmt.From.Count == 0)
+            && stmt.SelectList?.FirstOrDefault(item => item.ImplicitAlias) is { } implicitItem)
+        {
+            AddError("SELECT list has an implicit alias but no FROM clause is present",
+                "error", "SQL016", implicitItem.Position);
+        }
     }
 
     private void ValidateCreateTableStructure(CreateTableStatement stmt)

@@ -270,6 +270,11 @@ public record TruncateStatement(
     TableName Table
 ) : Statement(Position);
 
+public record LockStatement(
+    SourcePosition Position,
+    TableName Table
+) : Statement(Position);
+
 public record GroomStatement(
     SourcePosition Position,
     TableName Table,
@@ -347,7 +352,8 @@ public record SelectItem(
     SourcePosition Position,
     Expression Expression,
     string? Alias,
-    char? AliasQuote = null
+    char? AliasQuote = null,
+    bool ImplicitAlias = false
 ) : AstNode(Position);
 
 public record TableReference(

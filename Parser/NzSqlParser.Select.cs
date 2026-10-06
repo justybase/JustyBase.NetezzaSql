@@ -220,7 +220,7 @@ public partial class NzSqlParser
         if (Peek().Kind == NzToken.GroupBy)
         {
             Advance(); // GROUP BY
-            groupBy = ParseExpressionList();
+            groupBy = IsGroupingSetConstruct() ? ParseGroupingSetItems() : ParseExpressionList();
         }
 
         if (Peek().Kind == NzToken.Having)
@@ -291,6 +291,46 @@ public partial class NzSqlParser
         var result = new SelectStatement(FromToken(sel), distinct ? new SelectModifier(true, false) : null, items, from, where, groupBy, having,
             orderBy, limit, setOps.Count > 0 ? setOps : null, compoundSelects.Count > 0 ? compoundSelects : null, with, hasInto);
         return result with { OffsetFetch = offsetFetch };
+    }
+
+    private bool IsGroupingSetConstruct() =>
+        Peek().Kind == NzToken.Identifier
+        && Peek().ToStringValue().Equals("GROUPING", StringComparison.OrdinalIgnoreCase)
+        && (Peek(1).Kind == NzToken.Set
+            || (Peek(1).Kind == NzToken.Identifier
+                && Peek(1).ToStringValue().Equals("SETS", StringComparison.OrdinalIgnoreCase)));
+
+    private IReadOnlyList<Expression> ParseGroupingSetItems()
+    {
+        var items = new List<Expression>();
+        while (true)
+        {
+            if (IsGroupingSetConstruct())
+            {
+                var start = Advance(); // GROUPING
+                Advance(); // SETS
+                if (Peek().Kind == NzToken.LParen)
+                {
+                    var depth = 0;
+                    while (Peek().Kind != NzToken.Unknown)
+                    {
+                        var token = Advance();
+                        if (token.Kind == NzToken.LParen) depth++;
+                        else if (token.Kind == NzToken.RParen && --depth == 0) break;
+                    }
+                }
+                items.Add(new Literal(FromToken(start), LiteralKind.Null, "NULL"));
+            }
+            else
+            {
+                items.Add(ParseExpression());
+            }
+
+            if (Peek().Kind != NzToken.Comma)
+                break;
+            Advance();
+        }
+        return items;
     }
 
     protected virtual LimitClause ParseLimitClause()
@@ -463,16 +503,22 @@ public partial class NzSqlParser
             {
                 _pos = savedPos; // backtrack
                 var subquery = ParseSubqueryExpression();
+                var subAliasHasAs = Peek().Kind == NzToken.As;
                 var subAlias = ParseAliasName(out var subAliasQuote);
-                return new SelectItem(subquery.Position, subquery, subAlias, subAliasQuote);
+                return new SelectItem(
+                    subquery.Position, subquery, subAlias, subAliasQuote,
+                    ImplicitAlias: subAlias is not null && !subAliasHasAs);
             }
             _pos = savedPos; // backtrack if not subquery
         }
 
         var expr = ParseExpression();
+        var aliasHasAs = Peek().Kind == NzToken.As;
         string? alias = ParseAliasName(out var aliasQuote);
 
-        return new SelectItem(expr.Position, expr, alias, aliasQuote);
+        return new SelectItem(
+            expr.Position, expr, alias, aliasQuote,
+            ImplicitAlias: alias is not null && !aliasHasAs);
     }
 
     private Expression ParseSubqueryExpression()
