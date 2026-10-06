@@ -39,8 +39,9 @@ public sealed class AlterTableCompletionTests
     }
 
     [Fact]
-    public void AlterTable_DropColumnShorthand_ParsesValid()
+    public void AlterTable_DropColumnShorthand_IsRejected()
     {
-        SqlTestHelpers.ExpectValid("ALTER TABLE TESTDB..EMPLOYEES DROP STATUS;", _schema);
+        // Live Netezza requires COLUMN and RESTRICT or CASCADE (live evidence 2026-10-06).
+        SqlTestHelpers.ExpectSyntaxError("ALTER TABLE TESTDB..EMPLOYEES DROP STATUS;", _schema);
     }
 }

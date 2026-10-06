@@ -21,7 +21,8 @@ public sealed class NzSqlValidatorDmlTests
     [Fact]
     public void Insert_MultiRowValues()
     {
-        SqlTestHelpers.ExpectValid(
+        // Live Netezza rejects multi-row VALUES (live evidence 2026-10-06).
+        SqlTestHelpers.ExpectSyntaxError(
             "INSERT INTO TESTDB..FILMS (CODE, TITLE) VALUES ('A', 'Film A'), ('B', 'Film B');", _schema);
     }
 

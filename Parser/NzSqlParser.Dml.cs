@@ -104,8 +104,16 @@ public partial class NzSqlParser
             rows.Add(row);
 
             // Parse subsequent rows
+            var reportedMultiRow = false;
             while (Peek().Kind == NzToken.Comma)
             {
+                if (!reportedMultiRow && !SupportsMultiRowValues)
+                {
+                    AddParserError(
+                        "Netezza supports a single VALUES row per INSERT; use separate INSERT statements",
+                        Peek(), "PAR001");
+                    reportedMultiRow = true;
+                }
                 Advance();
                 Expect(NzToken.LParen);
                 row = new List<Expression>();

@@ -235,7 +235,12 @@ public sealed class SharedSqlConformanceTests
         .Replace("{{proc}}", "JB_CF_PROCEDURE", StringComparison.Ordinal)
         .Replace("{{table}}", "JUST_DATA.ADMIN.JB_CF_TABLE", StringComparison.Ordinal)
         .Replace("{{table2}}", "JUST_DATA.ADMIN.JB_CF_TABLE2", StringComparison.Ordinal)
-        .Replace("{{table3}}", "JUST_DATA.ADMIN.JB_CF_TABLE3", StringComparison.Ordinal);
+        .Replace("{{table3}}", "JUST_DATA.ADMIN.JB_CF_TABLE3", StringComparison.Ordinal)
+        .Replace("{{bareTable}}", "JB_CF_TABLE", StringComparison.Ordinal)
+        .Replace("{{bareTable2}}", "JB_CF_TABLE2", StringComparison.Ordinal)
+        .Replace("{{bareTable3}}", "JB_CF_TABLE3", StringComparison.Ordinal)
+        .Replace("{{database}}", "JUST_DATA", StringComparison.Ordinal)
+        .Replace("{{schema}}", "ADMIN", StringComparison.Ordinal);
 
     private static string GetString(JsonElement element, string property, string fallback = "") =>
         element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String

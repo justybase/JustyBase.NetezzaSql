@@ -15,6 +15,10 @@ public sealed partial class PostgreSqlSqlParser : NzSqlParser
 
     protected override bool SupportsFetchFirst => true;
 
+    protected override bool SupportsTimestamptz => true;
+
+    protected override bool SupportsMultiRowValues => true;
+
     public override Statement? Parse()
     {
         // Report unsupported storage syntax even when it appears in a DDL

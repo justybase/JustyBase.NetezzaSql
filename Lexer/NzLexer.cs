@@ -107,6 +107,8 @@ public static class NzLexer
         .Match(Kw("WHEN"), NzToken.When)
         .Match(Kw("THEN"), NzToken.Then)
         .Match(Kw("ELSIF"), NzToken.Elsif)
+        // Netezza accepts ELSEIF as a synonym for ELSIF (procedure matrix ctrl_elseif_alias).
+        .Match(Kw("ELSEIF"), NzToken.Elsif)
         .Match(Kw("IF"), NzToken.If)
         .Match(Kw("ELSE"), NzToken.Else)
         .Match(Kw("END"), NzToken.End)
@@ -312,8 +314,9 @@ public static class NzLexer
         // Number literal
         .Match(Span.Regex(@"^\d+(\.\d+)?([eE][+-]?\d+)?"), NzToken.NumberLiteral)
 
-        // Regular identifier (must be last to catch anything not matched by keywords)
-        .Match(Span.Regex(@"^\p{L}[_\p{L}\p{N}]*"), NzToken.Identifier)
+        // Regular identifier (must be last to catch anything not matched by keywords).
+        // Netezza catalog objects such as _V_DATABASE start with an underscore.
+        .Match(Span.Regex(@"^[_\p{L}][_\p{L}\p{N}]*"), NzToken.Identifier)
 
         // Whitespace (ignored, must be last)
         .Ignore(Span.Regex(@"^\s+"));

@@ -18,7 +18,6 @@ public sealed class ParserSurfaceTests
         ["CREATE EXTERNAL TABLE ext (id INTEGER) USING (DATAOBJECT('/tmp/a'));"],
         ["CREATE SEQUENCE order_seq START WITH 1;"],
         ["CREATE SYNONYM order_alias FOR orders;"],
-        ["DROP TABLE orders IF EXISTS;"],
         ["ALTER TABLE orders ADD COLUMN status INTEGER;"],
         ["TRUNCATE TABLE orders;"],
         ["EXPLAIN VERBOSE SELECT id FROM orders;"],

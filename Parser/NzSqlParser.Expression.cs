@@ -406,6 +406,10 @@ public partial class NzSqlParser
         {
             var id = Advance();
             var idStr = StripQuotes(id.ToStringValue());
+            if (idStr.Equals("TIMESTAMPTZ", StringComparison.OrdinalIgnoreCase) && !SupportsTimestamptz)
+            {
+                AddParserError("Netezza does not support TIMESTAMPTZ; use TIMESTAMP", id, "PAR001");
+            }
             var isScriptVariable = false;
             var previous = id;
             while (IsScriptVariableToken(Peek().Kind) && AreAdjacent(previous, Peek()))
@@ -822,6 +826,11 @@ public partial class NzSqlParser
             : Expect(NzToken.Identifier);
         var firstVal = StripQuotes(first.ToStringValue());
         var firstUpper = firstVal.ToUpperInvariant();
+
+        if (firstUpper == "TIMESTAMPTZ" && !SupportsTimestamptz)
+        {
+            AddParserError("Netezza does not support TIMESTAMPTZ; use TIMESTAMP", first, "PAR001");
+        }
 
         // INTERVAL qualifier: e.g. INTERVAL HOUR TO MINUTE
         if (firstUpper == "INTERVAL")

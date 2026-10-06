@@ -18,6 +18,8 @@ public partial class Db2SqlParser : NzSqlParser
 
     protected override bool SupportsFetchFirst => true;
 
+    protected override bool SupportsMultiRowValues => true;
+
     protected override bool SupportsEmptyQualifiedNameSegment => false;
 
     public override Statement? Parse()

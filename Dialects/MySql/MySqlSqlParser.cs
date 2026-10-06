@@ -7,7 +7,7 @@ namespace JustyBase.NetezzaSqlParser.Parser;
 /// <summary>MySQL 8 parser for the common high-frequency SQL surface.</summary>
 public sealed partial class MySqlSqlParser : NzSqlParser
 {
-    public MySqlSqlParser(Token<NzToken>[] tokens) : base(tokens)
+    public MySqlSqlParser(Token<NzToken>[] tokens) : base(tokens, strictNetezzaIntervalSyntax: false)
     {
     }
 
@@ -111,6 +111,8 @@ public sealed partial class MySqlSqlParser : NzSqlParser
 
         return new LimitClause(FromToken(limitToken), first, offset);
     }
+
+    protected override bool SupportsMultiRowValues => true;
 
     protected override OffsetFetchClause ParseOffsetFetchClause()
     {

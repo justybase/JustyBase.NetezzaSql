@@ -7,7 +7,7 @@ namespace JustyBase.NetezzaSqlParser.Parser;
 /// <summary>Strict parser for the SQLite SQL surface.</summary>
 public sealed partial class SqliteSqlParser : NzSqlParser
 {
-    public SqliteSqlParser(Token<NzToken>[] tokens) : base(tokens)
+    public SqliteSqlParser(Token<NzToken>[] tokens) : base(tokens, strictNetezzaIntervalSyntax: false)
     {
     }
 
@@ -55,6 +55,8 @@ public sealed partial class SqliteSqlParser : NzSqlParser
     }
 
     protected override bool SupportsEmptyQualifiedNameSegment => false;
+
+    protected override bool SupportsMultiRowValues => true;
 
     protected override bool AllowWindowNameAfterOver => true;
 

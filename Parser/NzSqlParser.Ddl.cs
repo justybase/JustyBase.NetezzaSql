@@ -133,6 +133,12 @@ public partial class NzSqlParser
             Expect(NzToken.RParen);
             columns = colList.Columns;
             constraints = colList.Constraints;
+            if (Peek().Kind == NzToken.As)
+            {
+                AddParserError(
+                    "Netezza does not support a CREATE TABLE column list combined with AS SELECT",
+                    Peek(), "PAR001");
+            }
         }
         else
         {
@@ -685,6 +691,7 @@ public partial class NzSqlParser
         bool ifExists = false;
         if (Peek().Kind == NzToken.If)
         {
+            AddParserError("Netezza does not support DROP IF EXISTS", Peek(), "PAR001");
             Advance();
             if (Peek().Kind == NzToken.Exists)
             {
@@ -710,6 +717,7 @@ public partial class NzSqlParser
         // Also handle IF EXISTS after table names (Netezza form)
         if (!ifExists && Peek().Kind == NzToken.If)
         {
+            AddParserError("Netezza does not support DROP IF EXISTS", Peek(), "PAR001");
             Advance();
             if (Peek().Kind == NzToken.Exists)
             {
@@ -785,8 +793,26 @@ public partial class NzSqlParser
         if (first == NzToken.Add && second == NzToken.Column) return new AddColumnAlterAction(position, raw);
         if (first == NzToken.Add && second == NzToken.Constraint) return new AddConstraintAlterAction(position, raw);
         if (first == NzToken.Alter && second == NzToken.Column) return new AlterColumnAlterAction(position, raw);
-        if (first == NzToken.Drop && second == NzToken.Column) return new DropColumnAlterAction(position, raw);
-        if (first == NzToken.Drop && second == NzToken.Constraint) return new DropConstraintAlterAction(position, raw);
+        if (first == NzToken.Drop
+            && second is NzToken.Column or NzToken.Constraint)
+        {
+            if (!tokens.Any(token => token.Kind is NzToken.Cascade or NzToken.Restrict))
+            {
+                AddParserError(
+                    "Netezza requires RESTRICT or CASCADE when dropping a column or constraint",
+                    tokens[0], "PAR001");
+            }
+            return second == NzToken.Column
+                ? new DropColumnAlterAction(position, raw)
+                : new DropConstraintAlterAction(position, raw);
+        }
+        if (first == NzToken.Drop && second == NzToken.Identifier)
+        {
+            AddParserError(
+                "Netezza requires COLUMN and RESTRICT or CASCADE when dropping a column",
+                tokens[0], "PAR001");
+            return new UnknownAlterAction(position, raw);
+        }
         if (first == NzToken.Modify && second == NzToken.Column) return new ModifyColumnAlterAction(position, raw);
         if (first == NzToken.Rename && second == NzToken.Column) return new RenameColumnAlterAction(position, raw);
         if (first == NzToken.Rename && second == NzToken.To) return new RenameToAlterAction(position, raw);
@@ -1034,6 +1060,12 @@ public partial class NzSqlParser
                 Advance();
                 columns = ParseIdentifierList();
                 Expect(NzToken.RParen);
+            }
+            if (Peek().Kind == NzToken.Express)
+            {
+                AddParserError(
+                    "Netezza does not support GENERATE STATISTICS ... EXPRESS",
+                    Peek(), "PAR001");
             }
         }
         else if (Peek().Kind == NzToken.For)

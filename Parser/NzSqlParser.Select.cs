@@ -386,6 +386,16 @@ public partial class NzSqlParser
     /// </summary>
     protected virtual bool SupportsFetchFirst => false;
 
+    /// <summary>
+    /// Netezza rejects TIMESTAMPTZ; PostgreSQL overrides this.
+    /// </summary>
+    protected virtual bool SupportsTimestamptz => false;
+
+    /// <summary>
+    /// Netezza accepts a single VALUES row per INSERT; ANSI dialects override this.
+    /// </summary>
+    protected virtual bool SupportsMultiRowValues => false;
+
     protected virtual OffsetFetchClause ParseOffsetFetchClause()
     {
         var start = Peek();
