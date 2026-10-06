@@ -24,9 +24,6 @@ internal sealed class ProcedureScopeBuilder
     private readonly Dictionary<string, ParameterState> _parameters = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, VariableState> _variables = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<ValidationError> _diagnostics = new();
-    private bool _hasReturns;
-    private SourcePosition? _returnsPosition;
-    private bool _hasReturn;
 
     public void RegisterParameter(ProcedureParameter parameter) =>
         _parameters[parameter.Name] = new ParameterState(parameter.Mode, parameter.Position);
@@ -36,14 +33,6 @@ internal sealed class ProcedureScopeBuilder
         if (!_variables.ContainsKey(declaration.Name))
             _variables[declaration.Name] = new VariableState(declaration.Position);
     }
-
-    public void SetHasReturns(SourcePosition position)
-    {
-        _hasReturns = true;
-        _returnsPosition = position;
-    }
-
-    public void MarkReturn() => _hasReturn = true;
 
     public void MarkNameUsed(string name)
     {
@@ -141,13 +130,6 @@ internal sealed class ProcedureScopeBuilder
 
     public IReadOnlyList<ValidationError> Finalize()
     {
-        if (_hasReturns && !_hasReturn && _returnsPosition is not null)
-        {
-            _diagnostics.Add(new ValidationError(
-                "Procedure declares RETURNS but has no RETURN statement",
-                "warning", _returnsPosition, "SQL038"));
-        }
-
         foreach (var (name, variable) in _variables)
         {
             if (!variable.Used)

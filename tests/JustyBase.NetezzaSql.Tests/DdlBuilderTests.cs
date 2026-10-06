@@ -131,6 +131,32 @@ public sealed class DdlBuilderTests
     }
 
     [Fact]
+    public void BuildCreateView_EmitsViewAndColumnComments()
+    {
+        var ddl = _builder.BuildCreateView(new NetezzaViewDdlInput(
+            "DB", "S", "V", "SELECT ID, NAME FROM T",
+            "view's comment",
+            [
+                new NetezzaColumnDdl("ID", "INTEGER", "identifier"),
+                new NetezzaColumnDdl("NAME", "VARCHAR(10)"),
+                new NetezzaColumnDdl("Weird Name", "INTEGER", "has 'quote'")
+            ]));
+
+        Assert.Contains("COMMENT ON VIEW DB.S.V IS 'view''s comment';", ddl);
+        Assert.Contains("COMMENT ON COLUMN DB.S.V.ID IS 'identifier';", ddl);
+        Assert.DoesNotContain("DB.S.V.NAME", ddl);
+        Assert.Contains("COMMENT ON COLUMN DB.S.V.\"Weird Name\" IS 'has ''quote''';", ddl);
+    }
+
+    [Fact]
+    public void BuildCreateView_WithoutColumns_DoesNotEmitColumnComments()
+    {
+        var ddl = _builder.BuildCreateView(new NetezzaViewDdlInput("DB", "S", "V", "SELECT 1"));
+
+        Assert.DoesNotContain("COMMENT ON COLUMN", ddl);
+    }
+
+    [Fact]
     public void BuildCreateTable_StripsEmbeddedNotNullFromTypeName()
     {
         var ddl = _builder.BuildCreateTable(new NetezzaTableDdlInput(

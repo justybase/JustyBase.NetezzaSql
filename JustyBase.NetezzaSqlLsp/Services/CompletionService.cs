@@ -1,3 +1,4 @@
+using System.Globalization;
 using JustyBase.Core.Database;
 using JustyBase.NetezzaSqlParser.Completion;
 using JustyBase.NetezzaSqlParser.Caching;
@@ -99,7 +100,8 @@ public static class CompletionService
                 Label: item.Label,
                 Kind: MapKind(item.Kind),
                 Detail: item.Detail,
-                InsertText: null
+                InsertText: item.InsertText,
+                SortText: GetSortText(item.Kind, item.Priority, item.Label)
             ));
         }
 
@@ -109,12 +111,49 @@ public static class CompletionService
                 Label: wordItem.Label,
                 Kind: MapWordListKind(wordItem.Kind),
                 Detail: wordItem.Detail,
-                InsertText: wordItem.Label
+                InsertText: wordItem.Label,
+                SortText: GetSortText(wordItem.Kind, wordItem.Label)
             ));
         }
 
         return new Protocol.CompletionList(false, mapped.ToArray());
     }
+
+    /// <summary>
+    /// Builds the wire sort key using the reference host's tier order:
+    /// variables, local definitions, scoped columns, metadata, functions, keywords.
+    /// </summary>
+    private static string GetSortText(CompletionKind kind, int priority, string label) =>
+        TierPrefix(kind) + priority.ToString("D2", CultureInfo.InvariantCulture) + "_" + label;
+
+    private static string GetSortText(SqlWordListKind kind, string label) =>
+        TierPrefix(kind) + "00_" + label;
+
+    private static string TierPrefix(CompletionKind kind) => kind switch
+    {
+        CompletionKind.Variable => "0_",
+        CompletionKind.Alias or CompletionKind.Cte => "1_",
+        CompletionKind.Column => "2_",
+        CompletionKind.Table or CompletionKind.View or CompletionKind.ExternalTable
+            or CompletionKind.Schema or CompletionKind.Database => "3_",
+        CompletionKind.Function or CompletionKind.Snippet or CompletionKind.DataType => "4_",
+        CompletionKind.Keyword => "5_",
+        _ => "4_"
+    };
+
+    private static string TierPrefix(SqlWordListKind kind) => kind switch
+    {
+        SqlWordListKind.Variable => "0_",
+        SqlWordListKind.Alias or SqlWordListKind.With or SqlWordListKind.Subquery => "1_",
+        SqlWordListKind.Column => "2_",
+        SqlWordListKind.Database or SqlWordListKind.Schema or SqlWordListKind.Table
+            or SqlWordListKind.View or SqlWordListKind.ExternalTable
+            or SqlWordListKind.TempTable => "3_",
+        SqlWordListKind.Procedure or SqlWordListKind.Function or SqlWordListKind.Snippet
+            or SqlWordListKind.DataType => "4_",
+        SqlWordListKind.Keyword => "5_",
+        _ => "4_"
+    };
 
     private static int GetOffset(string text, int line, int character)
     {

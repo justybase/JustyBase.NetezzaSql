@@ -14,7 +14,8 @@ Publishing to NuGet.org is done by GitHub Actions when a GitHub Release is
    production release, use `pwsh .\eng\Verify-Local.ps1 -FullCi`.
    Per-library gates in `eng\Test-Coverage.ps1`: parser, DDL, catalog, and
    Netezza integration (80% line / 65% branch); LSP handlers (60% / 50%);
-   **JustyBase.Core** and **JustyBase.ImportExport** (50% / 35%).
+   **JustyBase.Core** and **JustyBase.ImportExport** (50% / 35%);
+   **JustyBase.Ai** (35% / 25%) and **JustyBase.Sqlite** (88% / 74%).
 3. Pack the libraries, then run `pwsh .\eng\Test-PackageConsumer.ps1` to
    compile a fresh project that has only the generated `.nupkg` files as its
    JustyBase dependencies. In a workspace containing the unchanged Legacy
@@ -22,7 +23,7 @@ Publishing to NuGet.org is done by GitHub Actions when a GitHub Release is
 4. Choose a production SemVer version without a prerelease suffix (for example
    `0.3.0`), bump `PackageVersion` in `Directory.Build.props`, and update
    `CHANGELOG.md`.
-   Publish parser, DDL, catalog, `JustyBase.Netezza`, Core, ImportExport, `JustyBase.Ai`,
+   Publish parser, DDL, catalog, `JustyBase.Netezza`, Sqlite, Core, ImportExport, `JustyBase.Ai`,
    and `JustyBase.Ai.Embedded` under the **same** version.
 5. Inspect the generated `.nupkg` and `.snupkg` files, including README, XML
    documentation, Apache-2.0 metadata and Source Link.

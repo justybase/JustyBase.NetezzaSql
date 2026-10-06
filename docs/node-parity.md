@@ -1,8 +1,19 @@
 # Node.js parity contract
 
-`JustyBaseLite-netezzaTMP_` is the behavioral reference for features shared
-with this repository. The C# implementation deliberately has no dependency on
-VS Code, a connection manager, or query execution.
+`justybase/justybase-vscode@539f5a9` is the current behavioral reference for
+features shared with this repository (superseding the historical
+`JustyBaseLite-netezzaTMP_` reference). The canonical reference documents are
+`docs/EDITOR_CAPABILITY_MATRIX.md`, `docs/LSP_FEATURE_MATRIX.md`,
+`docs/SQL_LINTER.md`, `docs/QUICK_FIX_MATRIX.md` and
+`docs/SHARED_CODE_MIGRATION.md` in that repository. The C# implementation
+deliberately has no dependency on VS Code, a connection manager, or query
+execution.
+
+Externally observable SQL behavior is captured in the local
+`JustyBase.SqlConformance` repository and consumed directly by the .NET shared
+conformance adapters. Cases with unresolved cross-implementation differences
+remain marked `needsVerification`; implementation-only behavior stays in
+focused .NET tests.
 
 | Capability | Reference area | C# contract | Release status |
 | --- | --- | --- | --- |
@@ -38,8 +49,35 @@ VS Code, a connection manager, or query execution.
 | Common MERGE grammar | shared SQL parser and dialect parser entry points | `MergeStatement` with matched update/delete and not-matched insert clauses in all supported dialects | supported |
 | ANSI OFFSET/FETCH | Oracle and Db2 select parsers; Netezza probe/fixtures | `OffsetFetchClause` preserves OFFSET-only, FIRST/NEXT, PERCENT, ONLY and WITH TIES; legacy `LimitClause` remains compatible | supported |
 | Dialect dispatch | — | `DialectRuntime` (`Tokenize`/`CreateParser`/`QualityRules`/`AuthoringCatalog`) | supported |
+| Incremental parse/validation sessions | `documentParseSession.ts`, `documentValidationSession.ts`, `statementIndex.ts` | `Caching/DocumentParseSession`, `DocumentValidationSession`, `StatementIndex` | supported |
+| LSP lint code actions | `linterCodeActions.ts`, `handlers/signatureAndCodeActionHandlers.ts` | `NzLintCodeActions` + `textDocument/codeAction` | supported |
+| Inlay hints | `src/server/inlayHintEngine.ts` | `InlayHintService` (`textDocument/inlayHint`) | supported |
+| Document formatting | `providers/sqlFormattingProvider.ts`, `formatSql` | `NzSqlFormatter` + `FormattingService` (`textDocument/formatting`) | supported (whole document) |
+| Completion ranking and fuzzy matching | `completionRanker.ts`, `EDITOR_CAPABILITY_MATRIX.md` (name matching) | `NzCompletionEngine` `Priority`/`SortText` + word-start scoring | supported |
+| JOIN relation completion | `completionJoinConditions.ts`, `completionMetadataResolver.ts` | `IForeignKeyProvider` + `AfterOn` predicate suggestions | supported (explicit FK port) |
+| Procedure/script variable completion | `completionMacroVariableResolver.ts` | `NzCompletionEngine.TryGetVariableCompletions` (`&`, `${}`, `{}`, `$`) | supported |
+| NZPLSQL procedure matrix | extracted VS Code and .NET cases | `JustyBase.SqlConformance/dialects/netezza/nzplsql/` + live probes | shared contract; live outcomes recorded |
+| Dialect parser corpus | extracted VS Code and .NET cases | `JustyBase.SqlConformance/dialects/{common,netezza,db2,mssql,oracle,postgresql,sqlite}/` + shared adapter | shared contracts; unresolved cases stay `needsVerification` |
+| Parser performance budgets | `parserPerformance.test.ts` + 3×~1 MB fixtures, thresholds tokenize<500 ms / parse<2000 ms | generated 1 MB fixtures + `ParserPerfBudgetTests` (`Category=Performance`, CI gate) + BenchmarkDotNet script | supported |
+| ClickHouse dialect | `src/dialects/clickhouse/sql`, `dialect-utils` authoring | no public C# API | deferred |
+| DuckDB dialect | `src/dialects/duckdb/sql` | no public C# API | deferred |
+| Snowflake / Vertica / File SQL authoring | `packages/dialect-utils/src/authoring/*` | no public C# API | deferred |
 | Query flow and CTE refactoring | `queryStructureAnalyzer.ts`, `flowAnalyzer.ts` | no public C# API | intentionally deferred |
 | Connections, execution and VS Code UI | extension host | no public C# API | out of scope |
+
+## Shared conformance and unresolved cases
+
+The shared JSONL corpus records source provenance, dialect, priority, expected
+behavior, and verification status. `source-backed` and `oracleVerified` cases
+are asserted by the .NET adapter. `needsVerification` cases remain visible in
+reports and are not treated as accepted SQL specifications. Live Netezza
+results take precedence for Netezza legality; when source implementations
+conflict and there is no decisive live result, the VS Code behavior is the
+preferred reference.
+
+The .NET-only template parser baselines also read their SQL from the shared
+corpus. They preserve local smoke coverage without keeping a second large SQL
+fixture list in this repository.
 
 The following reference-host behaviors are deliberately not represented as
 skipped xUnit tests: Chevrotain parser performance/runtime internals,

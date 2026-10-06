@@ -28,7 +28,10 @@ jobs:
         run: dotnet build JustyBase.NetezzaSql.sln --no-restore --configuration Release
 
       - name: Test
-        run: dotnet test JustyBase.NetezzaSql.sln --no-build --configuration Release --logger trx --collect:"XPlat Code Coverage"
+        run: dotnet test JustyBase.NetezzaSql.sln --no-build --configuration Release --logger trx --collect:"XPlat Code Coverage" --filter "Category!=Performance"
+
+      - name: Parser performance budgets
+        run: dotnet test tests/JustyBase.NetezzaSql.Tests/JustyBase.NetezzaSql.Tests.csproj --no-build --configuration Release --filter "Category=Performance"
 
       - name: Verify per-library coverage
         shell: pwsh
@@ -44,6 +47,7 @@ jobs:
           dotnet pack JustyBase.NetezzaDdl/JustyBase.NetezzaDdl.csproj --no-build --configuration Release --output artifacts/packages
           dotnet pack JustyBase.NetezzaCatalogSql/JustyBase.NetezzaCatalogSql.csproj --no-build --configuration Release --output artifacts/packages
           dotnet pack JustyBase.Netezza/JustyBase.Netezza.csproj --no-build --configuration Release --output artifacts/packages
+          dotnet pack JustyBase.Sqlite/JustyBase.Sqlite.csproj --no-build --configuration Release --output artifacts/packages
           dotnet pack JustyBase.Core/JustyBase.Core.csproj --no-build --configuration Release --output artifacts/packages
           dotnet pack JustyBase.ImportExport/JustyBase.ImportExport.csproj --no-build --configuration Release --output artifacts/packages
           dotnet pack JustyBase.Ai/JustyBase.Ai.csproj --no-build --configuration Release --output artifacts/packages
@@ -64,3 +68,54 @@ jobs:
       - name: Check whitespace
         shell: pwsh
         run: git diff --check
+
+  aot-publish:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            rid: linux-x64
+          - os: windows-latest
+            rid: win-x64
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install NativeAOT prerequisites (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+
+      - name: Publish LSP (NativeAOT)
+        run: dotnet publish JustyBase.NetezzaSqlLsp/JustyBase.NetezzaSqlLsp.csproj -c Release -r ${{ matrix.rid }} -o artifacts/aot/lsp
+
+      - name: Smoke test LSP (Linux)
+        if: runner.os == 'Linux'
+        run: timeout 10 ./artifacts/aot/lsp/JustyBase.NetezzaSqlLsp </dev/null || test $? -eq 124
+
+      - name: Smoke test LSP (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $empty = New-TemporaryFile
+          $process = Start-Process -FilePath ./artifacts/aot/lsp/JustyBase.NetezzaSqlLsp.exe -PassThru -RedirectStandardInput $empty.FullName
+          Start-Sleep -Seconds 5
+          if ($process.HasExited -and $process.ExitCode -ne 0) { throw "LSP exited with code $($process.ExitCode)." }
+          if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
+
+      - name: Publish AI AOT probe
+        run: dotnet publish tests/JustyBase.Ai.AotProbe/JustyBase.Ai.AotProbe.csproj -c Release -r ${{ matrix.rid }} -o artifacts/aot/ai-probe -p:CopilotSkipCliDownload=true
+
+      - name: Run AI AOT probe
+        shell: pwsh
+        run: |
+          $exe = if ($IsWindows) { './artifacts/aot/ai-probe/JustyBase.Ai.AotProbe.exe' } else { './artifacts/aot/ai-probe/JustyBase.Ai.AotProbe' }
+          & $exe
+          if ($LASTEXITCODE -ne 0) { throw "AI AOT probe failed with code $LASTEXITCODE." }

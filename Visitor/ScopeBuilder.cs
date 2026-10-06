@@ -47,7 +47,18 @@ public class ScopeBuilder
     {
         var key = (table.Alias ?? table.Name).ToUpperInvariant();
         if (_currentScope.Tables.TryGetValue(key, out var existing))
+        {
+            // CTE registration first installs a placeholder, then resolves its
+            // projected columns. Replace only that placeholder so a real table
+            // with the same name cannot shadow the CTE's local shape.
+            if (existing.IsCte && table.IsCte
+                && existing.Columns is not { Count: > 0 }
+                && table.Columns is { Count: > 0 })
+            {
+                _currentScope.Tables[key] = table;
+            }
             return existing;
+        }
         _currentScope.Tables[key] = table;
         return null;
     }

@@ -230,6 +230,22 @@ public sealed class NetezzaDdlTextBuilder
             sb.AppendLine();
             sb.AppendLine($"COMMENT ON VIEW {cleanDatabase}.{cleanSchema}.{cleanViewName} IS '{comment}';");
         }
+
+        // View columns can carry comments exactly like table columns; the
+        // reference viewer reconstructs COMMENT ON COLUMN for both.
+        foreach (var column in input.Columns ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(column.Description))
+                continue;
+
+            var columnComment = NetezzaNameHelper.EscapeComment(column.Description);
+            if (columnComment is null)
+                continue;
+
+            var cleanColumn = NetezzaNameHelper.QuoteNameIfNeeded(column.Name);
+            sb.AppendLine(
+                $"COMMENT ON COLUMN {cleanDatabase}.{cleanSchema}.{cleanViewName}.{cleanColumn} IS '{columnComment}';");
+        }
     }
 
     public string BuildCreateView(NetezzaViewDdlInput input)

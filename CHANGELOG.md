@@ -2,6 +2,48 @@
 
 All notable changes to this project will be documented here.
 
+## 0.8.9
+
+- Mark `JustyBase.Ai` as Native AOT compatible (`IsAotCompatible = true`):
+  `GitHub.Copilot.SDK` 1.0.x bridges the Rust runtime via AOT-safe FFI and
+  source-generated JSON, so the package no longer advertises JIT-only metadata.
+- Add per-package NuGet descriptions and tags for the parser, DDL, catalog,
+  `JustyBase.Ai`, and `JustyBase.Ai.Embedded`.
+- Centralize package versions via `Directory.Packages.props` and update test
+  and live-proof dependencies (Test SDK 18.10.1, coverlet 10.1.0, SqlClient 7.1.1,
+  NetezzaDriver 1.9.5, Microsoft.Data.Sqlite 10.0.12).
+- Add NativeAOT publish smoke checks for the LSP and a `JustyBase.Ai` probe to CI.
+- Add coverage gates for `JustyBase.Ai` (35% / 25%) and `JustyBase.Sqlite` (88% / 74%).
+- Add LSP `textDocument/codeAction` with lint quick fixes and safe-fix-all,
+  `textDocument/inlayHint` type hints, and whole-document `textDocument/formatting`.
+- Add completion ranking tiers and fuzzy name matching, procedure/script
+  variable completion (`&`, `$`, `{}`, `${}`), and foreign-key JOIN predicate
+  suggestions (`IForeignKeyProvider`, `justy/syncSchema` FK metadata).
+- Add a frozen reference parity corpus (`Fixtures/parity`) with tests against
+  justybase/justybase-vscode behavior, and align the `NZ004`/`NZ010` quick
+  fixes with the reference semantics.
+- Port the reference NZPLSQL procedure matrix (101 accept/reject cases) and a
+  parser/validator parity corpus (150 dialect cases); intentional differences
+  are recorded with reasons instead of being skipped.
+- Add parser performance gates: generated ~1 MB DDL/DML/Complex fixtures with
+  hard budgets (`Category=Performance`, CI step) plus a BenchmarkDotNet project
+  and `eng/Run-ParserBenchmarks.ps1` for local profiling.
+- Align NZPLSQL grammar with the reference behavior: `ELSEIF` synonym,
+  `%TYPE`/`%ROWTYPE` declarations, mandatory `AS` and `LANGUAGE NZPLSQL`,
+  `RAISE` severity/message validation, non-empty `EXCEPTION` handlers, and
+  removal of the SQL038 warning for `RETURNS` without `RETURN` (live-verified
+  legal).
+- Split monolithic validator/completion test files into feature-named partial
+  classes (no behavior change).
+- Emit `COMMENT ON COLUMN <view>.<column>` for view columns with descriptions
+  (`NetezzaViewDdlInput.Columns`, `NetezzaDdlInputFactory.BuildView`), matching
+  the reference view DDL contract.
+
+## 0.8.8
+
+- Extend the shared Git service with amend, undo last commit, reset, revert,
+  and stash operations, and improve branch creation and commit retrieval.
+
 ## 0.8.7
 
 - Complete Legacy Netezza catalog source search, schema refresh, column caching,

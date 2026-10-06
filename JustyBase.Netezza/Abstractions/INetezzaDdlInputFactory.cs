@@ -23,6 +23,13 @@ public interface INetezzaDdlInputFactory
     /// <summary>Builds DDL input for an external table.</summary>
     NetezzaExternalDdlInput BuildExternal(NetezzaSchemaTable table, NetezzaExternalTableOptions options);
 
+    /// <summary>
+    /// Builds DDL input for a view from its catalog metadata and definition.
+    /// View and column descriptions become <c>COMMENT ON VIEW</c>/
+    /// <c>COMMENT ON COLUMN</c> statements.
+    /// </summary>
+    NetezzaViewDdlInput BuildView(NetezzaSchemaTable view, string definition);
+
     /// <summary>Builds DDL input for a procedure from its definition.</summary>
     NetezzaProcedureDdlInput BuildProcedure(NetezzaProcedureDefinition procedure);
 

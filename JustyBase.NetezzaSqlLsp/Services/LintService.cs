@@ -148,12 +148,21 @@ public static class LintService
             endPos = new Position(endPos.Line, endPos.Character + 1);
         }
 
+        var data = new Dictionary<string, object?>
+        {
+            ["startOffset"] = issue.StartOffset,
+            ["endOffset"] = issue.EndOffset
+        };
+        if (issue.SuggestedFix is not null)
+            data["suggestedFix"] = issue.SuggestedFix;
+
         return new Diagnostic(
             new Protocol.Range(startPos, endPos),
             issue.Severity == LintSeverity.Error ? DiagnosticSeverity.Error : DiagnosticSeverity.Warning,
             issue.RuleId,
             source,
-            issue.Message
+            issue.Message,
+            data
         );
     }
 

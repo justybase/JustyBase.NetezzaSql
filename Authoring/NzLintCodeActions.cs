@@ -74,8 +74,9 @@ public static class NzLintCodeActions
     }
 
     /// <summary>
-    /// Applies all safe Fix-all eligible fixes in reverse offset order (stable single pass).
-    /// Re-lint and call again if additional passes are needed after structural changes.
+    /// Applies safe Fix-all eligible fixes in reverse offset order in a single pass.
+    /// <paramref name="maxPasses"/> is retained for source compatibility; callers
+    /// must re-lint before applying another pass because edits can invalidate offsets.
     /// </summary>
     public static string ApplyAllSafeFixes(
         string sql,
@@ -83,25 +84,19 @@ public static class NzLintCodeActions
         ISchemaProvider? schema = null,
         int maxPasses = 1)
     {
-        var current = sql;
+        _ = maxPasses;
         var ordered = issues
             .Where(i => IsSafeForFixAll(i.RuleId))
             .OrderByDescending(i => i.StartOffset)
             .ThenByDescending(i => i.EndOffset)
             .ToList();
 
-        for (var pass = 0; pass < Math.Max(1, maxPasses); pass++)
+        var current = sql;
+        foreach (var issue in ordered)
         {
-            var before = current;
-            foreach (var issue in ordered)
-            {
-                var fix = GetQuickFix(issue, current, schema);
-                if (fix is null) continue;
-                current = fix.Value.Apply(current);
-            }
-
-            if (current == before)
-                break;
+            var fix = GetQuickFix(issue, current, schema);
+            if (fix is null) continue;
+            current = fix.Value.Apply(current);
         }
 
         return current;
@@ -141,13 +136,103 @@ public static class NzLintCodeActions
     private static (string Description, Func<string, string> Apply)? GetNz004Fix(LintIssue issue)
     {
         if (issue.StartOffset < 0) return null;
-        return ("Replace CROSS JOIN with INNER JOIN", sql =>
+        return ("Replace CROSS JOIN with INNER JOIN ... ON 1=1", sql =>
         {
             if (issue.StartOffset + 10 > sql.Length) return sql;
             var token = sql[issue.StartOffset..(issue.StartOffset + 10)];
             if (!string.Equals(token, "CROSS JOIN", StringComparison.OrdinalIgnoreCase)) return sql;
-            return sql[..issue.StartOffset] + "INNER JOIN" + sql[(issue.StartOffset + 10)..];
+
+            var replaced = sql[..issue.StartOffset] + "INNER JOIN" + sql[(issue.StartOffset + 10)..];
+            var joinSourceEnd = FindJoinSourceEnd(replaced, issue.StartOffset + "INNER JOIN".Length, out var hasExistingOn);
+            return hasExistingOn ? replaced : replaced.Insert(joinSourceEnd, " ON 1=1");
         });
+    }
+
+    private static int FindJoinSourceEnd(string sql, int start, out bool hasExistingOn)
+    {
+        hasExistingOn = false;
+        var parenDepth = 0;
+        var inSingleQuote = false;
+        var inDoubleQuote = false;
+        var inLineComment = false;
+        var inBlockComment = false;
+
+        for (var i = Math.Clamp(start, 0, sql.Length); i < sql.Length; i++)
+        {
+            var current = sql[i];
+            var next = i + 1 < sql.Length ? sql[i + 1] : '\0';
+
+            if (inSingleQuote)
+            {
+                if (current == '\'' && next == '\'') { i++; continue; }
+                if (current == '\'') inSingleQuote = false;
+                continue;
+            }
+            if (inDoubleQuote)
+            {
+                if (current == '"' && next == '"') { i++; continue; }
+                if (current == '"') inDoubleQuote = false;
+                continue;
+            }
+            if (inLineComment)
+            {
+                if (current == '\n') inLineComment = false;
+                continue;
+            }
+            if (inBlockComment)
+            {
+                if (current == '*' && next == '/') { inBlockComment = false; i++; }
+                continue;
+            }
+
+            if (current == '-' && next == '-') { inLineComment = true; i++; continue; }
+            if (current == '/' && next == '*') { inBlockComment = true; i++; continue; }
+            if (current == '\'') { inSingleQuote = true; continue; }
+            if (current == '"') { inDoubleQuote = true; continue; }
+            if (current == '(') { parenDepth++; continue; }
+            if (current == ')') { parenDepth = Math.Max(0, parenDepth - 1); continue; }
+            if (parenDepth != 0) continue;
+
+            if (current is ';' or ',' || IsClauseBoundary(sql, i))
+            {
+                hasExistingOn = IsKeywordAt(sql, i, "ON");
+                var end = i;
+                while (end > start && char.IsWhiteSpace(sql[end - 1])) end--;
+                return end;
+            }
+        }
+
+        var finalEnd = sql.Length;
+        while (finalEnd > start && char.IsWhiteSpace(sql[finalEnd - 1])) finalEnd--;
+        return finalEnd;
+    }
+
+    private static bool IsKeywordAt(string sql, int index, string keyword)
+    {
+        if (index + keyword.Length > sql.Length
+            || !sql.AsSpan(index, keyword.Length).Equals(keyword, StringComparison.OrdinalIgnoreCase))
+            return false;
+        var after = index + keyword.Length;
+        return after == sql.Length || !(char.IsLetterOrDigit(sql[after]) || sql[after] == '_');
+    }
+
+    private static bool IsClauseBoundary(string sql, int index)
+    {
+        if (!(char.IsLetter(sql[index]) || sql[index] == '_')) return false;
+        if (index > 0 && (char.IsLetterOrDigit(sql[index - 1]) || sql[index - 1] == '_')) return false;
+
+        foreach (var keyword in new[]
+                 {
+                     "JOIN", "ON", "WHERE", "GROUP", "ORDER", "HAVING", "LIMIT", "FETCH",
+                     "DISTRIBUTE", "ORGANIZE", "UNION", "EXCEPT", "INTERSECT", "QUALIFY"
+                 })
+        {
+            if (index + keyword.Length > sql.Length) continue;
+            if (!sql.AsSpan(index, keyword.Length).Equals(keyword, StringComparison.OrdinalIgnoreCase)) continue;
+            var after = index + keyword.Length;
+            if (after == sql.Length || !(char.IsLetterOrDigit(sql[after]) || sql[after] == '_')) return true;
+        }
+        return false;
     }
 
     private static (string Description, Func<string, string> Apply)? GetNz006Fix(LintIssue issue)
@@ -191,15 +276,119 @@ public static class NzLintCodeActions
     private static (string Description, Func<string, string> Apply)? GetNz010Fix(
         LintIssue issue, string fullSql)
     {
-        if (issue.StartOffset < 0 || issue.EndOffset > fullSql.Length) return null;
-        var tableToken = fullSql[issue.StartOffset..issue.EndOffset].Trim();
-        if (string.IsNullOrEmpty(tableToken)) return null;
-        var alias = "t1";
+        if (issue.StartOffset < 0 || issue.EndOffset > fullSql.Length || issue.EndOffset <= issue.StartOffset)
+            return null;
+
+        var statementRange = FindStatementRange(fullSql, issue.StartOffset);
+        if (statementRange.End <= statementRange.Start) return null;
+        var statement = fullSql[statementRange.Start..statementRange.End];
+        var statementIssueStart = issue.StartOffset - statementRange.Start;
+        var issueEnd = Math.Min(issue.EndOffset, statementRange.End) - statementRange.Start;
+        if (statementIssueStart < 0 || issueEnd > statement.Length || issueEnd <= statementIssueStart) return null;
+        var region = statement[statementIssueStart..issueEnd];
+        var tableMatch = Regex.Match(issue.Message, "'([^']+)'");
+        if (!tableMatch.Success)
+            return null;
+
+        var tableName = tableMatch.Groups[1].Value;
+        var tableIndex = region.IndexOf(tableName, StringComparison.OrdinalIgnoreCase);
+        if (tableIndex < 0)
+            return null;
+
+        var alias = FindUnusedAlias(fullSql);
         return ($"Add alias {alias}", sql =>
         {
-            if (issue.EndOffset > sql.Length) return sql;
-            return sql[..issue.EndOffset] + " " + alias + sql[issue.EndOffset..];
+            if (statementRange.End > sql.Length) return sql;
+            var statementText = sql[statementRange.Start..statementRange.End];
+            var insertAt = statementIssueStart + tableIndex + tableName.Length;
+            var withAlias = statementText[..insertAt] + " " + alias + statementText[insertAt..];
+            var rewritten = QualifyTableReferences(
+                withAlias,
+                tableName,
+                alias,
+                declarationNameOffset: insertAt,
+                declarationNameLength: tableName.Length);
+            return sql[..statementRange.Start] + rewritten + sql[statementRange.End..];
         });
+    }
+
+    private static (int Start, int End) FindStatementRange(string sql, int offset)
+    {
+        var start = 0;
+        var inSingle = false;
+        var inDouble = false;
+        var inLineComment = false;
+        var inBlockComment = false;
+        var depth = 0;
+        for (var i = 0; i < sql.Length; i++)
+        {
+            var c = sql[i];
+            var next = i + 1 < sql.Length ? sql[i + 1] : '\0';
+            if (inSingle)
+            {
+                if (c == '\'' && next == '\'') { i++; continue; }
+                if (c == '\'') inSingle = false;
+                continue;
+            }
+            if (inDouble)
+            {
+                if (c == '"' && next == '"') { i++; continue; }
+                if (c == '"') inDouble = false;
+                continue;
+            }
+            if (inLineComment)
+            {
+                if (c == '\n') inLineComment = false;
+                continue;
+            }
+            if (inBlockComment)
+            {
+                if (c == '*' && next == '/') { inBlockComment = false; i++; }
+                continue;
+            }
+            if (c == '-' && next == '-') { inLineComment = true; i++; continue; }
+            if (c == '/' && next == '*') { inBlockComment = true; i++; continue; }
+            if (c == '\'') { inSingle = true; continue; }
+            if (c == '"') { inDouble = true; continue; }
+            if (c == '(') { depth++; continue; }
+            if (c == ')') { depth = Math.Max(0, depth - 1); continue; }
+            if (c == ';' && depth == 0)
+            {
+                if (offset <= i) return (start, i);
+                start = i + 1;
+            }
+        }
+        return offset >= start && offset <= sql.Length ? (start, sql.Length) : (0, sql.Length);
+    }
+
+    internal static string FindUnusedAlias(string sql)
+    {
+        for (var i = 1; ; i++)
+        {
+            var candidate = "t" + i;
+            if (!Regex.IsMatch(sql, $@"\b{Regex.Escape(candidate)}\b", RegexOptions.IgnoreCase))
+                return candidate;
+        }
+    }
+
+    internal static string QualifyTableReferences(
+        string sql, string tableName, string alias, int declarationNameOffset = -1, int declarationNameLength = 0)
+    {
+        var basename = tableName.Split('.').Last().Trim('"', '`', '[', ']');
+        foreach (var qualifier in new[] { tableName, basename }.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var pattern = $@"(?<![\w.""\]]){Regex.Escape(qualifier)}\s*\.";
+            sql = Regex.Replace(sql, pattern, match =>
+            {
+                var inDeclaration = declarationNameOffset >= 0
+                    && match.Index >= declarationNameOffset
+                    && match.Index < declarationNameOffset + declarationNameLength;
+                return inDeclaration || LintHelpers.IsInsideStringOrComment(sql, match.Index)
+                    ? match.Value
+                    : alias + ".";
+            }, RegexOptions.IgnoreCase);
+        }
+        return sql;
     }
 
     private static (string Description, Func<string, string> Apply)? GetNz011Fix(LintIssue issue)
@@ -293,13 +482,25 @@ public static class NzLintCodeActions
     private static (string Description, Func<string, string> Apply)? GetSql012Fix(
         LintIssue issue, string fullSql)
     {
-        if (issue.StartOffset < 0 || issue.EndOffset > fullSql.Length) return null;
+        if (issue.StartOffset < 0 || issue.StartOffset >= fullSql.Length) return null;
+
+        var statementRange = FindStatementRange(fullSql, issue.StartOffset);
+        var statement = fullSql[statementRange.Start..statementRange.End];
+        var candidates = Regex.Matches(statement, @"\bVARCHAR\b(?!\s*\()", RegexOptions.IgnoreCase)
+            .Cast<Match>()
+            .Where(match => !LintHelpers.IsInsideStringOrComment(fullSql, statementRange.Start + match.Index))
+            .OrderBy(match => Math.Abs(statementRange.Start + match.Index - issue.StartOffset))
+            .ToArray();
+        if (candidates.Length == 0) return null;
+
+        var startOffset = statementRange.Start + candidates[0].Index;
+        var endOffset = startOffset + candidates[0].Length;
+
         return ("Use VARCHAR(100)", sql =>
         {
-            if (issue.StartOffset >= sql.Length || issue.EndOffset > sql.Length) return sql;
-            var segment = sql[issue.StartOffset..issue.EndOffset];
-            if (!segment.Contains("VARCHAR", StringComparison.OrdinalIgnoreCase)) return sql;
-            return sql[..issue.StartOffset] + "VARCHAR(100)" + sql[issue.EndOffset..];
+            if (endOffset > sql.Length || LintHelpers.IsInsideStringOrComment(sql, startOffset)) return sql;
+            if (!sql.AsSpan(startOffset, endOffset - startOffset).Equals("VARCHAR", StringComparison.OrdinalIgnoreCase)) return sql;
+            return sql[..startOffset] + "VARCHAR(100)" + sql[endOffset..];
         });
     }
 

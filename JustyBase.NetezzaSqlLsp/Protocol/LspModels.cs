@@ -74,7 +74,10 @@ public record ServerCapabilities(
     bool? ReferencesProvider,
     bool? DocumentSymbolProvider,
     SignatureHelpOptions? SignatureHelpProvider,
-    bool? RenameProvider
+    bool? RenameProvider,
+    CodeActionOptions? CodeActionProvider = null,
+    bool? InlayHintProvider = null,
+    bool? DocumentFormattingProvider = null
 );
 
 public record ServerInfo(string Name, string Version);
@@ -114,7 +117,8 @@ public record CompletionItem(
     string Label,
     CompletionItemKind? Kind,
     string? Detail,
-    string? InsertText
+    string? InsertText,
+    string? SortText = null
 );
 
 public enum CompletionItemKind
@@ -214,8 +218,14 @@ public record ParameterInformation(
 // ====== Custom JustyBase protocol ======
 
 public record SyncSchemaParams(string Database, string Schema, TableSchema[] Tables);
-public record TableSchema(string Name, ColumnSchema[] Columns);
-public record ColumnSchema(string Name);
+public record TableSchema(string Name, ColumnSchema[] Columns, ForeignKeySchema[]? ForeignKeys = null);
+public record ColumnSchema(string Name, string? DataType = null);
+public record ForeignKeySchema(
+    string[] Columns,
+    string ReferencedTable,
+    string[] ReferencedColumns,
+    string? ReferencedSchema = null,
+    string? ReferencedDatabase = null);
 
 // ====== Rename ======
 
@@ -228,5 +238,39 @@ public record PrepareRenameResult(bool PreparePlaceholder, Range Range);
 public record WorkspaceEdit(Dictionary<string, TextEdit[]>? Changes);
 
 public record TextEdit(Range Range, string NewText);
+
+// ====== Code Actions ======
+
+public record CodeActionParams(TextDocumentIdentifier TextDocument, Range Range, CodeActionContext Context);
+
+public record CodeActionContext(Diagnostic[] Diagnostics, string[]? Only = null);
+
+public record CodeAction(
+    string Title,
+    string? Kind,
+    Diagnostic[]? Diagnostics,
+    WorkspaceEdit? Edit,
+    bool? IsPreferred = null
+);
+
+public record CodeActionOptions(string[]? CodeActionKinds);
+
+// ====== Inlay Hints ======
+
+public record InlayHintParams(TextDocumentIdentifier TextDocument, Range Range);
+
+public record InlayHint(Position Position, string Label, InlayHintKind? Kind);
+
+public enum InlayHintKind
+{
+    Type = 1,
+    Parameter = 2
+}
+
+// ====== Formatting ======
+
+public record DocumentFormattingParams(TextDocumentIdentifier TextDocument, FormattingOptions Options);
+
+public record FormattingOptions(int TabSize, bool InsertSpaces);
 
 

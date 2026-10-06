@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>JustyBase.NetezzaSql.Benchmarks</RootNamespace>
+    <AssemblyName>JustyBase.NetezzaSql.Benchmarks</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\JustyBase.NetezzaSqlParser.csproj" />
+    <Compile Include="..\JustyBase.NetezzaSql.Tests\Performance\PerfFixtureFactory.cs" Link="PerfFixtureFactory.cs" />
+  </ItemGroup>
+</Project>

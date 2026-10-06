@@ -1,4 +1,4 @@
-﻿using JustyBase.Ai.Ports;
+using JustyBase.Ai.Ports;
 using JustyBase.Ai.Models;
 using ChatMessage = JustyBase.Ai.Models.ChatMessage;
 using JustyBase.Ai.Chat;

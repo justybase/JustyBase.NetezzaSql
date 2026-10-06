@@ -33,10 +33,11 @@ public enum TableKind { Table, View, Synonym, External }
 /// <summary>
 /// In-memory schema provider for testing.
 /// </summary>
-public class InMemorySchemaProvider : ISchemaProvider
+public class InMemorySchemaProvider : ISchemaProvider, IForeignKeyProvider
 {
     private readonly object _lock = new();
     private readonly Dictionary<string, TableInfo> _tables = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, List<ForeignKeyRelation>> _foreignKeys = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, List<TableQualificationProposal>> _qualificationProposals = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _absentTables = new(StringComparer.OrdinalIgnoreCase);
     private int _metadataEpoch;
@@ -77,6 +78,69 @@ public class InMemorySchemaProvider : ISchemaProvider
     public bool TableExists(string? database, string? schema, string tableName)
     {
         return GetTable(database, schema, tableName) is not null;
+    }
+
+    /// <summary>Registers a declared foreign key for the given table.</summary>
+    public void AddForeignKey(string? database, string? schema, string tableName, ForeignKeyRelation relation)
+    {
+        ArgumentNullException.ThrowIfNull(relation);
+
+        lock (_lock)
+        {
+            var key = FormatKey(database, schema, tableName);
+            if (!_foreignKeys.TryGetValue(key, out var relations))
+            {
+                relations = new List<ForeignKeyRelation>();
+                _foreignKeys[key] = relations;
+            }
+
+            relations.Add(relation);
+        }
+    }
+
+    /// <summary>Replaces all declared foreign keys for a table, including clearing them with an empty list.</summary>
+    public void ReplaceForeignKeys(string? database, string? schema, string tableName, IEnumerable<ForeignKeyRelation> relations)
+    {
+        ArgumentNullException.ThrowIfNull(relations);
+        var key = FormatKey(database, schema, tableName);
+        var replacement = relations.ToList();
+        lock (_lock)
+        {
+            if (replacement.Count == 0)
+                _foreignKeys.Remove(key);
+            else
+                _foreignKeys[key] = replacement;
+        }
+    }
+
+    public IReadOnlyList<ForeignKeyRelation>? GetForeignKeys(string? database, string? schema, string tableName)
+    {
+        if (string.IsNullOrWhiteSpace(tableName))
+            return null;
+
+        lock (_lock)
+        {
+            if (_foreignKeys.TryGetValue(FormatKey(database, schema, tableName), out var relations))
+                return relations.ToArray();
+
+            // Unqualified lookup falls back to any matching table name.
+            if (string.IsNullOrEmpty(database) && string.IsNullOrEmpty(schema))
+            {
+                List<ForeignKeyRelation>? uniqueMatch = null;
+                foreach (var (key, values) in _foreignKeys)
+                {
+                    if (IdentifiersEqual(key.Split('.')[^1], tableName))
+                    {
+                        if (uniqueMatch is not null)
+                            return null; // ambiguous table name across schemas/databases
+                        uniqueMatch = values;
+                    }
+                }
+                return uniqueMatch?.ToArray();
+            }
+
+            return null;
+        }
     }
 
     public bool HasTables()
@@ -234,6 +298,7 @@ public class InMemorySchemaProvider : ISchemaProvider
         lock (_lock)
         {
             _tables.Clear();
+            _foreignKeys.Clear();
             _qualificationProposals.Clear();
             _absentTables.Clear();
             _metadataEpoch++;

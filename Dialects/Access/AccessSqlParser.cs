@@ -13,7 +13,7 @@ public sealed class AccessSqlParser : Parser.NzSqlParser
 {
     private bool _parsingPivotExpression;
 
-    public AccessSqlParser(Token<NzToken>[] tokens) : base(tokens)
+    public AccessSqlParser(Token<NzToken>[] tokens) : base(tokens, strictNetezzaIntervalSyntax: false)
     {
     }
 

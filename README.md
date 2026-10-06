@@ -2,7 +2,7 @@
 
 Open-source .NET libraries for working with SQL without requiring a live database connection.
 
-The solution ships six NuGet libraries plus a standalone LSP executable:
+The solution ships nine NuGet libraries plus a standalone LSP executable:
 
 | Project | Purpose |
 | --- | --- |
@@ -10,8 +10,11 @@ The solution ships six NuGet libraries plus a standalone LSP executable:
 | `JustyBase.NetezzaDdl` | Netezza DDL text builders, identifier/literal helpers, import/maintenance SQL, and external-table option mapping. |
 | `JustyBase.NetezzaCatalogSql` | Reusable SQL statements for reading Netezza catalog metadata. |
 | `JustyBase.Netezza` | UI-agnostic metadata models, schema adapter for the parser, and DDL input mapping. |
+| `JustyBase.Sqlite` | UI-agnostic SQLite metadata, parser schema, and DDL integration components. |
 | `JustyBase.Core` | Shared host-agnostic app core: risk analysis, scripting dialect, execution contracts, schema cache/catalog ports. |
 | `JustyBase.ImportExport` | Shared Netezza import engines and tabular export writers used by Avalonia and Legacy hosts. |
+| `JustyBase.Ai` | UI-agnostic AI chat logic: chat service, tool executor, OpenAI-compatible and Codex backends, prompt building, and chat model contracts. |
+| `JustyBase.Ai.Embedded` | Embedded llama.cpp (`llama-server`) GGUF model management for FIM inline completion and AI chat. |
 | `JustyBase.NetezzaSqlLsp` | NativeAOT Language Server Protocol executable built on the parser package (not published to NuGet). |
 
 ## Status
@@ -108,7 +111,7 @@ Optional database-backed smoke tests:
 
 ## Create NuGet packages
 
-Pack all eight libraries under the same `PackageVersion` (default from `Directory.Build.props`):
+Pack all nine libraries under the same `PackageVersion` (default from `Directory.Build.props`):
 
 ```powershell
 dotnet pack .\JustyBase.NetezzaSql.sln -c Release -o .\artifacts
@@ -121,6 +124,7 @@ dotnet pack .\JustyBase.NetezzaSqlParser.csproj -c Release
 dotnet pack .\JustyBase.NetezzaDdl\JustyBase.NetezzaDdl.csproj -c Release
 dotnet pack .\JustyBase.NetezzaCatalogSql\JustyBase.NetezzaCatalogSql.csproj -c Release
 dotnet pack .\JustyBase.Netezza\JustyBase.Netezza.csproj -c Release
+dotnet pack .\JustyBase.Sqlite\JustyBase.Sqlite.csproj -c Release
 dotnet pack .\JustyBase.Core\JustyBase.Core.csproj -c Release
 dotnet pack .\JustyBase.ImportExport\JustyBase.ImportExport.csproj -c Release
 dotnet pack .\JustyBase.Ai\JustyBase.Ai.csproj -c Release

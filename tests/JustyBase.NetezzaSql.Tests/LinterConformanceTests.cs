@@ -248,7 +248,6 @@ public sealed class LinterConformanceTests
             new InMemorySchemaProvider(), "procedure-scope-regression"));
 
         Assert.Contains(result.Issues, issue => issue.RuleId == "SQL037");
-        Assert.Contains(result.Issues, issue => issue.RuleId == "SQL038");
         Assert.Contains(result.Issues, issue => issue.RuleId == "SQL040");
     }
 

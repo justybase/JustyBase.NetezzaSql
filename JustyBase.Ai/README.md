@@ -30,7 +30,7 @@ The package has no UI dependency.
 ## Target framework
 
 - .NET 10
-- Not Native AOT compatible (`IsAotCompatible = false`) — the Copilot SDK bridge requires JIT
+- Native AOT compatible (`IsAotCompatible = true`) — GitHub.Copilot.SDK 1.0.x bridges the Rust runtime via AOT-safe FFI and source-generated JSON
 
 ## Build and test
 

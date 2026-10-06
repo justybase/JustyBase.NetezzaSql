@@ -25,7 +25,10 @@ public static class LifecycleHandlers
                 ReferencesProvider: true,
                 DocumentSymbolProvider: true,
                 SignatureHelpProvider: new SignatureHelpOptions(new[] { "(", "," }),
-                RenameProvider: true
+                RenameProvider: true,
+                CodeActionProvider: new CodeActionOptions(new[] { "quickfix", "source.fixAll" }),
+                InlayHintProvider: true,
+                DocumentFormattingProvider: true
             ),
             new ServerInfo("Netezza SQL LSP", "0.1.0")
         );

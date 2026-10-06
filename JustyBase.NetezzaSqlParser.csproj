@@ -7,11 +7,17 @@
     <IsAotCompatible>true</IsAotCompatible>
     <RootNamespace>JustyBase.NetezzaSqlParser</RootNamespace>
     <AssemblyName>JustyBase.NetezzaSqlParser</AssemblyName>
+    <PackageDescription>Netezza SQL / NZPLSQL lexer, parser, AST, formatter, linter, completion, and editor-authoring services with multi-dialect support.</PackageDescription>
+    <PackageTags>netezza;sql;parser;nzsql;nzplsql;formatter;linter;justybase</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="\" />
-    <PackageReference Include="Superpower" Version="3.2.1" />
+    <PackageReference Include="Superpower" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="JustyBase.NetezzaSql.Tests" />
   </ItemGroup>
 
   <ItemGroup>

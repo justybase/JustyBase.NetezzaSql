@@ -45,6 +45,40 @@ public sealed class NetezzaDdlInputFactoryTests
     }
 
     [Fact]
+    public void BuildView_MapsViewAndColumnComments()
+    {
+        var view = new NetezzaSchemaTable(
+            "V_ORDERS",
+            Schema: "PUBLIC",
+            Database: "SALES",
+            IsView: true,
+            Columns:
+            [
+                new NetezzaSchemaColumn("ORDER_ID", "BIGINT", Description: "order identifier"),
+                new NetezzaSchemaColumn("NOTE", "VARCHAR(200)")
+            ],
+            Description: "orders view");
+
+        var input = NetezzaDdlInputFactory.BuildView(view, "SELECT ORDER_ID, NOTE FROM ORDERS");
+
+        Assert.Equal("SALES", input.Database);
+        Assert.Equal("PUBLIC", input.Schema);
+        Assert.Equal("V_ORDERS", input.ViewName);
+        Assert.Equal("orders view", input.ViewComment);
+        Assert.NotNull(input.Columns);
+        Assert.Equal("order identifier", input.Columns![0].Description);
+        Assert.Null(input.Columns[1].Description);
+    }
+
+    [Fact]
+    public void BuildView_RejectsNullDefinition()
+    {
+        var view = new NetezzaSchemaTable("V", IsView: true);
+
+        Assert.Throws<ArgumentNullException>(() => NetezzaDdlInputFactory.BuildView(view, null!));
+    }
+
+    [Fact]
     public void BuildTable_UsesSafeFallbackTypeForIncompleteMetadata()
     {
         var input = NetezzaDdlInputFactory.BuildTable(

@@ -21,7 +21,11 @@ public sealed class LintCoordinatorTests
         var second = lintCoordinator.Lint(sql, schema, SqlDialect.Oracle, "file:///lint.sql");
 
         Assert.NotNull(first);
-        Assert.Equal(first, second);
+        Assert.Equal(
+            first.Select(diagnostic => (diagnostic.Range, diagnostic.Severity, diagnostic.Code, diagnostic.Message)),
+            second.Select(diagnostic => (diagnostic.Range, diagnostic.Severity, diagnostic.Code, diagnostic.Message)));
+        Assert.Equal(first.Select(diagnostic => diagnostic.Data?["startOffset"]),
+            second.Select(diagnostic => diagnostic.Data?["startOffset"]));
         Assert.Same(
             parsingCoordinator.GetOrCreate("file:///lint.sql", SqlDialect.Oracle),
             parsingCoordinator.GetOrCreate("file:///lint.sql", SqlDialect.Oracle));

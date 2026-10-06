@@ -4,18 +4,21 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <NoWarn>$(NoWarn);GHCP001</NoWarn>
-    <!-- GitHub.Copilot.SDK (and reflection-based tool/JSON marshalling) is not AOT-compatible. -->
-    <IsAotCompatible>false</IsAotCompatible>
+    <!-- GitHub.Copilot.SDK 1.0.x (Rust runtime bridged via source-generated FFI,
+         source-generated JSON) and Microsoft.Extensions.AI 10.x are AOT/trim
+         compatible. Verified with analyzers (0 warnings) and a NativeAOT publish probe. -->
+    <IsAotCompatible>true</IsAotCompatible>
     <PackageId>JustyBase.Ai</PackageId>
     <RootNamespace>JustyBase.Ai</RootNamespace>
     <AssemblyName>JustyBase.Ai</AssemblyName>
     <PackageDescription>UI-agnostic AI chat logic for JustyBase hosts: chat service, tool executor, OpenAI-compatible and Codex backends, prompt building, and chat model contracts.</PackageDescription>
+    <PackageTags>ai;chat;copilot;openai;justybase</PackageTags>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="DiffPlex" Version="1.9.0" />
-    <PackageReference Include="GitHub.Copilot.SDK" Version="1.0.16" />
-    <PackageReference Include="Microsoft.Extensions.AI" Version="10.10.0" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
+    <PackageReference Include="DiffPlex" />
+    <PackageReference Include="GitHub.Copilot.SDK" />
+    <PackageReference Include="Microsoft.Extensions.AI" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\JustyBase.Ai.Embedded\JustyBase.Ai.Embedded.csproj" />

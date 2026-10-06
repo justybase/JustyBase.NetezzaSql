@@ -7,6 +7,8 @@
     <IsAotCompatible>true</IsAotCompatible>
     <RootNamespace>JustyBase.NetezzaCatalogSql</RootNamespace>
     <AssemblyName>JustyBase.NetezzaCatalogSql</AssemblyName>
+    <PackageDescription>Reusable SQL statements for reading Netezza catalog metadata.</PackageDescription>
+    <PackageTags>netezza;catalog;metadata;justybase</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

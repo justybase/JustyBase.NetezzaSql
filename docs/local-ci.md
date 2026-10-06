@@ -9,13 +9,14 @@ pwsh .\eng\Verify-Local.ps1
 This script runs, in order:
 
 1. `dotnet restore` and `dotnet build` (Release)
-2. `dotnet test` on the full solution (Release)
-3. `pwsh .\eng\Test-Coverage.ps1` — per-library line/branch gates (parser, DDL, catalog, LSP, **Core**, **ImportExport**, Netezza integration)
+2. `dotnet test` on the full solution (Release, excluding `Category=Performance`)
+3. `pwsh .\eng\Test-Coverage.ps1` — per-library line/branch gates (parser, DDL, catalog, LSP, **Core**, **ImportExport**, **Ai**, **Sqlite**, Netezza integration)
 4. `git diff --check` — trailing whitespace and conflict markers
 
 ## Full CI parity (before a release tag)
 
-Add `-FullCi` to also run vulnerable-package scan, `dotnet pack` for all eight libraries, and `eng\Test-PackageConsumer.ps1`:
+Add `-FullCi` to also run parser performance budgets, vulnerable-package scan,
+`dotnet pack` for all nine libraries, and `eng\Test-PackageConsumer.ps1`:
 
 ```powershell
 pwsh .\eng\Verify-Local.ps1 -FullCi
@@ -42,6 +43,19 @@ pwsh .\eng\Run-LiveImportProof.ps1
 ```
 
 Do not wire this into GitHub Actions. Details: [live-import-roundtrip.md](live-import-roundtrip.md).
+
+## Parser benchmarks (optional, local only)
+
+Detailed BenchmarkDotNet runs over the generated ~1 MB fixtures (DDL, DML, Complex):
+
+```powershell
+pwsh .\eng\Run-ParserBenchmarks.ps1
+pwsh .\eng\Run-ParserBenchmarks.ps1 -Short -Filter "*Tokenize*"
+```
+
+The hard performance gate is `ParserPerfBudgetTests` (`Category=Performance`);
+CI runs it as an explicit step and `pwsh .\eng\Verify-Local.ps1 -FullCi` runs it
+locally. The fast `dotnet test` path excludes it.
 
 ## Live Oracle / Db2 / MSSQL parser proof (optional, local only)
 

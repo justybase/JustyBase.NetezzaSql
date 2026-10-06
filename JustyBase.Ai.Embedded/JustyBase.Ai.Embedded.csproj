@@ -4,13 +4,14 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>JustyBase.Ai.Embedded</RootNamespace>
-    <Description>Embedded llama.cpp (llama-server) GGUF model management for FIM inline completion and AI chat.</Description>
+    <PackageId>JustyBase.Ai.Embedded</PackageId>
+    <PackageDescription>Embedded llama.cpp (llama-server) GGUF model management for FIM inline completion and AI chat.</PackageDescription>
+    <PackageTags>ai;llama;gguf;fim;justybase</PackageTags>
     <!-- Pure managed code (HttpClient, Process, System.Text.Json source-gen). No native packages. -->
     <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="JustyBase.Ai.Tests" />
-    <InternalsVisibleTo Include="JustyBase.Tests" />
   </ItemGroup>
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="\" />

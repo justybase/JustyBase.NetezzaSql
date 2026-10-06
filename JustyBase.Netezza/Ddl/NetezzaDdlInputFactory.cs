@@ -28,6 +28,10 @@ public static class NetezzaDdlInputFactory
         NetezzaExternalTableOptions options)
         => Default.BuildExternal(table, options);
 
+    /// <summary>Builds DDL input for a view, including view and column comments.</summary>
+    public static NetezzaViewDdlInput BuildView(NetezzaSchemaTable view, string definition)
+        => Default.BuildView(view, definition);
+
     /// <summary>Builds DDL input for a procedure from its definition.</summary>
     public static NetezzaProcedureDdlInput BuildProcedure(NetezzaProcedureDefinition procedure)
         => Default.BuildProcedure(procedure);
@@ -93,6 +97,22 @@ internal sealed class DefaultNetezzaDdlInputFactory : INetezzaDdlInputFactory
             table.Name,
             columns,
             options);
+    }
+
+    public NetezzaViewDdlInput BuildView(NetezzaSchemaTable view, string definition)
+    {
+        ArgumentNullException.ThrowIfNull(view);
+        ArgumentNullException.ThrowIfNull(definition);
+
+        var columns = view.Columns?.Select(NetezzaColumnCatalogMapper.ToColumnDdl).ToArray() ?? [];
+
+        return new NetezzaViewDdlInput(
+            view.Database ?? string.Empty,
+            view.Schema ?? string.Empty,
+            view.Name,
+            definition,
+            view.Description,
+            columns);
     }
 
     public NetezzaProcedureDdlInput BuildProcedure(NetezzaProcedureDefinition procedure)

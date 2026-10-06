@@ -3,6 +3,7 @@
     <Deterministic>true</Deterministic>
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <!-- A NuGet audit endpoint outage must not make local compilation fail. -->
     <WarningsNotAsErrors>$(WarningsNotAsErrors);NU1900</WarningsNotAsErrors>
     <Authors>Krzysztof Dusko</Authors>
@@ -20,6 +21,6 @@
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-    <PackageVersion Condition="'$(PackageVersion)' == ''">0.8.8</PackageVersion>
+    <PackageVersion Condition="'$(PackageVersion)' == ''">0.8.9</PackageVersion>
   </PropertyGroup>
 </Project>

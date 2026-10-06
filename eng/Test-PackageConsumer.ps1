@@ -23,7 +23,7 @@ New-Item -ItemType Directory -Force -Path $consumerRoot | Out-Null
 $escapedSource = [Security.SecurityElement]::Escape((Resolve-Path $PackageDirectory).Path)
 @"
 <Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><RestoreSources>$escapedSource;`$(RestoreSources)</RestoreSources></PropertyGroup>
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><RestoreSources>$escapedSource;`$(RestoreSources)</RestoreSources><ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally></PropertyGroup>
   <ItemGroup>
     <PackageReference Include="JustyBase.NetezzaSqlParser" Version="$($versions['JustyBase.NetezzaSqlParser'])" />
     <PackageReference Include="JustyBase.NetezzaDdl" Version="$($versions['JustyBase.NetezzaDdl'])" />

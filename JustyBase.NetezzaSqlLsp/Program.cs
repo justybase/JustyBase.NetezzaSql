@@ -8,6 +8,7 @@ using JustyBase.NetezzaSqlParser.Caching;
 using JustyBase.NetezzaSqlParser.Dialects;
 using JustyBase.NetezzaSqlParser.Visitor;
 using JustyBase.NetezzaSqlParser.Ast;
+using JustyBase.NetezzaSqlParser.Linter;
 using System.Text.Json;
 
 Console.InputEncoding = System.Text.Encoding.UTF8;
@@ -106,16 +107,57 @@ server.RegisterRequestHandler("justy/syncSchema", async (root, id, ct) =>
                 foreach (var colEl in colsEl.EnumerateArray())
                 {
                     var colName = colEl.GetProperty("name").GetString() ?? "";
-                    columns.Add(new ColumnInfo(colName));
+                    var dataType = colEl.TryGetProperty("dataType", out var dataTypeEl)
+                        && dataTypeEl.ValueKind == JsonValueKind.String
+                        ? dataTypeEl.GetString()
+                        : null;
+                    columns.Add(new ColumnInfo(colName, DataType: dataType));
                 }
             }
 
+            var tableSchema = string.IsNullOrEmpty(schemaName) ? null : schemaName;
+            var tableDatabase = string.IsNullOrEmpty(database) ? null : database;
             schema.AddTable(new TableInfo(
                 tableName,
-                Schema: string.IsNullOrEmpty(schemaName) ? null : schemaName,
-                Database: string.IsNullOrEmpty(database) ? null : database,
+                Schema: tableSchema,
+                Database: tableDatabase,
                 Columns: columns.Count > 0 ? columns.ToArray() : null
             ));
+
+            var relations = new List<ForeignKeyRelation>();
+            if (tableEl.TryGetProperty("foreignKeys", out var foreignKeysEl)
+                && foreignKeysEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var fkEl in foreignKeysEl.EnumerateArray())
+                {
+                    var fkColumns = ReadStringArray(fkEl, "columns");
+                    var referencedTable = fkEl.TryGetProperty("referencedTable", out var referencedEl)
+                        ? referencedEl.GetString() ?? ""
+                        : "";
+                    var referencedColumns = ReadStringArray(fkEl, "referencedColumns");
+
+                    if (fkColumns.Length == 0 || referencedColumns.Length == 0 || string.IsNullOrEmpty(referencedTable))
+                        continue;
+
+                    var referencedSchema = fkEl.TryGetProperty("referencedSchema", out var referencedSchemaEl)
+                        ? referencedSchemaEl.GetString()
+                        : null;
+                    var referencedDatabase = fkEl.TryGetProperty("referencedDatabase", out var referencedDatabaseEl)
+                        ? referencedDatabaseEl.GetString()
+                        : null;
+                    relations.Add(new ForeignKeyRelation(
+                        fkColumns,
+                        referencedTable,
+                        referencedColumns,
+                        ReferencedSchema: referencedSchema,
+                        ReferencedDatabase: referencedDatabase));
+                }
+
+            }
+
+            // Each syncSchema request is a full table snapshot. Missing or empty
+            // foreignKeys therefore clears old relations instead of leaving stale JOIN hints.
+            schema.ReplaceForeignKeys(tableDatabase, tableSchema, tableName, relations);
         }
 
         await server.SendResult(id!, "ok", ct);
@@ -360,6 +402,110 @@ server.RegisterRequestHandler("textDocument/rename", async (root, id, ct) =>
     }
 });
 
+// ---- Code Actions ----
+server.RegisterRequestHandler("textDocument/codeAction", async (root, id, ct) =>
+{
+    try
+    {
+        var request = JsonSerializer.Deserialize(
+            root.GetProperty("params").GetRawText(),
+            LspJsonContext.Default.CodeActionParams);
+        if (request is null)
+        {
+            await server.SendResult(id!, Array.Empty<CodeAction>(), ct);
+            return;
+        }
+
+        if (request.Context.Only is { Length: > 0 } only
+            && !only.Any(kind => kind is "quickfix" or "source" or "source.fixAll"))
+        {
+            await server.SendResult(id!, Array.Empty<CodeAction>(), ct);
+            return;
+        }
+
+        var uri = request.TextDocument.Uri;
+        var text = docs.GetText(uri);
+        if (text is null)
+        {
+            await server.SendResult(id!, Array.Empty<CodeAction>(), ct);
+            return;
+        }
+
+        var issues = request.Context.Diagnostics
+            .Where(diagnostic => CodeActionService.IntersectsRange(diagnostic, request.Range, text))
+            .Select(diagnostic => CodeActionService.ToLintIssue(diagnostic, text))
+            .OfType<LintIssue>()
+            .ToArray();
+        var actions = CodeActionService.GetCodeActions(uri, text, issues, schema);
+        if (request.Context.Only is { Length: > 0 } requestedKinds)
+        {
+            actions = actions
+                .Where(action => action.Kind is not null
+                    && requestedKinds.Any(kind => action.Kind.Equals(kind, StringComparison.Ordinal)
+                        || action.Kind.StartsWith(kind + ".", StringComparison.Ordinal)))
+                .ToArray();
+        }
+        await server.SendResult(id!, actions, ct);
+    }
+    catch (Exception ex)
+    {
+        await server.SendError(id!, JsonRpcErrorCodes.InternalError, $"Code action error: {ex.Message}", ct);
+    }
+});
+
+// ---- Inlay Hints ----
+server.RegisterRequestHandler("textDocument/inlayHint", async (root, id, ct) =>
+{
+    try
+    {
+        var p = root.GetProperty("params");
+        var uri = p.GetProperty("textDocument").GetProperty("uri").GetString() ?? "";
+        var rangeElement = p.GetProperty("range");
+        var start = rangeElement.GetProperty("start");
+        var end = rangeElement.GetProperty("end");
+        var requestedRange = new JustyBase.NetezzaSqlLsp.Protocol.Range(
+            new Position(start.GetProperty("line").GetInt32(), start.GetProperty("character").GetInt32()),
+            new Position(end.GetProperty("line").GetInt32(), end.GetProperty("character").GetInt32()));
+        var text = docs.GetText(uri);
+        var hints = text is null
+            ? Array.Empty<InlayHint>()
+            : InlayHintService.GetInlayHints(text, schema, dialect, requestedRange);
+        await server.SendResult(id!, hints, ct);
+    }
+    catch (Exception ex)
+    {
+        await server.SendError(id!, JsonRpcErrorCodes.InternalError, $"Inlay hint error: {ex.Message}", ct);
+    }
+});
+
+// ---- Formatting ----
+server.RegisterRequestHandler("textDocument/formatting", async (root, id, ct) =>
+{
+    try
+    {
+        var p = root.GetProperty("params");
+        var uri = p.GetProperty("textDocument").GetProperty("uri").GetString() ?? "";
+        var text = docs.GetText(uri);
+        var formatted = text is null ? null : FormattingService.FormatDocument(text, dialect);
+        if (text is null || formatted is null || string.Equals(formatted, text, StringComparison.Ordinal))
+        {
+            await server.SendResult(id!, Array.Empty<TextEdit>(), ct);
+            return;
+        }
+
+        var lineStarts = LspTextUtilities.ComputeLineStarts(text);
+        var lastLine = Math.Max(0, lineStarts.Length - 1);
+        var range = new JustyBase.NetezzaSqlLsp.Protocol.Range(
+            new Position(0, 0),
+            new Position(lastLine, Math.Max(0, text.Length - lineStarts[lastLine])));
+        await server.SendResult(id!, new[] { new TextEdit(range, formatted) }, ct);
+    }
+    catch (Exception ex)
+    {
+        await server.SendError(id!, JsonRpcErrorCodes.InternalError, $"Formatting error: {ex.Message}", ct);
+    }
+});
+
 try
 {
     await server.RunAsync(shutdownCts.Token);
@@ -368,4 +514,16 @@ catch (OperationCanceledException) { /* graceful shutdown */ }
 catch (Exception ex)
 {
     await Console.Error.WriteLineAsync($"LSP server error: {ex.Message}");
+}
+
+static string[] ReadStringArray(JsonElement element, string propertyName)
+{
+    if (!element.TryGetProperty(propertyName, out var arrayEl) || arrayEl.ValueKind != JsonValueKind.Array)
+        return Array.Empty<string>();
+
+    return arrayEl.EnumerateArray()
+        .Where(item => item.ValueKind == JsonValueKind.String)
+        .Select(item => item.GetString() ?? "")
+        .Where(value => value.Length > 0)
+        .ToArray();
 }

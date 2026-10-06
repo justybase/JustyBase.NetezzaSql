@@ -179,6 +179,8 @@ public class NzCompletionEngine
                 }
                 else
                 {
+                    if (context == CompletionContext.AfterOn)
+                        TryAddJoinPredicates(suggestions, contextTokens);
                     AddColumnsFromScope(suggestions, fullTokens, astScope);
                     AddFunctions(suggestions);
                     AddKeywords(suggestions, SqlContext.WhereKeywords);
@@ -360,12 +362,43 @@ public class NzCompletionEngine
 
         if (!string.IsNullOrEmpty(filterPartial))
         {
-            suggestions = suggestions
-                .Where(s => s.Label.StartsWith(filterPartial, StringComparison.OrdinalIgnoreCase))
-                .ToList();
+            suggestions = FilterAndRank(suggestions, filterPartial);
+            return suggestions;
         }
 
         return suggestions.OrderBy(s => s.Priority).ThenBy(s => s.Label).ToList();
+    }
+
+    /// <summary>
+    /// Ranks candidate labels by match quality. Direct prefix matches keep the
+    /// historical prefix-only behavior; fuzzy tiers (compact spelling, word
+    /// starts, initials, fragments) only surface when no direct prefix exists.
+    /// </summary>
+    private static List<CompletionItem> FilterAndRank(List<CompletionItem> suggestions, string partial)
+    {
+        var scored = new List<(CompletionItem Item, int Score)>(suggestions.Count);
+        foreach (var suggestion in suggestions)
+        {
+            var score = CompletionMatchScorer.Compute(suggestion.Label, partial);
+            var qualifierSeparator = suggestion.Label.LastIndexOf('.');
+            if (qualifierSeparator >= 0 && qualifierSeparator + 1 < suggestion.Label.Length)
+            {
+                score = Math.Max(score, CompletionMatchScorer.Compute(
+                    suggestion.Label[(qualifierSeparator + 1)..], partial));
+            }
+            if (score > 0)
+                scored.Add((suggestion, score));
+        }
+
+        if (scored.Any(entry => entry.Score >= CompletionMatchScorer.Prefix))
+            scored = scored.Where(entry => entry.Score >= CompletionMatchScorer.Prefix).ToList();
+
+        return scored
+            .OrderBy(entry => entry.Item.Priority)
+            .ThenByDescending(entry => entry.Score)
+            .ThenBy(entry => entry.Item.Label, StringComparer.OrdinalIgnoreCase)
+            .Select(entry => entry.Item)
+            .ToList();
     }
 
     /// <summary>
@@ -452,8 +485,8 @@ public class NzCompletionEngine
         bool trailingFromComma = false)
     {
         var ctx = CompletionContext.TopLevel;
-        int parenDepth = 0;
         bool sawSelect = false;
+        var parentContexts = new Stack<(CompletionContext Context, bool SawSelect)>();
 
         if (tokens.Length >= 2 &&
             tokens[^1].Kind == NzToken.Dot &&
@@ -466,10 +499,20 @@ public class NzCompletionEngine
         {
             var t = tokens[i].Kind;
 
-            if (t == NzToken.LParen) parenDepth++;
-            if (t == NzToken.RParen) parenDepth--;
-
-            if (parenDepth > 0) continue;
+            if (t == NzToken.LParen)
+            {
+                parentContexts.Push((ctx, sawSelect));
+                continue;
+            }
+            if (t == NzToken.RParen)
+            {
+                if (parentContexts.TryPop(out var parent))
+                {
+                    ctx = parent.Context;
+                    sawSelect = parent.SawSelect;
+                }
+                continue;
+            }
 
             if (IsSelect(t)) { ctx = CompletionContext.AfterSelect; sawSelect = true; }
             else if (IsFrom(t)) ctx = CompletionContext.AfterFrom;
@@ -485,7 +528,6 @@ public class NzCompletionEngine
             else if (t == NzToken.Update)
             {
                 ctx = CompletionContext.AfterUpdate;
-                parenDepth = 0;
             }
             else if (t == NzToken.Set && ctx == CompletionContext.AfterUpdate)
                 ctx = CompletionContext.AfterSet;
@@ -547,7 +589,7 @@ public class NzCompletionEngine
             else if (t == NzToken.Semicolon)
             {
                 ctx = CompletionContext.TopLevel;
-                parenDepth = 0;
+                parentContexts.Clear();
             }
             else if (t == NzToken.Comma)
             {
@@ -954,6 +996,8 @@ public class NzCompletionEngine
     /// </summary>
     private void AddCtes(List<CompletionItem> list, Token<NzToken>[] tokens, ScopeBuilder? astScope = null)
     {
+        var positionVisibleCtes = _lastScopeCollector?.GetCteNamesInScope(_cursorPosition)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (astScope is not null)
         {
             // AST-based: CTE names from scope builder
@@ -963,6 +1007,9 @@ public class NzCompletionEngine
             {
                 if (table.IsCte || astScope.CurrentScope.Ctes.ContainsKey(table.Name.ToUpperInvariant()))
                 {
+                    if (positionVisibleCtes is { Count: > 0 }
+                        && !positionVisibleCtes.Contains(table.Name))
+                        continue;
                     list.Add(new CompletionItem(table.Name, CompletionKind.Cte, Priority: 5));
                     hasCtes = true;
                 }
@@ -971,12 +1018,138 @@ public class NzCompletionEngine
         }
 
         // Token-based: use scope collector for position-aware CTE visibility
-        if (_lastScopeCollector is not null)
+        if (positionVisibleCtes is not null)
         {
-            foreach (var name in _lastScopeCollector.GetCteNamesInScope(_cursorPosition))
+            foreach (var name in positionVisibleCtes)
             {
                 list.Add(new CompletionItem(name, CompletionKind.Cte, Priority: 5));
             }
+        }
+    }
+
+    /// <summary>
+    /// Suggests ON predicates from declared foreign keys between the last two
+    /// table sources in scope. Requires an <see cref="IForeignKeyProvider"/> schema.
+    /// </summary>
+    private void TryAddJoinPredicates(List<CompletionItem> list, Token<NzToken>[] tokens)
+    {
+        if (_schema is not IForeignKeyProvider provider)
+            return;
+
+        var candidates = GetJoinTableCandidates(tokens);
+        if (candidates.Count < 2)
+            return;
+
+        var left = candidates[^2];
+        var right = candidates[^1];
+        if (left.TableName.Equals(right.TableName, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(left.Schema, right.Schema, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        AddForeignKeyPredicates(list, provider, left, right);
+        AddForeignKeyPredicates(list, provider, right, left);
+    }
+
+    private List<(string TableName, string? Schema, string? Database, string Qualifier)> GetJoinTableCandidates(
+        Token<NzToken>[] tokens)
+    {
+        var queryTokens = CurrentQueryTokens(tokens);
+        return ExtractTableReferences(queryTokens)
+            .Select(reference => (reference.TableName, reference.Schema, reference.Database, reference.Alias ?? reference.TableName))
+            .ToList();
+    }
+
+    private static Token<NzToken>[] CurrentQueryTokens(Token<NzToken>[] tokens)
+    {
+        var depth = 0;
+        var lastSelectByDepth = new Dictionary<int, int>();
+
+        for (var i = 0; i < tokens.Length; i++)
+        {
+            if (tokens[i].Kind == NzToken.LParen)
+            {
+                depth++;
+                continue;
+            }
+            if (tokens[i].Kind == NzToken.RParen)
+            {
+                depth = Math.Max(0, depth - 1);
+                continue;
+            }
+            if (tokens[i].Kind == NzToken.Select)
+                lastSelectByDepth[depth] = i;
+        }
+
+        var targetDepth = depth;
+        if (!lastSelectByDepth.TryGetValue(targetDepth, out var lastSelectIndex))
+            return Array.Empty<Token<NzToken>>();
+
+        depth = targetDepth;
+        var result = new List<Token<NzToken>>();
+        for (var i = lastSelectIndex; i < tokens.Length; i++)
+        {
+            var token = tokens[i];
+            if (token.Kind == NzToken.LParen)
+            {
+                depth++;
+                continue;
+            }
+            if (token.Kind == NzToken.RParen)
+            {
+                depth = Math.Max(0, depth - 1);
+                continue;
+            }
+            if (depth == targetDepth)
+                result.Add(token);
+        }
+
+        return result.ToArray();
+    }
+
+    private void AddForeignKeyPredicates(
+        List<CompletionItem> list,
+        IForeignKeyProvider provider,
+        (string TableName, string? Schema, string? Database, string Qualifier) from,
+        (string TableName, string? Schema, string? Database, string Qualifier) to)
+    {
+        var fromInfo = _schema?.GetTable(from.Database, from.Schema, from.TableName);
+        var toInfo = _schema?.GetTable(to.Database, to.Schema, to.TableName);
+        var fromDatabase = from.Database ?? fromInfo?.Database;
+        var fromSchema = from.Schema ?? fromInfo?.Schema;
+        var toDatabase = to.Database ?? toInfo?.Database;
+        var toSchema = to.Schema ?? toInfo?.Schema;
+
+        var relations = provider.GetForeignKeys(fromDatabase, fromSchema, from.TableName);
+        if (relations is null)
+            return;
+
+        foreach (var relation in relations)
+        {
+            if (!relation.ReferencedTable.Equals(to.TableName, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (relation.ReferencedSchema is { Length: > 0 }
+                && !relation.ReferencedSchema.Equals(toSchema, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            if (relation.ReferencedDatabase is { Length: > 0 }
+                && !relation.ReferencedDatabase.Equals(toDatabase, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (relation.Columns.Count == 0 || relation.Columns.Count != relation.ReferencedColumns.Count)
+                continue;
+
+            var predicates = relation.Columns
+                .Zip(relation.ReferencedColumns, (local, referenced) =>
+                    $"{from.Qualifier}.{local} = {to.Qualifier}.{referenced}");
+            var label = string.Join(" AND ", predicates);
+
+            if (list.All(item => !item.Label.Equals(label, StringComparison.OrdinalIgnoreCase)))
+                list.Add(new CompletionItem(label, CompletionKind.Column, Detail: "foreign key", Priority: -10));
         }
     }
 
@@ -984,8 +1157,16 @@ public class NzCompletionEngine
     {
         if (astScope is not null)
         {
-            // AST-based: use ScopeBuilder's visible tables (handles CTEs, subquery aliases, etc.)
-            var visibleTables = astScope.GetAllVisibleTables();
+            // AST-based: use ScopeBuilder's visible relations, but exclude CTE
+            // definitions that are not referenced by any query scope containing
+            // the cursor. ScopeBuilder exposes the whole WITH scope, including
+            // sibling CTEs that are not part of the current FROM clause.
+            var referencedRelations = GetRelationNamesAtCursor(tokens, _cursorPosition);
+            var visibleTables = astScope.GetAllVisibleTables()
+                .Where(table => !table.IsCte
+                    || referencedRelations.Contains(table.Name)
+                    || (table.Alias is not null && referencedRelations.Contains(table.Alias)))
+                .ToArray();
             bool hasTables = false;
             foreach (var table in visibleTables)
             {
@@ -995,6 +1176,12 @@ public class NzCompletionEngine
                 foreach (var col in table.Columns)
                     list.Add(CreateColumnItem(col, displayName));
             }
+            // If an unqualified column occurs on multiple visible relations,
+            // offer qualified labels as well so the user can disambiguate it.
+            AddAmbiguousQualifiedColumns(list, visibleTables
+                .Where(table => table.Columns is { Count: > 0 })
+                .SelectMany(table => table.Columns!.Select(column =>
+                    (Qualifier: table.Alias ?? table.Name, Column: column))));
             // If AST found tables, use it exclusively (it's more accurate)
             if (hasTables) return;
             // Otherwise fall through to token-based
@@ -1002,8 +1189,10 @@ public class NzCompletionEngine
 
         // Fallback: token-based table reference extraction
         var tableRefs = ExtractTableReferences(tokens);
-        foreach (var (tableName, schema, database, _) in tableRefs)
+        var columnCandidates = new List<(string Qualifier, ColumnInfo Column)>();
+        foreach (var (tableName, schema, database, alias) in tableRefs)
         {
+            var displayName = alias ?? tableName;
             // Try schema provider first
             if (_schema is not null)
             {
@@ -1011,7 +1200,10 @@ public class NzCompletionEngine
                 if (info?.Columns is { Count: > 0 })
                 {
                     foreach (var col in info.Columns)
-                        list.Add(CreateColumnItem(col, tableName));
+                    {
+                        list.Add(CreateColumnItem(col, displayName));
+                        columnCandidates.Add((displayName, col));
+                    }
                     continue;
                 }
             }
@@ -1021,7 +1213,97 @@ public class NzCompletionEngine
             if (cteCols is not null && cteCols.Count > 0)
             {
                 foreach (var col in cteCols)
-                    list.Add(CreateColumnItem(col, tableName));
+                {
+                    var column = new ColumnInfo(col);
+                    list.Add(CreateColumnItem(column, displayName));
+                    columnCandidates.Add((displayName, column));
+                }
+            }
+        }
+        AddAmbiguousQualifiedColumns(list, columnCandidates);
+    }
+
+    private static HashSet<string> GetRelationNamesAtCursor(Token<NzToken>[] tokens, int cursorPosition)
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var tokenDepths = new int[tokens.Length];
+        var lastSelectByDepth = new Dictionary<int, int>();
+        var depth = 0;
+        var tokenCount = 0;
+
+        for (var i = 0; i < tokens.Length; i++)
+        {
+            if (tokens[i].Span.Position.Absolute >= cursorPosition)
+                break;
+
+            var kind = tokens[i].Kind;
+            if (kind == NzToken.LParen)
+            {
+                tokenDepths[i] = depth;
+                depth++;
+            }
+            else if (kind == NzToken.RParen)
+            {
+                depth = Math.Max(0, depth - 1);
+                tokenDepths[i] = depth;
+            }
+            else
+            {
+                tokenDepths[i] = depth;
+                if (kind == NzToken.Select)
+                    lastSelectByDepth[depth] = i;
+            }
+
+            tokenCount = i + 1;
+        }
+
+        // Include the current query and enclosing query scopes so correlated
+        // subqueries can still complete columns from their outer FROM clauses.
+        for (var queryDepth = 0; queryDepth <= depth; queryDepth++)
+        {
+            if (!lastSelectByDepth.TryGetValue(queryDepth, out var selectIndex))
+                continue;
+
+            var queryTokens = new List<Token<NzToken>>();
+            for (var i = selectIndex; i < tokenCount; i++)
+            {
+                if (tokenDepths[i] != queryDepth)
+                    continue;
+                if (tokens[i].Kind == NzToken.Semicolon)
+                    break;
+                queryTokens.Add(tokens[i]);
+            }
+
+            foreach (var reference in ExtractTableReferences(queryTokens.ToArray()))
+            {
+                names.Add(reference.TableName);
+                if (reference.Alias is not null)
+                    names.Add(reference.Alias);
+            }
+        }
+
+        return names;
+    }
+
+    private static void AddAmbiguousQualifiedColumns(
+        List<CompletionItem> list,
+        IEnumerable<(string Qualifier, ColumnInfo Column)> candidates)
+    {
+        foreach (var group in candidates
+                     .GroupBy(entry => entry.Column.Name, StringComparer.OrdinalIgnoreCase)
+                     .Where(group => group.Select(entry => entry.Qualifier)
+                         .Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1))
+        {
+            foreach (var entry in group)
+            {
+                var qualified = $"{entry.Qualifier}.{entry.Column.Name}";
+                list.Add(new CompletionItem(
+                    qualified,
+                    CompletionKind.Column,
+                    Detail: entry.Column.DataType,
+                    Priority: 3,
+                    InsertText: qualified,
+                    Documentation: entry.Column.Description));
             }
         }
     }
@@ -1422,27 +1704,146 @@ public class NzCompletionEngine
             string.IsNullOrEmpty(database) ? null : database), i - start);
     }
 
-    private static List<CompletionItem> TryGetVariableCompletions(string sql, int cursorPosition)
+    private static readonly string[] BuiltInVariableNames =
     {
+        "ROWCOUNT", "SQLCODE", "SQLSTATE", "ERROR", "MESSAGE"
+    };
+
+    private static readonly HashSet<string> VariableTypeNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "INT", "INTEGER", "INT2", "INT4", "INT8", "BIGINT", "SMALLINT", "BYTEINT",
+        "FLOAT", "FLOAT4", "FLOAT8", "REAL", "DOUBLE", "NUMERIC", "DECIMAL",
+        "VARCHAR", "CHAR", "NCHAR", "NVARCHAR", "BPCHAR", "CHARACTER", "TEXT",
+        "DATE", "TIME", "TIMESTAMP", "BOOLEAN", "BOOL", "VARRAY", "RECORD", "ALIAS"
+    };
+
+    private List<CompletionItem> TryGetVariableCompletions(string sql, int cursorPosition)
+    {
+        var (sigil, prefix, valid) = ResolveVariableSigil(sql, cursorPosition);
+        if (!valid)
+            return [];
+
+        var closing = sigil is "{" or "${" ? "}" : string.Empty;
         var items = new List<CompletionItem>();
-        if (cursorPosition <= 0) return items;
 
-        var start = cursorPosition - 1;
-        while (start >= 0 && (char.IsLetterOrDigit(sql[start]) || sql[start] is '_' or '&'))
-            start--;
-        start++;
-
-        var word = sql[start..cursorPosition];
-        if (!word.StartsWith("&", StringComparison.Ordinal)) return items;
-
-        var prefix = word[1..];
-        foreach (var name in new[] { "ROWCOUNT", "SQLCODE", "SQLSTATE", "ERROR", "MESSAGE" })
+        foreach (var name in BuiltInVariableNames)
         {
             if (prefix.Length == 0 || name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                items.Add(new CompletionItem($"&{name}", CompletionKind.Variable, Priority: 15));
+                items.Add(new CompletionItem($"{sigil}{name}{closing}", CompletionKind.Variable, Priority: 15));
+        }
+
+        foreach (var declared in GetDeclaredVariables(sql, cursorPosition))
+        {
+            if (prefix.Length > 0 && !declared.Label.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var label = $"{sigil}{declared.Label}{closing}";
+            if (items.All(item => !item.Label.Equals(label, StringComparison.OrdinalIgnoreCase)))
+                items.Add(new CompletionItem(label, CompletionKind.Variable, Priority: 15));
         }
 
         return items;
+    }
+
+    /// <summary>
+    /// Resolves the sigil and typed prefix for script/procedure variable forms:
+    /// <c>&amp;name</c>, <c>$name</c>, <c>{name}</c> and <c>${name}</c>.
+    /// </summary>
+    private static (string Sigil, string Prefix, bool Valid) ResolveVariableSigil(string sql, int cursorPosition)
+    {
+        var start = cursorPosition;
+        while (start > 0 && (char.IsLetterOrDigit(sql[start - 1]) || sql[start - 1] == '_'))
+            start--;
+        var prefix = sql[start..cursorPosition];
+
+        if (start > 0)
+        {
+            var before = sql[start - 1];
+            if (before is '&' or '$')
+                return (before.ToString(), prefix, true);
+            if (before == '{')
+                return start >= 2 && sql[start - 2] == '$' ? ("${", prefix, true) : ("{", prefix, true);
+        }
+
+        if (cursorPosition > 0)
+        {
+            var last = sql[cursorPosition - 1];
+            if (last is '&' or '$')
+                return (last.ToString(), string.Empty, true);
+            if (last == '{')
+                return cursorPosition >= 2 && sql[cursorPosition - 2] == '$'
+                    ? ("${", string.Empty, true)
+                    : ("{", string.Empty, true);
+        }
+
+        return (string.Empty, prefix, false);
+    }
+
+    /// <summary>Collects declared variables by pairing identifiers with known type names.</summary>
+    private List<CompletionItem> GetDeclaredVariables(string sql, int cursorPosition)
+    {
+        var names = new List<CompletionItem>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            var tokens = DialectRuntime.Tokenize(sql, _dialect).ToArray();
+            var procedureStartIndex = -1;
+            var declareIndex = -1;
+            var bodyBeginIndex = -1;
+            for (var i = 0; i < tokens.Length; i++)
+            {
+                if (tokens[i].Span.Position.Absolute >= cursorPosition)
+                    break;
+                var tokenText = tokens[i].ToStringValue();
+                if (tokenText.Equals("PROCEDURE", StringComparison.OrdinalIgnoreCase))
+                {
+                    procedureStartIndex = i;
+                    declareIndex = -1;
+                    bodyBeginIndex = -1;
+                }
+                else if (procedureStartIndex >= 0 && tokenText.Equals("END_PROC", StringComparison.OrdinalIgnoreCase))
+                {
+                    procedureStartIndex = -1;
+                    declareIndex = -1;
+                    bodyBeginIndex = -1;
+                }
+                else if (procedureStartIndex >= 0 && tokenText.Equals("DECLARE", StringComparison.OrdinalIgnoreCase))
+                {
+                    declareIndex = i;
+                    bodyBeginIndex = -1;
+                }
+                else if (declareIndex >= 0 && bodyBeginIndex < 0
+                         && tokenText.Equals("BEGIN", StringComparison.OrdinalIgnoreCase))
+                {
+                    bodyBeginIndex = i;
+                }
+            }
+
+            // Only expose declarations from a PL/SQL DECLARE section while the
+            // cursor is in its executable body. This avoids treating DDL columns
+            // such as CREATE TABLE t (id INT4) as variables.
+            if (procedureStartIndex < 0 || declareIndex < procedureStartIndex || bodyBeginIndex <= declareIndex)
+                return names;
+
+            for (var i = declareIndex + 1; i + 1 < bodyBeginIndex; i++)
+            {
+                if (!tokens[i].Kind.IsIdentifierLike())
+                    continue;
+                if (!VariableTypeNames.Contains(tokens[i + 1].ToStringValue()))
+                    continue;
+
+                var name = tokens[i].ToIdentifierText();
+                if (!string.IsNullOrEmpty(name) && seen.Add(name))
+                    names.Add(new CompletionItem(name, CompletionKind.Variable, Priority: 15));
+            }
+        }
+        catch
+        {
+            // Declaration scanning is best-effort and must never break completion.
+        }
+
+        return names;
     }
 
     private static bool IsClauseKeyword(string word)

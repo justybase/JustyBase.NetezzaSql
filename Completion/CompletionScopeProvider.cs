@@ -38,10 +38,10 @@ public class CompletionScopeProvider
         var stmt = parser.Parse();
         if (stmt is null) return null;
 
-        // Only use AST scope when parsing produced no errors — otherwise
-        // the scope may have incomplete or incorrect registrations
-        // (e.g., WITH ... AS (...) ... WHERE alias. with trailing dot)
-        if (parser.Errors.Count > 0) return null;
+        // Editor SQL is often incomplete at the caret. A recoverable partial
+        // statement can still carry useful FROM/CTE scope, so use the AST when
+        // the parser returned one and let the caller use token fallback only
+        // when parsing could not produce a statement at all.
 
         var builder = new ScopeBuilder();
         var walker = new ScopeWalker(builder, _schema, _dialect);
@@ -323,7 +323,7 @@ internal class ScopeWalker
         return info?.Columns;
     }
 
-    private static List<ColumnInfo> InferSubqueryColumns(SelectStatement stmt)
+    private List<ColumnInfo> InferSubqueryColumns(SelectStatement stmt)
     {
         var cols = new List<ColumnInfo>();
         foreach (var item in stmt.SelectList)
@@ -333,7 +333,41 @@ internal class ScopeWalker
                 name = cr.Name;
             if (name is not null)
                 cols.Add(new ColumnInfo(name));
+            else if (item.Expression is StarExpression star)
+            {
+                foreach (var reference in stmt.From ?? Array.Empty<TableReference>())
+                {
+                    AddExpandedSourceColumns(reference.Source, star.Qualifier, cols);
+                    foreach (var join in reference.Joins ?? Array.Empty<JoinClause>())
+                        AddExpandedSourceColumns(join.Source, star.Qualifier, cols);
+                }
+            }
         }
         return cols;
+    }
+
+    private void AddExpandedSourceColumns(TableSource source, string? qualifier, List<ColumnInfo> columns)
+    {
+        if (qualifier is not null
+            && !string.Equals(source.Alias, qualifier, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(source.Table?.Name, qualifier, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        if (source.Table is not null && _schema is not null)
+        {
+            var table = CompletionSchemaLookup.GetTable(
+                _schema, _dialect, source.Table.Database, source.Table.Schema, source.Table.Name);
+            if (table?.Columns is { Count: > 0 })
+            {
+                columns.AddRange(table.Columns.Select(column => new ColumnInfo(
+                    column.Name, DataType: column.DataType, Description: column.Description)));
+                return;
+            }
+        }
+
+        if (source.Subquery is not null)
+            columns.AddRange(InferSubqueryColumns(source.Subquery));
     }
 }

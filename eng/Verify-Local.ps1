@@ -18,13 +18,17 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'dotnet build failed.' }
 
     Write-Host '==> dotnet test' -ForegroundColor Cyan
-    dotnet test .\JustyBase.NetezzaSql.sln -c $Configuration --no-build
+    dotnet test .\JustyBase.NetezzaSql.sln -c $Configuration --no-build --filter "Category!=Performance"
     if ($LASTEXITCODE -ne 0) { throw 'dotnet test failed.' }
 
     Write-Host '==> per-library coverage' -ForegroundColor Cyan
     & (Join-Path $PSScriptRoot 'Test-Coverage.ps1') -Configuration $Configuration
 
     if ($FullCi) {
+        Write-Host '==> parser performance budgets' -ForegroundColor Cyan
+        dotnet test .\tests\JustyBase.NetezzaSql.Tests\JustyBase.NetezzaSql.Tests.csproj -c $Configuration --no-build --filter "Category=Performance"
+        if ($LASTEXITCODE -ne 0) { throw 'parser performance budgets failed.' }
+
         Write-Host '==> vulnerable packages' -ForegroundColor Cyan
         dotnet list .\JustyBase.NetezzaSql.sln package --vulnerable --include-transitive
         if ($LASTEXITCODE -ne 0) { throw 'vulnerable package check failed.' }

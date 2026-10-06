@@ -60,11 +60,14 @@ public sealed class DdlSurfaceCoverageTests
         var procedureBuffer = new StringBuilder();
         var synonymBuffer = new StringBuilder();
 
-        builder.AppendCreateView(viewBuffer, new NetezzaViewDdlInput("DB", "S", "V", "SELECT 1", "view's comment"));
+        builder.AppendCreateView(viewBuffer, new NetezzaViewDdlInput(
+            "DB", "S", "V", "SELECT 1", "view's comment",
+            [new NetezzaColumnDdl("ID", "INTEGER", "identifier")]));
         builder.AppendCreateProcedure(procedureBuffer, new NetezzaProcedureDdlInput("DB", "S", "P", "INTEGER", "RETURN 1;", "(p INTEGER)", ExecuteAsOwner: true));
         builder.AppendCreateSynonym(synonymBuffer, new NetezzaSynonymDdlInput("DB", "S", "ALIAS", "DB.S.T", Owner: "OWNER"));
 
         Assert.Contains("COMMENT ON VIEW DB.S.V IS 'view''s comment'", viewBuffer.ToString(), StringComparison.Ordinal);
+        Assert.Contains("COMMENT ON COLUMN DB.S.V.ID IS 'identifier';", viewBuffer.ToString(), StringComparison.Ordinal);
         Assert.Contains("P(p INTEGER)", procedureBuffer.ToString(), StringComparison.Ordinal);
         Assert.Contains("EXECUTE AS OWNER", procedureBuffer.ToString(), StringComparison.Ordinal);
         Assert.Contains("CREATE SYNONYM DB.OWNER.ALIAS", synonymBuffer.ToString(), StringComparison.Ordinal);

@@ -7,6 +7,8 @@
     <IsAotCompatible>true</IsAotCompatible>
     <RootNamespace>JustyBase.NetezzaDdl</RootNamespace>
     <AssemblyName>JustyBase.NetezzaDdl</AssemblyName>
+    <PackageDescription>Netezza DDL text builders, identifier/literal helpers, import SQL, and external-table option mapping.</PackageDescription>
+    <PackageTags>netezza;ddl;external-table;justybase</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
