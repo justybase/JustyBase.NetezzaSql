@@ -381,6 +381,11 @@ public partial class NzSqlParser
     /// Parses the shared ANSI OFFSET/FETCH tail. Dialect parsers reuse this
     /// method and may still add their own clauses after it.
     /// </summary>
+    /// <summary>
+    /// Netezza rejects FETCH FIRST/NEXT; ANSI dialects override this.
+    /// </summary>
+    protected virtual bool SupportsFetchFirst => false;
+
     protected virtual OffsetFetchClause ParseOffsetFetchClause()
     {
         var start = Peek();
@@ -408,6 +413,13 @@ public partial class NzSqlParser
         if (Peek().Kind == NzToken.Fetch)
         {
             var fetchToken = Advance();
+            if (!SupportsFetchFirst)
+            {
+                AddParserError(
+                    "Netezza does not support FETCH FIRST/NEXT; use LIMIT and OFFSET",
+                    fetchToken,
+                    "PAR001");
+            }
             start = offset is null ? fetchToken : start;
 
             if (Peek().Kind == NzToken.First)
@@ -785,7 +797,17 @@ public partial class NzSqlParser
             }
         }
 
-        if (Peek().Kind == NzToken.Outer) Advance();
+        if (Peek().Kind == NzToken.Outer)
+        {
+            var outerToken = Peek();
+            Advance();
+            if (!joinTypeSet)
+            {
+                _errors.Add(new ValidationError(
+                    "OUTER JOIN requires LEFT, RIGHT, or FULL", "error",
+                    SourcePosition.FromToken(outerToken), "PAR001"));
+            }
+        }
 
         if (Peek().Kind != NzToken.Join) return null;
         var joinTok = Advance();

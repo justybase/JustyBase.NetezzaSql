@@ -394,8 +394,12 @@ public partial class NzSqlParser
                 Expression? where = null;
                 if (Peek().Kind == NzToken.Where)
                 {
+                    var whereToken = Peek();
                     Advance();
                     where = ParseExpression();
+                    AddParserError(
+                        "Netezza does not support a trailing WHERE on a MERGE UPDATE action",
+                        whereToken, "PAR001");
                 }
 
                 return new MergeMatchedUpdateClause(FromToken(whenTok), condition, setItems, where);

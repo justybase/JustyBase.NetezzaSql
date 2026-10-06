@@ -41,6 +41,16 @@ public partial class NzSqlParser
                     Peek(), "PAR121");
             }
             var query = ParseSelectStatement();
+            if (query.From is null || query.From.Count == 0)
+            {
+                AddParserError("Netezza materialized views require a table source",
+                    createTok, "PAR001");
+            }
+            if (query.Where is not null)
+            {
+                AddParserError("Netezza materialized views do not support WHERE",
+                    createTok, "PAR001");
+            }
             if (Peek().Kind == NzToken.RParen) Advance();
             return new CreateViewStatement(FromToken(createTok), view, orReplace, null, query);
         }
@@ -631,7 +641,15 @@ public partial class NzSqlParser
         string objectType;
         var typeTokKind = Peek().Kind;
 
-        if (typeTokKind == NzToken.External)
+        if (typeTokKind == NzToken.Materialized)
+        {
+            var materializedTok = Advance();
+            Expect(NzToken.View);
+            objectType = "VIEW";
+            AddParserError("Netezza does not support DROP MATERIALIZED VIEW; use DROP VIEW",
+                materializedTok, "PAR001");
+        }
+        else if (typeTokKind == NzToken.External)
         {
             Advance();
             Expect(NzToken.Table);

@@ -45,12 +45,16 @@ public sealed class AnsiDialectConformanceTests
         var mssql = SqlDialectCapabilitiesCatalog.For(SqlDialect.Mssql);
         var mysql = SqlDialectCapabilitiesCatalog.For(SqlDialect.MySql);
 
-        Assert.All(new[] { netezza, oracle, db2, mssql }, capabilities =>
+        Assert.All(new[] { oracle, db2, mssql }, capabilities =>
         {
             Assert.True(capabilities.SupportsMerge);
             Assert.True(capabilities.SupportsFetchFirst);
             Assert.True(capabilities.SupportsAnsiOffsetFetch);
         });
+        // Live Netezza rejects FETCH FIRST/NEXT (live evidence 2026-10-06).
+        Assert.True(netezza.SupportsMerge);
+        Assert.False(netezza.SupportsFetchFirst);
+        Assert.False(netezza.SupportsAnsiOffsetFetch);
         Assert.True(netezza.SupportsLimit);
         Assert.False(oracle.SupportsLimit);
         Assert.False(db2.SupportsLimit);
@@ -84,7 +88,7 @@ public sealed class AnsiDialectConformanceTests
     [Theory]
     [InlineData(SqlDialect.Netezza, "SELECT id FROM t LIMIT 10")]
     [InlineData(SqlDialect.Netezza, "SELECT id FROM t LIMIT 10 OFFSET 3")]
-    [InlineData(SqlDialect.Netezza, "SELECT id FROM t OFFSET 3 ROWS FETCH NEXT 10 ROWS ONLY")]
+    [InlineData(SqlDialect.Netezza, "SELECT id FROM t OFFSET 3 ROWS")]
     [InlineData(SqlDialect.Oracle, "SELECT id FROM t OFFSET 3 ROWS FETCH FIRST 10 ROWS ONLY")]
     [InlineData(SqlDialect.Oracle, "SELECT id FROM t OFFSET 3 ROWS FETCH NEXT 10 ROWS ONLY")]
     [InlineData(SqlDialect.Oracle, "SELECT id FROM t OFFSET 3 ROWS")]
@@ -127,6 +131,16 @@ public sealed class AnsiDialectConformanceTests
                 formatted.Contains("OFFSET", StringComparison.OrdinalIgnoreCase) ||
                 formatted.Contains("FETCH", StringComparison.OrdinalIgnoreCase),
                 formatted);
+    }
+
+    [Fact]
+    public void Netezza_RejectsFetchFirstAfterOffset()
+    {
+        // Live Netezza rejects FETCH FIRST/NEXT; the live outcome overrides the
+        // earlier ANSI-shaped expectation.
+        var (_, errors) = Parse("SELECT id FROM t OFFSET 3 ROWS FETCH NEXT 10 ROWS ONLY", SqlDialect.Netezza);
+        Assert.NotEmpty(errors);
+        Assert.Contains(errors, error => error.Code == "PAR001");
     }
 
     [Fact]

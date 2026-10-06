@@ -44,43 +44,43 @@ public sealed class NzSqlValidatorNetezzaTests
     }
 
     // ========================================================================
-    // FETCH FIRST — row limiting
+    // FETCH FIRST — rejected by live Netezza (live evidence 2026-10-06)
     // ========================================================================
 
     [Fact]
     public void Validate_FetchFirst_NRowsOnly()
     {
-        ExpectValid("SELECT * FROM EMPLOYEES FETCH FIRST 10 ROWS ONLY;");
+        ExpectSyntaxError("SELECT * FROM EMPLOYEES FETCH FIRST 10 ROWS ONLY;");
     }
 
     [Fact]
     public void Validate_FetchFirst_SingleRowOnly()
     {
-        ExpectValid("SELECT * FROM EMPLOYEES FETCH FIRST 1 ROW ONLY;");
+        ExpectSyntaxError("SELECT * FROM EMPLOYEES FETCH FIRST 1 ROW ONLY;");
     }
 
     [Fact]
     public void Validate_FetchFirst_WithoutCountDefaultsTo1()
     {
-        ExpectValid("SELECT * FROM EMPLOYEES FETCH FIRST ROW ONLY;");
+        ExpectSyntaxError("SELECT * FROM EMPLOYEES FETCH FIRST ROW ONLY;");
     }
 
     [Fact]
     public void Validate_FetchFirst_AfterOrderBy()
     {
-        ExpectValid("SELECT * FROM EMPLOYEES ORDER BY SALARY DESC FETCH FIRST 5 ROWS ONLY;");
+        ExpectSyntaxError("SELECT * FROM EMPLOYEES ORDER BY SALARY DESC FETCH FIRST 5 ROWS ONLY;");
     }
 
     [Fact]
     public void Validate_FetchFirst_AfterLimit()
     {
-        ExpectValid("SELECT * FROM EMPLOYEES LIMIT 100 FETCH FIRST 10 ROWS ONLY;");
+        ExpectSyntaxError("SELECT * FROM EMPLOYEES LIMIT 100 FETCH FIRST 10 ROWS ONLY;");
     }
 
     [Fact]
     public void Validate_FetchFirst_WithOffset()
     {
-        ExpectValid("SELECT * FROM EMPLOYEES ORDER BY SALARY LIMIT 100 OFFSET 10 FETCH FIRST 5 ROWS ONLY;");
+        ExpectSyntaxError("SELECT * FROM EMPLOYEES ORDER BY SALARY LIMIT 100 OFFSET 10 FETCH FIRST 5 ROWS ONLY;");
     }
 
     // ========================================================================
@@ -162,7 +162,7 @@ public sealed class NzSqlValidatorNetezzaTests
     [Fact]
     public void Validate_BuiltinValues_InExpressions()
     {
-        ExpectValid("SELECT CURRENT_TIMESTAMP + INTERVAL '1' DAY FROM TESTDB..EMPLOYEES;", _schema);
+        SqlTestHelpers.ExpectSyntaxError("SELECT CURRENT_TIMESTAMP + INTERVAL '1' DAY FROM TESTDB..EMPLOYEES;", _schema);
     }
 
     // ========================================================================

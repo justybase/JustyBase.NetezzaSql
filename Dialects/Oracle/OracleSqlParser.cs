@@ -15,9 +15,11 @@ namespace JustyBase.NetezzaSqlParser.Parser;
 /// </summary>
 public partial class OracleSqlParser : NzSqlParser
 {
-    public OracleSqlParser(Token<NzToken>[] tokens) : base(tokens)
+    public OracleSqlParser(Token<NzToken>[] tokens) : base(tokens, strictNetezzaIntervalSyntax: false)
     {
     }
+
+    protected override bool SupportsFetchFirst => true;
 
     // ====== Top-Level Dispatch ======
 

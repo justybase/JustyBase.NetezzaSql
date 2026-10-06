@@ -9,9 +9,11 @@ public sealed partial class PostgreSqlSqlParser : NzSqlParser
 {
     private bool _unsupportedSyntaxReported;
 
-    public PostgreSqlSqlParser(Token<NzToken>[] tokens) : base(tokens)
+    public PostgreSqlSqlParser(Token<NzToken>[] tokens) : base(tokens, strictNetezzaIntervalSyntax: false)
     {
     }
+
+    protected override bool SupportsFetchFirst => true;
 
     public override Statement? Parse()
     {

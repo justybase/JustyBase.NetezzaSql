@@ -48,8 +48,8 @@ public static class SqlDialectCapabilitiesCatalog
             SupportsLimit: false),
         _ => new(
             SupportsMerge: true,
-            SupportsFetchFirst: true,
-            SupportsAnsiOffsetFetch: true,
+            SupportsFetchFirst: false,
+            SupportsAnsiOffsetFetch: false,
             SupportsLimit: true),
     };
 }

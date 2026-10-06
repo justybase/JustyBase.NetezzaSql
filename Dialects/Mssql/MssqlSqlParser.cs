@@ -13,9 +13,11 @@ namespace JustyBase.NetezzaSqlParser.Parser;
 /// </summary>
 public partial class MssqlSqlParser : NzSqlParser
 {
-    public MssqlSqlParser(Token<NzToken>[] tokens) : base(tokens)
+    public MssqlSqlParser(Token<NzToken>[] tokens) : base(tokens, strictNetezzaIntervalSyntax: false)
     {
     }
+
+    protected override bool SupportsFetchFirst => true;
 
     protected override bool SupportsEmptyQualifiedNameSegment => false;
 

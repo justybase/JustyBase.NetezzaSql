@@ -125,6 +125,7 @@ public partial class NzSqlParser
         NzToken.Identifier or NzToken.QuotedIdentifier or NzToken.Replace
         or NzToken.Owner or NzToken.Hash or NzToken.Start or NzToken.Out or NzToken.Inout
         or NzToken.Perform or NzToken.Reverse or NzToken.Warning or NzToken.Within
+        or NzToken.Next
         // PostgreSQL lexes legacy Netezza words separately so dialect-specific
         // validation can reject storage clauses without rejecting a column or
         // relation that happens to use one of those words as its name.
