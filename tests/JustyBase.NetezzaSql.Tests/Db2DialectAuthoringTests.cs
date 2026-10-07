@@ -1,15 +1,16 @@
-using JustyBase.NetezzaSqlLsp.Services;
 using JustyBase.NetezzaSqlParser.Authoring;
 using JustyBase.NetezzaSqlParser.Caching;
+using JustyBase.NetezzaSqlParser.Completion;
 using JustyBase.NetezzaSqlParser.Dialects;
 using JustyBase.NetezzaSqlParser.Lexer;
 
 namespace JustyBase.Tests.NetezzaSqlParser;
 
 /// <summary>
-/// LSP-level Db2 dialect switching tests (mirror of OracleDialectLspTests).
+/// Db2 dialect switching tests against the shared parser authoring stack
+/// (mirror of OracleDialectAuthoringTests).
 /// </summary>
-public sealed class Db2DialectLspTests
+public sealed class Db2DialectAuthoringTests
 {
     [Fact]
     public void ParseSession_Db2Dialect_ParsesFetchFirstWithUr()
@@ -51,44 +52,54 @@ public sealed class Db2DialectLspTests
         Assert.Same(db2, coordinator.GetOrCreate("doc1", SqlDialect.Db2));
     }
 
+    private static IReadOnlyList<JustyBase.NetezzaSqlParser.Linter.LintIssue> CheckDb2(string sql) =>
+        DialectRuntime.QualityRules(SqlDialect.Db2).AllRules.SelectMany(r => r.Check(sql)).ToList();
+
     [Fact]
     public void Lint_Db2Dialect_ReportsDb2001SelectStar()
     {
-        var diagnostics = LintService.Lint("SELECT * FROM employees", null, SqlDialect.Db2);
-        Assert.Contains(diagnostics, d => d.Code == "DB2001");
-        Assert.All(diagnostics, d => Assert.Equal("Db2 SQL", d.Source));
+        var issues = CheckDb2("SELECT * FROM employees");
+        Assert.Contains(issues, d => d.RuleId == "DB2001");
+        Assert.Equal("Db2 SQL", DialectRuntime.DiagnosticSource(SqlDialect.Db2));
     }
 
     [Fact]
     public void Lint_Db2Dialect_DoesNotReportNzRules()
     {
-        var diagnostics = LintService.Lint("SELECT * FROM employees", null, SqlDialect.Db2);
-        Assert.Contains(diagnostics, d => d.Code == "DB2001");
-        Assert.DoesNotContain(diagnostics, d => d.Code?.StartsWith("NZ", StringComparison.Ordinal) == true);
-        Assert.DoesNotContain(diagnostics, d => d.Code?.StartsWith("ORA", StringComparison.Ordinal) == true);
+        var issues = CheckDb2("SELECT * FROM employees");
+        Assert.Contains(issues, d => d.RuleId == "DB2001");
+        Assert.DoesNotContain(issues, d => d.RuleId.StartsWith("NZ", StringComparison.Ordinal));
+        Assert.DoesNotContain(issues, d => d.RuleId.StartsWith("ORA", StringComparison.Ordinal));
     }
 
     [Fact]
     public async Task Completion_Db2Dialect_OffersDb2Functions()
     {
-        var completions = await CompletionService.GetCompletions("SELECT", 0, 6, null, SqlDialect.Db2);
-        Assert.NotNull(completions.Items);
-        Assert.Contains(completions.Items!, i => i.Label.Equals("COALESCE", StringComparison.OrdinalIgnoreCase));
-        Assert.Contains(completions.Items!, i => i.Label.Equals("CONCAT", StringComparison.OrdinalIgnoreCase));
+        var result = await CompletionOrchestrator.GetCompletions("SELECT", 6, null, SqlDialect.Db2);
+        Assert.Contains(result.EngineItems, i => i.Label.Equals("COALESCE", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.EngineItems, i => i.Label.Equals("CONCAT", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
     public void Hover_Db2Dialect_ExplainsDb2DataType()
     {
-        var hover = HoverService.GetHover("SELECT DECFLOAT FROM t", 0, 10, null, SqlDialect.Db2);
+        const string sql = "SELECT DECFLOAT FROM t";
+        var hover = NzHoverService.GetHover(
+            sql, 10, null,
+            catalog: DialectRuntime.AuthoringCatalog(SqlDialect.Db2),
+            dialect: SqlDialect.Db2);
         Assert.NotNull(hover);
-        Assert.Contains("DECFLOAT", hover!.Contents!.Value);
+        Assert.Contains("DECFLOAT", hover!.Content, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
     public void SignatureHelp_Db2Dialect_ReturnsDb2Signatures()
     {
-        var help = SignatureHelpService.GetSignatureHelp("SELECT COALESCE(", 0, 16, SqlDialect.Db2);
+        const string sql = "SELECT COALESCE(";
+        var help = NzSignatureHelpService.GetSignatureHelp(
+            sql, sql.Length,
+            catalog: DialectRuntime.AuthoringCatalog(SqlDialect.Db2),
+            dialect: SqlDialect.Db2);
         Assert.NotNull(help);
         Assert.Contains(help!.Signatures, s => s.Label.Contains("COALESCE", StringComparison.OrdinalIgnoreCase));
     }
@@ -102,14 +113,13 @@ public sealed class Db2DialectLspTests
     }
 
     [Theory]
-    [InlineData(new[] { "--dialect=db2" }, SqlDialect.Db2)]
-    [InlineData(new[] { "--dialect", "db2" }, SqlDialect.Db2)]
-    [InlineData(new[] { "--dialect=oracle" }, SqlDialect.Oracle)]
-    [InlineData(new[] { "--dialect=netezza" }, SqlDialect.Netezza)]
-    [InlineData(new string[0], SqlDialect.Netezza)]
-    public void LspDialectArgs_ParsesDb2Forms(string[] args, SqlDialect expected)
+    [InlineData("db2", SqlDialect.Db2)]
+    [InlineData("oracle", SqlDialect.Oracle)]
+    [InlineData("netezza", SqlDialect.Netezza)]
+    [InlineData(null, SqlDialect.Netezza)]
+    public void DialectRuntime_ParsesDb2Forms(string? name, SqlDialect expected)
     {
-        Assert.Equal(expected, JustyBase.NetezzaSqlLsp.LspDialectArgs.Parse(args));
+        Assert.Equal(expected, DialectRuntime.ParseName(name));
     }
 
     [Fact]

@@ -4,8 +4,7 @@ using JustyBase.NetezzaSqlParser.Dialects;
 using JustyBase.NetezzaSqlParser.Formatter;
 using JustyBase.NetezzaSqlParser.Lexer;
 using JustyBase.NetezzaSqlParser.Parser;
-using JustyBase.NetezzaSqlLsp;
-using JustyBase.NetezzaSqlLsp.Services;
+using JustyBase.NetezzaSqlParser.Completion;
 
 namespace JustyBase.NetezzaSql.Tests;
 
@@ -433,12 +432,13 @@ public sealed class SqliteSqlParserTests
     }
 
     [Fact]
-    public async Task Lsp_UsesSqliteRuntimeAndCatalog()
+    public async Task Authoring_UsesSqliteRuntimeAndCatalog()
     {
-        Assert.Equal(SqlDialect.Sqlite, LspDialectArgs.Parse(["--dialect", "sqlite"]));
-        var diagnostics = LintService.Lint("SELECT JSON_EXTRACT(payload, '$.a') FROM events", null, SqlDialect.Sqlite);
-        Assert.Empty(diagnostics);
-        var completions = await CompletionService.GetCompletions("SELECT", 0, 6, null, SqlDialect.Sqlite);
-        Assert.Contains(completions.Items!, item => item.Label == "JSON_EXTRACT");
+        Assert.Equal(SqlDialect.Sqlite, DialectRuntime.ParseName("sqlite"));
+        var issues = DialectRuntime.QualityRules(SqlDialect.Sqlite).AllRules
+            .SelectMany(r => r.Check("SELECT JSON_EXTRACT(payload, '$.a') FROM events")).ToList();
+        Assert.Empty(issues);
+        var completions = await CompletionOrchestrator.GetCompletions("SELECT", 6, null, SqlDialect.Sqlite);
+        Assert.Contains(completions.EngineItems, item => item.Label == "JSON_EXTRACT");
     }
 }

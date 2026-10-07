@@ -35,9 +35,9 @@ The component responsibilities are:
 
 | Component | Owns | Must not own |
 |---|---|---|
-| `JustyBase.NetezzaSqlParser` | lexer, tokens, AST, dialect parser, formatter, authoring, completion, linting and LSP | MDB/ACCDB I/O, SQLite mirror, provider transactions or Access file mutation |
+| `JustyBase.NetezzaSqlParser` | lexer, tokens, AST, dialect parser, formatter, authoring, completion and linting | MDB/ACCDB I/O, SQLite mirror, provider transactions or Access file mutation |
 | `JustyBase.UCanAccess.File` | Jet/ACE file format, pages, tables, indexes, relationships and file metadata | SQL parser, SQLite execution or ADO.NET provider behavior |
-| `JustyBase.UCanAccessCs` | ADO.NET provider, SQLite mirror, Access-to-SQLite translation, Access functions, DML/DDL and transactions | editor/LSP-specific behavior and file-format primitives |
+| `JustyBase.UCanAccessCs` | ADO.NET provider, SQLite mirror, Access-to-SQLite translation, Access functions, DML/DDL and transactions | editor-specific behavior and file-format primitives |
 | `JustyBase.UCanAccess.AccessCrypto` | optional encrypted-page codec | parser and general provider policy |
 
 The Access lexer and parser are the shared syntax contract. UCanAccess may

@@ -93,23 +93,6 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
 
-      - name: Publish LSP (NativeAOT)
-        run: dotnet publish JustyBase.NetezzaSqlLsp/JustyBase.NetezzaSqlLsp.csproj -c Release -r ${{ matrix.rid }} -o artifacts/aot/lsp
-
-      - name: Smoke test LSP (Linux)
-        if: runner.os == 'Linux'
-        run: timeout 10 ./artifacts/aot/lsp/JustyBase.NetezzaSqlLsp </dev/null || test $? -eq 124
-
-      - name: Smoke test LSP (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $empty = New-TemporaryFile
-          $process = Start-Process -FilePath ./artifacts/aot/lsp/JustyBase.NetezzaSqlLsp.exe -PassThru -RedirectStandardInput $empty.FullName
-          Start-Sleep -Seconds 5
-          if ($process.HasExited -and $process.ExitCode -ne 0) { throw "LSP exited with code $($process.ExitCode)." }
-          if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
-
       - name: Publish AI AOT probe
         run: dotnet publish tests/JustyBase.Ai.AotProbe/JustyBase.Ai.AotProbe.csproj -c Release -r ${{ matrix.rid }} -o artifacts/aot/ai-probe -p:CopilotSkipCliDownload=true
 

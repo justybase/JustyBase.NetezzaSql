@@ -4,8 +4,7 @@ using JustyBase.NetezzaSqlParser.Dialects;
 using JustyBase.NetezzaSqlParser.Formatter;
 using JustyBase.NetezzaSqlParser.Lexer;
 using JustyBase.NetezzaSqlParser.Parser;
-using JustyBase.NetezzaSqlLsp;
-using JustyBase.NetezzaSqlLsp.Services;
+using JustyBase.NetezzaSqlParser.Completion;
 
 namespace JustyBase.NetezzaSql.Tests;
 
@@ -183,12 +182,13 @@ public sealed class PostgreSqlSqlParserTests
     }
 
     [Fact]
-    public async Task Lsp_UsesPostgreSqlRuntimeAndCatalog()
+    public async Task Authoring_UsesPostgreSqlRuntimeAndCatalog()
     {
-        Assert.Equal(SqlDialect.PostgreSql, LspDialectArgs.Parse(["--dialect", "postgres"]));
-        var diagnostics = LintService.Lint("SELECT JSONB_BUILD_OBJECT('id', id) FROM public.items", null, SqlDialect.PostgreSql);
-        Assert.Empty(diagnostics);
-        var completions = await CompletionService.GetCompletions("SELECT", 0, 6, null, SqlDialect.PostgreSql);
-        Assert.Contains(completions.Items!, item => item.Label == "JSONB_BUILD_OBJECT");
+        Assert.Equal(SqlDialect.PostgreSql, DialectRuntime.ParseName("postgres"));
+        var issues = DialectRuntime.QualityRules(SqlDialect.PostgreSql).AllRules
+            .SelectMany(r => r.Check("SELECT JSONB_BUILD_OBJECT('id', id) FROM public.items")).ToList();
+        Assert.Empty(issues);
+        var completions = await CompletionOrchestrator.GetCompletions("SELECT", 6, null, SqlDialect.PostgreSql);
+        Assert.Contains(completions.EngineItems, item => item.Label == "JSONB_BUILD_OBJECT");
     }
 }

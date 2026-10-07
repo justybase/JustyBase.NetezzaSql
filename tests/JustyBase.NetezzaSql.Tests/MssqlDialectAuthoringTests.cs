@@ -1,14 +1,14 @@
-using JustyBase.NetezzaSqlLsp.Services;
 using JustyBase.NetezzaSqlParser.Authoring;
 using JustyBase.NetezzaSqlParser.Caching;
+using JustyBase.NetezzaSqlParser.Completion;
 using JustyBase.NetezzaSqlParser.Dialects;
 
 namespace JustyBase.Tests.NetezzaSqlParser;
 
 /// <summary>
-/// LSP-level MSSQL dialect switching tests (mirror of Db2DialectLspTests).
+/// MSSQL dialect switching tests against the shared parser authoring stack (mirror of Db2DialectAuthoringTests).
 /// </summary>
-public sealed class MssqlDialectLspTests
+public sealed class MssqlDialectAuthoringTests
 {
     [Fact]
     public void ParseSession_MssqlDialect_ParsesTopAndApply()
@@ -51,45 +51,55 @@ public sealed class MssqlDialectLspTests
         Assert.Same(mssql, coordinator.GetOrCreate("doc1", SqlDialect.Mssql));
     }
 
+    private static IReadOnlyList<JustyBase.NetezzaSqlParser.Linter.LintIssue> CheckMssql(string sql) =>
+        DialectRuntime.QualityRules(SqlDialect.Mssql).AllRules.SelectMany(r => r.Check(sql)).ToList();
+
     [Fact]
     public void Lint_MssqlDialect_ReportsMss001SelectStar()
     {
-        var diagnostics = LintService.Lint("SELECT * FROM employees", null, SqlDialect.Mssql);
-        Assert.Contains(diagnostics, d => d.Code == "MSS001");
-        Assert.All(diagnostics, d => Assert.Equal("MSSQL SQL", d.Source));
+        var issues = CheckMssql("SELECT * FROM employees");
+        Assert.Contains(issues, d => d.RuleId == "MSS001");
+        Assert.Equal("MSSQL SQL", DialectRuntime.DiagnosticSource(SqlDialect.Mssql));
     }
 
     [Fact]
     public void Lint_MssqlDialect_DoesNotReportNzOrDb2Rules()
     {
-        var diagnostics = LintService.Lint("SELECT * FROM employees", null, SqlDialect.Mssql);
-        Assert.Contains(diagnostics, d => d.Code == "MSS001");
-        Assert.DoesNotContain(diagnostics, d => d.Code?.StartsWith("NZ", StringComparison.Ordinal) == true);
-        Assert.DoesNotContain(diagnostics, d => d.Code?.StartsWith("DB", StringComparison.Ordinal) == true);
-        Assert.DoesNotContain(diagnostics, d => d.Code?.StartsWith("ORA", StringComparison.Ordinal) == true);
+        var issues = CheckMssql("SELECT * FROM employees");
+        Assert.Contains(issues, d => d.RuleId == "MSS001");
+        Assert.DoesNotContain(issues, d => d.RuleId.StartsWith("NZ", StringComparison.Ordinal));
+        Assert.DoesNotContain(issues, d => d.RuleId.StartsWith("DB", StringComparison.Ordinal));
+        Assert.DoesNotContain(issues, d => d.RuleId.StartsWith("ORA", StringComparison.Ordinal));
     }
 
     [Fact]
     public async Task Completion_MssqlDialect_OffersMssqlFunctions()
     {
-        var completions = await CompletionService.GetCompletions("SELECT", 0, 6, null, SqlDialect.Mssql);
-        Assert.NotNull(completions.Items);
-        Assert.Contains(completions.Items!, i => i.Label.Equals("ISNULL", StringComparison.OrdinalIgnoreCase));
-        Assert.Contains(completions.Items!, i => i.Label.Equals("GETDATE", StringComparison.OrdinalIgnoreCase));
+        var result = await CompletionOrchestrator.GetCompletions("SELECT", 6, null, SqlDialect.Mssql);
+        Assert.Contains(result.EngineItems, i => i.Label.Equals("ISNULL", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.EngineItems, i => i.Label.Equals("GETDATE", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
     public void Hover_MssqlDialect_ExplainsMssqlDataType()
     {
-        var hover = HoverService.GetHover("SELECT NVARCHAR FROM t", 0, 10, null, SqlDialect.Mssql);
+        const string sql = "SELECT NVARCHAR FROM t";
+        var hover = NzHoverService.GetHover(
+            sql, 10, null,
+            catalog: DialectRuntime.AuthoringCatalog(SqlDialect.Mssql),
+            dialect: SqlDialect.Mssql);
         Assert.NotNull(hover);
-        Assert.Contains("NVARCHAR", hover!.Contents!.Value);
+        Assert.Contains("NVARCHAR", hover!.Content, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
     public void SignatureHelp_MssqlDialect_ReturnsMssqlSignatures()
     {
-        var help = SignatureHelpService.GetSignatureHelp("SELECT ISNULL(", 0, 15, SqlDialect.Mssql);
+        const string sql = "SELECT ISNULL(";
+        var help = NzSignatureHelpService.GetSignatureHelp(
+            sql, sql.Length,
+            catalog: DialectRuntime.AuthoringCatalog(SqlDialect.Mssql),
+            dialect: SqlDialect.Mssql);
         Assert.NotNull(help);
         Assert.Contains(help!.Signatures, s => s.Label.Contains("ISNULL", StringComparison.OrdinalIgnoreCase));
     }
@@ -103,15 +113,15 @@ public sealed class MssqlDialectLspTests
     }
 
     [Theory]
-    [InlineData(new[] { "--dialect=mssql" }, SqlDialect.Mssql)]
-    [InlineData(new[] { "--dialect", "mssql" }, SqlDialect.Mssql)]
-    [InlineData(new[] { "--dialect=db2" }, SqlDialect.Db2)]
-    [InlineData(new[] { "--dialect=oracle" }, SqlDialect.Oracle)]
-    [InlineData(new[] { "--dialect=netezza" }, SqlDialect.Netezza)]
-    [InlineData(new string[0], SqlDialect.Netezza)]
-    public void LspDialectArgs_ParsesMssqlForms(string[] args, SqlDialect expected)
+    [InlineData("mssql", SqlDialect.Mssql)]
+    [InlineData("sqlserver", SqlDialect.Mssql)]
+    [InlineData("db2", SqlDialect.Db2)]
+    [InlineData("oracle", SqlDialect.Oracle)]
+    [InlineData("netezza", SqlDialect.Netezza)]
+    [InlineData(null, SqlDialect.Netezza)]
+    public void DialectRuntime_ParsesMssqlForms(string? name, SqlDialect expected)
     {
-        Assert.Equal(expected, JustyBase.NetezzaSqlLsp.LspDialectArgs.Parse(args));
+        Assert.Equal(expected, DialectRuntime.ParseName(name));
     }
 
     [Fact]

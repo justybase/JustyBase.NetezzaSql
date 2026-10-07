@@ -10,7 +10,7 @@ This script runs, in order:
 
 1. `dotnet restore` and `dotnet build` (Release)
 2. `dotnet test` on the full solution (Release, excluding `Category=Performance`)
-3. `pwsh .\eng\Test-Coverage.ps1` — per-library line/branch gates (parser, DDL, catalog, LSP, **Core**, **ImportExport**, **Ai**, **Sqlite**, Netezza integration)
+3. `pwsh .\eng\Test-Coverage.ps1` — per-library line/branch gates (parser, DDL, catalog, **Core**, **ImportExport**, **Ai**, **Sqlite**, Netezza integration)
 4. `git diff --check` — trailing whitespace and conflict markers
 
 ## Full CI parity (before a release tag)

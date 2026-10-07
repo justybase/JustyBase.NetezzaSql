@@ -1,4 +1,3 @@
-using JustyBase.NetezzaSqlLsp.Services;
 using JustyBase.NetezzaSqlParser.Ast;
 using JustyBase.NetezzaSqlParser.Dialects;
 using JustyBase.NetezzaSqlParser.Lexer;
@@ -90,6 +89,9 @@ public sealed class MssqlLiveParserLinterTests : IClassFixture<MssqlLiveFixture>
         }
         return (statements, errors);
     }
+
+    private static IReadOnlyList<LintIssue> CheckMssql(string sql) =>
+        DialectRuntime.QualityRules(SqlDialect.Mssql).AllRules.SelectMany(r => r.Check(sql)).ToList();
 
     private void AssertParsesAndExecutes(string sql, bool expectRows = false)
     {
@@ -256,37 +258,35 @@ public sealed class MssqlLiveParserLinterTests : IClassFixture<MssqlLiveFixture>
     {
         if (!RequireLive()) return;
 
-        var selectStar = LintService.Lint($"SELECT * FROM {_fx.QualifiedTable}", null, SqlDialect.Mssql);
-        Assert.Contains(selectStar, d => d.Code == "MSS001");
+        var selectStar = CheckMssql($"SELECT * FROM {_fx.QualifiedTable}");
+        Assert.Contains(selectStar, d => d.RuleId == "MSS001");
 
-        var deleteAll = LintService.Lint($"DELETE FROM {_fx.QualifiedTable}", null, SqlDialect.Mssql);
-        Assert.Contains(deleteAll, d => d.Code == "MSS002");
+        var deleteAll = CheckMssql($"DELETE FROM {_fx.QualifiedTable}");
+        Assert.Contains(deleteAll, d => d.RuleId == "MSS002");
 
-        var updateAll = LintService.Lint(
-            $"UPDATE {_fx.QualifiedTable} SET NOTE = N'x'",
-            null,
-            SqlDialect.Mssql);
-        Assert.Contains(updateAll, d => d.Code == "MSS003");
+        var updateAll = CheckMssql(
+            $"UPDATE {_fx.QualifiedTable} SET NOTE = N'x'");
+        Assert.Contains(updateAll, d => d.RuleId == "MSS003");
 
         Assert.Contains(
-            LintService.Lint("GROOM TABLE T", null, SqlDialect.Mssql),
-            d => d.Code == "MSS004");
+            CheckMssql("GROOM TABLE T"),
+            d => d.RuleId == "MSS004");
         Assert.Contains(
-            LintService.Lint("CREATE TABLE T (A INT) DISTRIBUTE ON (A)", null, SqlDialect.Mssql),
-            d => d.Code == "MSS005");
+            CheckMssql("CREATE TABLE T (A INT) DISTRIBUTE ON (A)"),
+            d => d.RuleId == "MSS005");
         Assert.Contains(
-            LintService.Lint($"SELECT TOP 5 ID FROM {_fx.QualifiedTable}", null, SqlDialect.Mssql),
-            d => d.Code == "MSS006");
+            CheckMssql($"SELECT TOP 5 ID FROM {_fx.QualifiedTable}"),
+            d => d.RuleId == "MSS006");
         Assert.Contains(
-            LintService.Lint("SELECT * FROM T LIMIT 10", null, SqlDialect.Mssql),
-            d => d.Code == "MSS007");
+            CheckMssql("SELECT * FROM T LIMIT 10"),
+            d => d.RuleId == "MSS007");
         Assert.Contains(
-            LintService.Lint("SELECT * FROM DB..TABLE", null, SqlDialect.Mssql),
-            d => d.Code == "MSS008");
+            CheckMssql("SELECT * FROM DB..TABLE"),
+            d => d.RuleId == "MSS008");
 
         Assert.DoesNotContain(
-            LintService.Lint($"SELECT * FROM {_fx.QualifiedTable}", null, SqlDialect.Mssql),
-            d => d.Code?.StartsWith("NZ", StringComparison.Ordinal) == true);
+            CheckMssql($"SELECT * FROM {_fx.QualifiedTable}"),
+            d => d.RuleId.StartsWith("NZ", StringComparison.Ordinal));
 
         var registry = new QualityRuleRegistry(MssqlLintRules.AllRules);
         Assert.Equal(8, registry.AllRules.Count);

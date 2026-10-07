@@ -38,13 +38,13 @@ JustyBase.Core (assembly JustyBase.Core)                           ← UI-agnost
 
 | Surface | Status | Consumers |
 | --- | --- | --- |
-| Parser + AST (all dialects incl. DB2) | **Production** | Avalonia (lint/highlight/outline), Legacy (lint/highlight), LSP |
-| Lexers (all dialects incl. DB2) | **Production** | Avalonia, Legacy, LSP, tests |
+| Parser + AST (all dialects incl. DB2) | **Production** | Avalonia (lint/highlight/outline), Legacy (lint/highlight), tests |
+| Lexers (all dialects incl. DB2) | **Production** | Avalonia, Legacy, tests |
 | Linter (`LintEngine`, `NzLintRules`, `Db2LintRules`) | **Production** | Avalonia `NzLinterService`, Legacy `LegacySqlAuthoringServices` |
 | Formatter (`NzSqlFormatter`) | **Production** | Avalonia `NzSqlDocumentFormatter`, Legacy `LegacySqlAuthoringServices` (generic SQL fallback remains host-side) |
 | Completion (`NzCompletionEngine`) | **Production** | Avalonia `SqlCompletionProvider`, Legacy `NetezzaHybridAutocompleteSource` / `NetezzaSqlAuthoringUseCase` |
 | Completion merge policy (`SqlCompletionMergePolicy`) | **Production** | Both hosts (Avalonia `SqlCompletionProvider.ShouldRunLegacyPath`, Legacy `NetezzaHybridAutocompleteSource`) |
-| DB word-list fallback contract (`ISqlDbWordListProvider`) | **Production (contract + headless seam)** | `JustyBase.Core.Database`; adapters in both hosts (`DbWordListProvider`, `LegacyDbWordListProvider`); headless `SqlWordListService` + `SqlWordListRequestExtractor`; parser-backed `EngineSqlWordListRequestBuilder` in the parser lib; LSP `CompletionService` merges word-list items via optional provider |
+| DB word-list fallback contract (`ISqlDbWordListProvider`) | **Production (contract + headless seam)** | `JustyBase.Core.Database`; adapters in both hosts (`DbWordListProvider`, `LegacyDbWordListProvider`); headless `SqlWordListService` + `SqlWordListRequestExtractor`; parser-backed `EngineSqlWordListRequestBuilder` in the parser lib; `CompletionOrchestrator.GetCompletions` merges word-list items via optional provider |
 | Semantic tokens (`NzSemanticTokenClassifier`) | **Production** | Avalonia `SemanticLineColorizer`, Legacy `LegacySqlAuthoringServices` + `FctbSemanticStyleMapper` |
 | Rename / symbols / references (`NzRenameService`, `NzSymbolService`) | **Production** | Avalonia `SqlDocumentViewModel`, Legacy FCTB key handlers |
 | Signature help (`NzSignatureHelpService`) | **Production** | Avalonia `SqlCompletionProvider`, Legacy `LegacySqlAuthoringServices` + `NzSignatureHelpPopup` |
@@ -52,7 +52,6 @@ JustyBase.Core (assembly JustyBase.Core)                           ← UI-agnost
 | Parse/schema cache (`DocumentParsingCoordinator`, `InMemorySchemaProvider`) | **Production** | Both hosts |
 | Performance policy (`SqlPerformancePolicy`) | **Production** | Both hosts |
 | Typing UX probe (`SqlTypingPerfProbe`) | **Production** | Avalonia `SemanticLineColorizer`, FCTB control + Legacy host |
-| LSP server (`JustyBase.NetezzaSqlLsp`) | **Production** | External editors via LSP |
 
 \* `LegacyCompletionPolicy` was a delegating shim and has been removed; Legacy
 calls `SqlCompletionMergePolicy` directly.
@@ -88,7 +87,7 @@ In the desktop hosts:
   through `DialectRuntime`/`SqlDialect.Db2`.
 - **Avalonia** does not ship a DB2 connection plugin today; DB2 authoring is
   covered there by unit tests (`Db2AuthoringCatalogTests`,
-  `Db2DialectLspTests`) and the LSP server. This asymmetry is intentional and
+  `Db2DialectAuthoringTests`). This asymmetry is intentional and
   should be re-examined when a DB2 plugin is added.
 
 ## Definition of done for a shared surface
@@ -104,7 +103,7 @@ In the desktop hosts:
 
 | Item | Status | Notes |
 | --- | --- | --- |
-| Legacy "live word-list" completion path | **Phase B (contract) + Phase C (headless seam) — done** | Shared `ISqlDbWordListProvider` + `SqlWordListItem`/`SqlWordListRequest` live in `JustyBase.Core.Database`. Both hosts implement it as adapters over their existing engines (`DbWordListProvider` over `AutocompleteService`/`IDatabaseService`; `LegacyDbWordListProvider` over `LegacyDbCompletionFallback`) and register it in DI. Hot completion paths are unchanged (Avalonia stays `IAsyncEnumerable`, FCTB stays synchronous). Headless seam: `SqlWordListService` (Core orchestrator: text + caret → request → provider) with injected `SqlWordListRequestExtractor`; the default `SqlWordListRequest.FromText` computes only the dotted fragment (no hints), while the parser-backed `EngineSqlWordListRequestBuilder` (parser lib) runs `NzCompletionEngine` + `GetScopeHints` for alias/CTE/temp-table hints. The LSP `CompletionService.GetCompletions` (now async) takes an optional `ISqlDbWordListProvider` and merges word-list items after engine items (deduped by label); the LSP executable registers no provider today, so behavior is unchanged until a DB-backed provider exists. Note: the parser lib now references `JustyBase.Core` (packed as a `JustyBase.Core` package dependency — package-graph change). Contract notes: (1) `Label` is opaque **insert text** — it may be qualified (`SCHEMA.OBJECT` on the DB2 path) or unqualified depending on dialect and typed fragment; (2) the interface is `IAsyncEnumerable` while both underlying engines are synchronous — the adapters are async ceremony today, intended for future async DB access; (3) the hint dictionaries (`AliasDbTable`/`Subquery`/`With`/`TempTable`) are consumed only by the Avalonia engine and the parser-backed builder; the Legacy adapter currently ignores them (behavioral parity comes later). |
+| Legacy "live word-list" completion path | **Phase B (contract) + Phase C (headless seam) — done** | Shared `ISqlDbWordListProvider` + `SqlWordListItem`/`SqlWordListRequest` live in `JustyBase.Core.Database`. Both hosts implement it as adapters over their existing engines (`DbWordListProvider` over `AutocompleteService`/`IDatabaseService`; `LegacyDbWordListProvider` over `LegacyDbCompletionFallback`) and register it in DI. Hot completion paths are unchanged (Avalonia stays `IAsyncEnumerable`, FCTB stays synchronous). Headless seam: `SqlWordListService` (Core orchestrator: text + caret → request → provider) with injected `SqlWordListRequestExtractor`; the default `SqlWordListRequest.FromText` computes only the dotted fragment (no hints), while the parser-backed `EngineSqlWordListRequestBuilder` (parser lib) runs `NzCompletionEngine` + `GetScopeHints` for alias/CTE/temp-table hints. The shared `CompletionOrchestrator.GetCompletions` (now async) takes an optional `ISqlDbWordListProvider` and merges word-list items after engine items (deduped by label). Note: the parser lib now references `JustyBase.Core` (packed as a `JustyBase.Core` package dependency — package-graph change). Contract notes: (1) `Label` is opaque **insert text** — it may be qualified (`SCHEMA.OBJECT` on the DB2 path) or unqualified depending on dialect and typed fragment; (2) the interface is `IAsyncEnumerable` while both underlying engines are synchronous — the adapters are async ceremony today, intended for future async DB access; (3) the hint dictionaries (`AliasDbTable`/`Subquery`/`With`/`TempTable`) are consumed only by the Avalonia engine and the parser-backed builder; the Legacy adapter currently ignores them (behavioral parity comes later). |
 | Generic SQL formatter fallback | Host | Legacy falls back to `Hogimn.Sql.Formatter` when the shared parser cannot parse. Keep until parity audit. |
 | `SqlTypingPerfProbe` | **Resolved** | Two divergent copies (parser lib + FCTB) merged into one canonical class in `JustyBase.Core.Diagnostics`; both hosts and the FCTB control now reference Core. Note: the merged NDJSON format uses ISO timestamps, a `doc` key, and per-op slow budgets (the FCTB copy previously used unix-ms, `documentKey`, and a flat 16 ms threshold) — telemetry-only, no consumer contract. `SqlTypingPerfLocal` re-syncs from the probe inside the FCTB control itself, preserving activation on non-host forms. |
 | `LegacyCompletionPolicy` | **Resolved** | Removed; both hosts use `SqlCompletionMergePolicy` directly. |

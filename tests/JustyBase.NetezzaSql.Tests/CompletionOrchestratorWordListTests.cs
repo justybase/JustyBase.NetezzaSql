@@ -3,34 +3,33 @@ using JustyBase.Core.Database;
 using JustyBase.NetezzaSqlParser.Ast;
 using JustyBase.NetezzaSqlParser.Completion;
 using JustyBase.NetezzaSqlParser.Visitor;
-using JustyBase.NetezzaSqlLsp.Protocol;
-using JustyBase.NetezzaSqlLsp.Services;
 
 namespace JustyBase.Tests.NetezzaSqlParser;
 
 /// <summary>
-/// End-to-end headless seam tests: the LSP completion service consumes the
-/// shared <see cref="ISqlDbWordListProvider"/> contract through the engine-backed
+/// End-to-end headless seam tests: the shared <see cref="CompletionOrchestrator"/>
+/// consumes <see cref="ISqlDbWordListProvider"/> through the engine-backed
 /// request builder and <see cref="SqlWordListService"/>.
 /// </summary>
-public sealed class CompletionServiceWordListTests
+public sealed class CompletionOrchestratorWordListTests
 {
     [Fact]
     public async Task GetCompletions_without_provider_returns_engine_items_only()
     {
-        var list = await CompletionService.GetCompletions("SELE", 0, 4, schema: null);
-        Assert.Contains(list.Items!, i => i.Label == "SELECT");
+        var result = await CompletionOrchestrator.GetCompletions("SELE", 4, schema: null);
+        Assert.Contains(result.EngineItems, i => i.Label == "SELECT");
+        Assert.Empty(result.WordListItems);
     }
 
     [Theory]
-    [InlineData("SELECT * FROM ", 14)]
-    [InlineData("SELECT * FROM T A ", 18)]
-    [InlineData("SELECT * FROM T WHERE A.X = 1\t", 30)]
-    public async Task GetCompletions_after_whitespace_returns_empty_list(string sql, int offset)
+    [InlineData(' ', true)]
+    [InlineData('\t', true)]
+    [InlineData('\n', true)]
+    [InlineData('M', false)]
+    [InlineData(null, false)]
+    public void CompletionGate_suppresses_whitespace_triggers(char? trigger, bool expected)
     {
-        var list = await CompletionService.GetCompletions(sql, 0, offset, schema: null);
-        Assert.NotNull(list.Items);
-        Assert.Empty(list.Items!);
+        Assert.Equal(expected, CompletionGate.ShouldSuppressTrigger(trigger));
     }
 
     [Fact]
@@ -39,14 +38,13 @@ public sealed class CompletionServiceWordListTests
         var schema = new InMemorySchemaProvider();
         schema.AddTable(new TableInfo("EMPLOYEES", Columns: [new ColumnInfo("ID")]));
 
-        var list = await CompletionService.GetCompletions(
+        var result = await CompletionOrchestrator.GetCompletions(
             "SELECT * FROM ",
-            0,
             14,
             schema,
-            triggerKind: (int)CompletionTriggerKind.Invoked);
+            options: new CompletionOrchestrationOptions { ForcedAutocomplete = true });
 
-        Assert.Contains(list.Items!, item => item.Label == "EMPLOYEES");
+        Assert.Contains(result.EngineItems, item => item.Label == "EMPLOYEES");
     }
 
     [Fact]
@@ -54,8 +52,8 @@ public sealed class CompletionServiceWordListTests
     {
         var schema = new InMemorySchemaProvider();
         schema.AddTable(new TableInfo("DIMDATE", Columns: [new ColumnInfo("ID")]));
-        var list = await CompletionService.GetCompletions("SELECT * FROM DIM", 0, 17, schema);
-        Assert.NotEmpty(list.Items!);
+        var result = await CompletionOrchestrator.GetCompletions("SELECT * FROM DIM", 17, schema);
+        Assert.NotEmpty(result.EngineItems);
     }
 
     [Fact]
@@ -64,13 +62,12 @@ public sealed class CompletionServiceWordListTests
         var provider = new FakeWordListProvider(
             new SqlWordListItem("DIMDATE", SqlWordListKind.Table, "Table", "dimension date"));
 
-        var list = await CompletionService.GetCompletions(
-            "SELECT * FROM DIM", 0, 17, schema: null, wordListProvider: provider);
+        var result = await CompletionOrchestrator.GetCompletions(
+            "SELECT * FROM DIM", 17, schema: null, wordListProvider: provider);
 
-        Assert.Contains(list.Items!,
+        Assert.Contains(result.WordListItems,
             i => i.Label == "DIMDATE"
-                 && i.Kind == CompletionItemKind.Struct
-                 && i.InsertText == "DIMDATE"
+                 && i.Kind == SqlWordListKind.Table
                  && i.Detail == "Table");
     }
 
@@ -80,11 +77,11 @@ public sealed class CompletionServiceWordListTests
         var provider = new FakeWordListProvider(
             new SqlWordListItem("JBL_LIVE.JBL_ORDERS", SqlWordListKind.Table, "table"));
 
-        var list = await CompletionService.GetCompletions(
-            "SELECT * FROM JBL_LIVE.", 0, 23, schema: null, wordListProvider: provider);
+        var result = await CompletionOrchestrator.GetCompletions(
+            "SELECT * FROM JBL_LIVE.", 23, schema: null, wordListProvider: provider);
 
-        Assert.Contains(list.Items!,
-            i => i.Label == "JBL_LIVE.JBL_ORDERS" && i.InsertText == "JBL_LIVE.JBL_ORDERS");
+        Assert.Contains(result.WordListItems,
+            i => i.Label == "JBL_LIVE.JBL_ORDERS");
     }
 
     [Fact]
@@ -93,23 +90,23 @@ public sealed class CompletionServiceWordListTests
         var provider = new FakeWordListProvider(
             new SqlWordListItem("SELECT", SqlWordListKind.Keyword));
 
-        var list = await CompletionService.GetCompletions(
-            "SELE", 0, 4, schema: null, wordListProvider: provider);
+        var result = await CompletionOrchestrator.GetCompletions(
+            "SELE", 4, schema: null, wordListProvider: provider);
 
-        var selectItems = list.Items!.Where(i => i.Label == "SELECT").ToList();
-        Assert.Single(selectItems); // engine keyword wins; the provider duplicate is dropped
+        Assert.Contains(result.EngineItems, i => i.Label == "SELECT");
+        Assert.DoesNotContain(result.WordListItems, i => i.Label == "SELECT");
     }
 
     [Fact]
-    public async Task Lsp_engine_items_match_core_orchestrator_items()
+    public async Task Orchestrator_is_deterministic_for_same_input()
     {
         const string sql = "SELECT * FROM ";
-        var core = await CompletionOrchestrator.GetCompletions(sql, sql.Length, null);
-        var lsp = await CompletionService.GetCompletions(sql, 0, sql.Length, null);
+        var first = await CompletionOrchestrator.GetCompletions(sql, sql.Length, null);
+        var second = await CompletionOrchestrator.GetCompletions(sql, sql.Length, null);
 
         Assert.Equal(
-            core.EngineItems.Select(item => item.Label),
-            lsp.Items!.Where(item => item.InsertText is null).Select(item => item.Label));
+            first.EngineItems.Select(item => item.Label),
+            second.EngineItems.Select(item => item.Label));
     }
 
     private sealed class FakeWordListProvider : ISqlDbWordListProvider

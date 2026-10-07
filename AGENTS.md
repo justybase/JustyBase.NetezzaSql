@@ -4,7 +4,7 @@
 
 This repository contains .NET 10 libraries for Netezza SQL tooling and shared JustyBase application services. `JustyBase.NetezzaSqlParser.csproj` is the main parser package; its code is grouped by concern in `Lexer/`, `Parser/`, `Ast/`, `Visitor/`, `Formatter/`, `Linter/`, `Completion/`, `Authoring/`, and `Caching/`.
 
-Supporting libraries are `JustyBase.NetezzaDdl/` (DDL generation), `JustyBase.NetezzaCatalogSql/` (catalog SQL helpers), `JustyBase.Netezza/` (integration layer), `JustyBase.Core/` (shared contracts and services), and `JustyBase.ImportExport/` (tabular import/export). The NativeAOT language server is in `JustyBase.NetezzaSqlLsp/`. Tests are under `tests/`; live-driver proof projects are intentionally isolated from the normal test run.
+Supporting libraries are `JustyBase.NetezzaDdl/` (DDL generation), `JustyBase.NetezzaCatalogSql/` (catalog SQL helpers), `JustyBase.Netezza/` (integration layer), `JustyBase.Core/` (shared contracts and services), and `JustyBase.ImportExport/` (tabular import/export). Tests are under `tests/`; live-driver proof projects are intentionally isolated from the normal test run.
 
 ## Build, Test, and Development Commands
 

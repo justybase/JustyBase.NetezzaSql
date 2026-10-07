@@ -31,7 +31,6 @@
     <Compile Remove="JustyBase.Netezza\**\*.cs" />
     <Compile Remove="JustyBase.NetezzaCatalogSql\**\*.cs" />
     <Compile Remove="JustyBase.NetezzaDdl\**\*.cs" />
-    <Compile Remove="JustyBase.NetezzaSqlLsp\**\*.cs" />
     <Compile Remove="JustyBase.Sqlite\**\*.cs" />
     <Compile Remove="JustyBase.Core\**\*.cs" />
     <Compile Remove="JustyBase.ImportExport\**\*.cs" />

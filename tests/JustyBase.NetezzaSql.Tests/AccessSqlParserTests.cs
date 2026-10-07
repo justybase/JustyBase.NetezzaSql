@@ -8,7 +8,7 @@ using JustyBase.NetezzaSqlParser.Linter;
 using JustyBase.NetezzaSqlParser.Parser;
 using JustyBase.NetezzaSqlParser.Visitor;
 using JustyBase.NetezzaSqlParser.Caching;
-using JustyBase.NetezzaSqlLsp.Services;
+using JustyBase.NetezzaSqlParser.Completion;
 using JustyBase.Tests.NetezzaSqlParser;
 
 namespace JustyBase.NetezzaSql.Tests;
@@ -137,7 +137,7 @@ public sealed class AccessSqlParserTests
     }
 
     [Fact]
-    public async Task AccessAuthoringAndLsp_UseAccessDialect()
+    public async Task AccessAuthoring_UseAccessDialect()
     {
         using var session = new DocumentParseSession(SqlDialect.Access);
         var parsed = session.GetOrParse(
@@ -146,16 +146,19 @@ public sealed class AccessSqlParserTests
         Assert.True(parsed.Valid);
         Assert.Empty(parsed.Errors);
 
-        var completions = await CompletionService.GetCompletions(
-            "SELECT", 0, 6, null, SqlDialect.Access);
-        Assert.Contains(completions.Items!, item =>
+        var catalog = DialectRuntime.AuthoringCatalog(SqlDialect.Access);
+        var completions = await CompletionOrchestrator.GetCompletions(
+            "SELECT", 6, null, SqlDialect.Access);
+        Assert.Contains(completions.EngineItems, item =>
             item.Label.Equals("NZ", StringComparison.OrdinalIgnoreCase));
 
-        var hover = HoverService.GetHover("SELECT Nz(value, 0) FROM people", 0, 8, null, SqlDialect.Access);
+        const string hoverSql = "SELECT Nz(value, 0) FROM people";
+        var hover = NzHoverService.GetHover(hoverSql, 8, null, catalog: catalog, dialect: SqlDialect.Access);
         Assert.NotNull(hover);
-        Assert.Contains("NZ", hover!.Contents!.Value, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("NZ", hover!.Content, StringComparison.OrdinalIgnoreCase);
 
-        var signatures = SignatureHelpService.GetSignatureHelp("SELECT Nz(", 0, 10, SqlDialect.Access);
+        const string sigSql = "SELECT Nz(";
+        var signatures = NzSignatureHelpService.GetSignatureHelp(sigSql, sigSql.Length, catalog: catalog, dialect: SqlDialect.Access);
         Assert.NotNull(signatures);
         Assert.Contains(signatures!.Signatures, signature =>
             signature.Label.Contains("Nz", StringComparison.OrdinalIgnoreCase));
@@ -175,32 +178,37 @@ public sealed class AccessSqlParserTests
         Assert.False(capabilities.SupportsLimit);
 
         Assert.Equal(SqlDialect.Access, DialectRuntime.ParseName("jet"));
-        Assert.Equal(SqlDialect.Access, JustyBase.NetezzaSqlLsp.LspDialectArgs.Parse(["--dialect=access"]));
+        Assert.Equal(SqlDialect.Access, DialectRuntime.ParseName("access"));
     }
 
     [Fact]
     public void AccessRename_PreservesBracketedIdentifiers()
     {
-        const string sql = "CREATE TABLE [orders] (id INT); SELECT * FROM [orders];";
-        var offset = sql.IndexOf("orders", StringComparison.Ordinal);
+        const string sql = "SELECT [a].id FROM [orders] AS [a] WHERE [a].id > 0;";
+        var first = sql.IndexOf("[a]", StringComparison.Ordinal);
+        var second = sql.IndexOf("[a]", first + 1, StringComparison.Ordinal);
+        var third = sql.IndexOf("[a]", second + 1, StringComparison.Ordinal);
+        var occurrences = new[]
+        {
+            new SymbolOccurrence(1, "a", SqlSymbolKind.Alias, first, first + 3, true, 1),
+            new SymbolOccurrence(2, "a", SqlSymbolKind.Alias, second, second + 3, false, 1),
+            new SymbolOccurrence(3, "a", SqlSymbolKind.Alias, third, third + 3, false, 1),
+        };
 
-        var edit = RenameService.Rename(
-            sql, 0, offset + 1, "order archive", "file:///access.sql", SqlDialect.Access);
-
-        Assert.NotNull(edit);
-        var edits = edit!.Changes!["file:///access.sql"];
-        Assert.Equal(2, edits.Length);
-        Assert.All(edits, item => Assert.Equal("[order archive]", item.NewText));
+        var renamed = NzRenameService.ApplyRename(sql, new SqlRenameInfo("a", SqlSymbolKind.Alias, occurrences), "order archive");
+        Assert.Contains("[order archive]", renamed, StringComparison.Ordinal);
+        Assert.Equal(3, System.Text.RegularExpressions.Regex.Matches(renamed, @"\[order archive\]", System.Text.RegularExpressions.RegexOptions.None).Count);
     }
 
     [Fact]
     public void AccessLint_ReportsAccessSpecificSafetyIssues()
     {
-        var diagnostics = LintService.Lint("SELECT TOP @limit * FROM [orders]", null, SqlDialect.Access);
+        var issues = DialectRuntime.QualityRules(SqlDialect.Access).AllRules
+            .SelectMany(r => r.Check("SELECT TOP @limit * FROM [orders]")).ToList();
 
-        Assert.Contains(diagnostics, diagnostic => diagnostic.Code == "ACC001");
-        Assert.Contains(diagnostics, diagnostic => diagnostic.Code == "ACC004");
-        Assert.All(diagnostics, diagnostic => Assert.Equal("Access SQL", diagnostic.Source));
+        Assert.Contains(issues, issue => issue.RuleId == "ACC001");
+        Assert.Contains(issues, issue => issue.RuleId == "ACC004");
+        Assert.Equal("Access SQL", DialectRuntime.DiagnosticSource(SqlDialect.Access));
     }
 
     [Fact]
@@ -277,9 +285,10 @@ public sealed class AccessSqlParserTests
     [Fact]
     public void AccessLint_DoesNotFlagQuotedIdentifierText()
     {
-        var diagnostics = LintService.Lint("SELECT TOP 5 [LIMIT] FROM people", null, SqlDialect.Access);
+        var issues = DialectRuntime.QualityRules(SqlDialect.Access).AllRules
+            .SelectMany(r => r.Check("SELECT TOP 5 [LIMIT] FROM people")).ToList();
 
-        Assert.DoesNotContain(diagnostics, diagnostic => diagnostic.Code == "ACC005");
+        Assert.DoesNotContain(issues, issue => issue.RuleId == "ACC005");
     }
 
     [Fact]

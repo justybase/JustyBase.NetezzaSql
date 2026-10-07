@@ -5,7 +5,7 @@ namespace JustyBase.Core.Database;
 /// turns raw SQL text + caret offset into a <see cref="SqlWordListRequest"/>
 /// (via an injected <see cref="SqlWordListRequestExtractor"/>) and streams the
 /// provider's neutral items. This is the shared seam for non-UI consumers such
-/// as the LSP server, CLI tools, and tests — no host or editor primitives are
+/// as CLI tools and tests — no host or editor primitives are
 /// involved.
 /// </summary>
 /// <remarks>

@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented here.
 
+## Unreleased
+
+- Remove the experimental `JustyBase.NetezzaSqlLsp` NativeAOT server (JSON-RPC protocol, handlers, LSP services, workspace). Editor intelligence stays in `JustyBase.NetezzaSqlParser` (`CompletionOrchestrator`, `NzHoverService`, `NzSignatureHelpService`, `NzRenameService`, `NzSymbolService`, `NzSemanticTokenClassifier`, `LintEngine`, `NzLintCodeActions`, `NzSqlFormatter`, `DialectRuntime`); dialect tests were migrated to those APIs. CI keeps NativeAOT publish smoke checks only for the `JustyBase.Ai` probe.
+
 ## 0.8.9
 
 - Mark `JustyBase.Ai` as Native AOT compatible (`IsAotCompatible = true`):
@@ -12,10 +16,9 @@ All notable changes to this project will be documented here.
 - Centralize package versions via `Directory.Packages.props` and update test
   and live-proof dependencies (Test SDK 18.10.1, coverlet 10.1.0, SqlClient 7.1.1,
   NetezzaDriver 1.9.5, Microsoft.Data.Sqlite 10.0.12).
-- Add NativeAOT publish smoke checks for the LSP and a `JustyBase.Ai` probe to CI.
+- Add NativeAOT publish smoke checks for a `JustyBase.Ai` probe to CI.
 - Add coverage gates for `JustyBase.Ai` (35% / 25%) and `JustyBase.Sqlite` (88% / 74%).
-- Add LSP `textDocument/codeAction` with lint quick fixes and safe-fix-all,
-  `textDocument/inlayHint` type hints, and whole-document `textDocument/formatting`.
+- Add lint quick fixes and safe-fix-all via `NzLintCodeActions` and whole-document formatting via `NzSqlFormatter`.
 - Add completion ranking tiers and fuzzy name matching, procedure/script
   variable completion (`&`, `$`, `{}`, `${}`), and foreign-key JOIN predicate
   suggestions (`IForeignKeyProvider`, `justy/syncSchema` FK metadata).
@@ -95,12 +98,12 @@ All notable changes to this project will be documented here.
 - Add MLX backend for Apple Silicon and harden llama-server startup: CPU fallback when GPU
   start fails, GPU offload defaulting to auto (model layer count read), KV cache kept in
   system RAM, and the FIM prompt field fixed for recent llama.cpp.
-- Add a shared completion orchestrator, fragment and gate; route the LSP completion through
-  it. Gate completion after whitespace and add FROM-continuation and WHERE-continuation
+- Add a shared completion orchestrator, fragment and gate for `CompletionOrchestrator`.
+  Gate completion after whitespace and add FROM-continuation and WHERE-continuation
   contexts.
 - Complete the Microsoft Access / Jet / ACE SQL dialect: Access lexer tokens,
   TOP/DISTINCTROW, TRANSFORM/PIVOT, PARAMETERS, Access index DDL, formatter,
-  lint rules, completion/hover/signature metadata, semantic tokens and LSP/runtime dispatch.
+  lint rules, completion/hover/signature metadata, semantic tokens and `DialectRuntime` dispatch.
 - Add a shared Netezza schema loader with typed schema cache (and unit/live tests), plus
   modern Legacy-host catalog queries replacing the retired legacy SQL file.
 - Harden the import pipe, schema cache, and scan-preview handling; improve Netezza import
@@ -155,9 +158,8 @@ All notable changes to this project will be documented here.
   `SqlAutocompleteWindow` and runs `NzCompletionEngine` scope hints (aliases/CTE/temp tables)
   to build a `SqlWordListRequest`; `JustyBase.NetezzaSqlParser` now depends on the
   `JustyBase.Core` package.
-- LSP: `CompletionService.GetCompletions` is now `async` and accepts an optional
-  `ISqlDbWordListProvider` whose items are merged (dedupe by label) with engine items;
-  `Program.cs` awaits the new API.
+- `CompletionOrchestrator.GetCompletions` is now `async` and accepts an optional
+  `ISqlDbWordListProvider` whose items are merged (dedupe by label) with engine items.
 - Document the shared authoring core status and word-list seam in `docs/authoring-shared-core.md`.
 
 ## 0.4.0
@@ -177,7 +179,7 @@ All notable changes to this project will be documented here.
 ## 0.3.0-preview.9
 
 - Improve parser runtime conformance and structural scanning.
-- Add lint coordination and expand LSP linting, symbol, reference, rename, and document handling.
+- Add lint coordination and expand linting, symbol, reference, rename, and document handling via `LintEngine` and authoring services.
 - Add parser performance coverage.
 
 ## 0.3.0-preview.8

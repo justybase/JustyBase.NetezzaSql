@@ -1,7 +1,7 @@
 namespace JustyBase.NetezzaSqlParser.Authoring;
 
 /// <summary>
-/// Shared semantic token kinds for editor and LSP consumers.
+/// Shared semantic token kinds for editor and headless consumers.
 /// Order must match <see cref="NzSemanticTokenClassifier.TokenTypesLegend"/>.
 /// </summary>
 public enum SemanticTokenKind

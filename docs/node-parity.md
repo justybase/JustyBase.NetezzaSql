@@ -50,9 +50,9 @@ focused .NET tests.
 | ANSI OFFSET/FETCH | Oracle and Db2 select parsers; Netezza probe/fixtures | `OffsetFetchClause` preserves OFFSET-only, FIRST/NEXT, PERCENT, ONLY and WITH TIES; legacy `LimitClause` remains compatible | supported |
 | Dialect dispatch | — | `DialectRuntime` (`Tokenize`/`CreateParser`/`QualityRules`/`AuthoringCatalog`) | supported |
 | Incremental parse/validation sessions | `documentParseSession.ts`, `documentValidationSession.ts`, `statementIndex.ts` | `Caching/DocumentParseSession`, `DocumentValidationSession`, `StatementIndex` | supported |
-| LSP lint code actions | `linterCodeActions.ts`, `handlers/signatureAndCodeActionHandlers.ts` | `NzLintCodeActions` + `textDocument/codeAction` | supported |
-| Inlay hints | `src/server/inlayHintEngine.ts` | `InlayHintService` (`textDocument/inlayHint`) | supported |
-| Document formatting | `providers/sqlFormattingProvider.ts`, `formatSql` | `NzSqlFormatter` + `FormattingService` (`textDocument/formatting`) | supported (whole document) |
+| Lint code actions | `linterCodeActions.ts`, `handlers/signatureAndCodeActionHandlers.ts` | `NzLintCodeActions` | supported |
+| Inlay hints | `src/server/inlayHintEngine.ts` | no public C# API (editor-specific) | deferred |
+| Document formatting | `providers/sqlFormattingProvider.ts`, `formatSql` | `NzSqlFormatter` | supported (whole document) |
 | Completion ranking and fuzzy matching | `completionRanker.ts`, `EDITOR_CAPABILITY_MATRIX.md` (name matching) | `NzCompletionEngine` `Priority`/`SortText` + word-start scoring | supported |
 | JOIN relation completion | `completionJoinConditions.ts`, `completionMetadataResolver.ts` | `IForeignKeyProvider` + `AfterOn` predicate suggestions | supported (explicit FK port) |
 | Procedure/script variable completion | `completionMacroVariableResolver.ts` | `NzCompletionEngine.TryGetVariableCompletions` (`&`, `${}`, `{}`, `$`) | supported |
@@ -103,10 +103,8 @@ offsets are preserved by the lexer and parser.
   `NzSqlVisitor` dispatches Oracle statements (anonymous blocks, program units)
   as opaque token ranges.
 - Oracle quality rules and authoring live in `extensions/oracle/src/sql/`
-  (not in `src/dialects/oracle`); they are composed per document in the C# LSP
-  through `SqlDialect` (`Dialects/SqlDialect.cs`) with `--dialect` startup
-  argument or the `justy/setDialect` request (`netezza` | `oracle` | `db2` |
-  `mssql` | `mysql` | `postgresql` | `access`).
+  (not in `src/dialects/oracle`); they are composed per document in C#
+  through `SqlDialect` (`Dialects/SqlDialect.cs`).
 - q-quoted strings (`q'[...]'`) tokenize as `q` identifier + string literal in
   both the TS and C# lexers; embedded quote handling is preserved only in the
   linter's statement scanner (`OracleLintHelpers.StatementEnd`).

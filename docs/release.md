@@ -13,7 +13,7 @@ Publishing to NuGet.org is done by GitHub Actions when a GitHub Release is
 2. Run `pwsh .\eng\Verify-Local.ps1` before every push to `master`. For a
    production release, use `pwsh .\eng\Verify-Local.ps1 -FullCi`.
    Per-library gates in `eng\Test-Coverage.ps1`: parser, DDL, catalog, and
-   Netezza integration (80% line / 65% branch); LSP handlers (60% / 50%);
+   Netezza integration (80% line / 65% branch);
    **JustyBase.Core** and **JustyBase.ImportExport** (50% / 35%);
    **JustyBase.Ai** (35% / 25%) and **JustyBase.Sqlite** (88% / 74%).
 3. Pack the libraries, then run `pwsh .\eng\Test-PackageConsumer.ps1` to

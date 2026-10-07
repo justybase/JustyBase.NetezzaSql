@@ -126,7 +126,7 @@ public delegate SqlWordListRequest SqlWordListRequestExtractor(
 /// Shared contract for the live-database word-list completion fallback used by
 /// SQL editors (Avalonia RoslynPad and WinForms FCTB). Implementations adapt a
 /// host-owned database/schema layer; the contract itself is UI-agnostic so
-/// headless and LSP consumers can query either host engine.
+/// headless consumers can query either host engine.
 /// </summary>
 public interface ISqlDbWordListProvider
 {

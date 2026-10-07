@@ -8,7 +8,7 @@ namespace JustyBase.Core.Diagnostics;
 
 /// <summary>
 /// Environment-gated SQL typing UX probe shared by all JustyBase editor hosts
-/// (Avalonia SqlEditor, WinForms FCTB, LSP). Single canonical implementation —
+/// (Avalonia SqlEditor, WinForms FCTB). Single canonical implementation —
 /// no per-host copies.
 /// Enable with env <c>JUSTYBASE_SQL_TYPING_PERF=1</c> (optional path via
 /// <c>JUSTYBASE_SQL_TYPING_PERF_LOG</c>). Writes NDJSON lines to

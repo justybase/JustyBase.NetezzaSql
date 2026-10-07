@@ -17,7 +17,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\JustyBase.NetezzaSqlParser.csproj" />
-    <ProjectReference Include="..\..\JustyBase.NetezzaSqlLsp\JustyBase.NetezzaSqlLsp.csproj" />
   </ItemGroup>
   <ItemGroup><Using Include="Xunit" /></ItemGroup>
 </Project>

@@ -9,7 +9,7 @@ using Superpower.Model;
 namespace JustyBase.NetezzaSqlParser.Authoring;
 
 /// <summary>
-/// Context-aware semantic token classifier shared by the Avalonia editor and LSP.
+/// Context-aware semantic token classifier shared by the Avalonia editor and headless consumers.
 /// </summary>
 public sealed class NzSemanticTokenClassifier
 {

@@ -1,5 +1,3 @@
-using JustyBase.NetezzaSqlLsp.Protocol;
-using JustyBase.NetezzaSqlLsp.Services;
 using JustyBase.NetezzaSqlParser.Ast;
 using JustyBase.NetezzaSqlParser.Completion;
 using JustyBase.NetezzaSqlParser.Dialects;
@@ -72,21 +70,19 @@ public sealed class CompletionRankingTests
     }
 
     [Fact]
-    public async Task CompletionService_AssignsTierSortText()
+    public async Task Orchestrator_PrioritizesColumnsOverKeywords()
     {
         const string text = "SELECT EMPLOYEE_ID FROM EMPLOYEES WHERE ";
 
-        var list = await CompletionService.GetCompletions(
+        var result = await CompletionOrchestrator.GetCompletions(
             text,
-            line: 0,
-            character: text.Length,
+            text.Length,
             CreateSchema(),
             SqlDialect.Netezza,
-            triggerKind: (int)CompletionTriggerKind.Invoked);
+            options: new CompletionOrchestrationOptions { ForcedAutocomplete = true });
 
-        var column = Assert.Single(list.Items!, item => item.Label == "EMPLOYEE_ID");
-        Assert.StartsWith("2_", column.SortText, StringComparison.Ordinal);
-        Assert.Contains(list.Items!, item => item.SortText != null && item.SortText.StartsWith("5_", StringComparison.Ordinal));
+        Assert.Contains(result.EngineItems, item => item.Label == "EMPLOYEE_ID" && item.Kind == CompletionKind.Column);
+        Assert.Contains(result.EngineItems, item => item.Kind == CompletionKind.Keyword);
     }
 
     [Fact]

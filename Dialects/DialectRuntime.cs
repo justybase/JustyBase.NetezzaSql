@@ -9,7 +9,7 @@ namespace JustyBase.NetezzaSqlParser.Dialects;
 
 /// <summary>
 /// Central dialect dispatch for tokenize / parse / quality rules / authoring.
-/// Keeps LSP and caching layers free of growing <c>if (dialect == …)</c> chains.
+/// Keeps authoring and caching layers free of growing <c>if (dialect == …)</c> chains.
 /// </summary>
 public static class DialectRuntime
 {

@@ -1,4 +1,3 @@
-using JustyBase.NetezzaSqlLsp.Services;
 using JustyBase.NetezzaSqlParser.Ast;
 using JustyBase.NetezzaSqlParser.Dialects;
 using JustyBase.NetezzaSqlParser.Lexer;
@@ -102,6 +101,9 @@ public sealed class OracleLiveParserLinterTests : IClassFixture<OracleLiveFixtur
         }
         return (statements, errors);
     }
+
+    private static IReadOnlyList<LintIssue> CheckOracle(string sql) =>
+        DialectRuntime.QualityRules(SqlDialect.Oracle).AllRules.SelectMany(r => r.Check(sql)).ToList();
 
     private void AssertParsesAndExecutes(string sql, bool expectRows = false)
     {
@@ -274,30 +276,24 @@ public sealed class OracleLiveParserLinterTests : IClassFixture<OracleLiveFixtur
     {
         if (!RequireLive()) return;
 
-        var selectStar = LintService.Lint($"SELECT * FROM {_fx.QualifiedTable}", null, SqlDialect.Oracle);
-        Assert.Contains(selectStar, d => d.Code == "ORA001");
-        Assert.DoesNotContain(selectStar, d => d.Code?.StartsWith("NZ", StringComparison.Ordinal) == true);
+        var selectStar = CheckOracle($"SELECT * FROM {_fx.QualifiedTable}");
+        Assert.Contains(selectStar, d => d.RuleId == "ORA001");
+        Assert.DoesNotContain(selectStar, d => d.RuleId.StartsWith("NZ", StringComparison.Ordinal));
 
-        var deleteAll = LintService.Lint($"DELETE FROM {_fx.QualifiedTable}", null, SqlDialect.Oracle);
-        Assert.Contains(deleteAll, d => d.Code == "ORA002");
+        var deleteAll = CheckOracle($"DELETE FROM {_fx.QualifiedTable}");
+        Assert.Contains(deleteAll, d => d.RuleId == "ORA002");
 
-        var updateAll = LintService.Lint(
-            $"UPDATE {_fx.QualifiedTable} SET NOTE = 'X'",
-            null,
-            SqlDialect.Oracle);
-        Assert.Contains(updateAll, d => d.Code == "ORA003");
+        var updateAll = CheckOracle(
+            $"UPDATE {_fx.QualifiedTable} SET NOTE = 'X'");
+        Assert.Contains(updateAll, d => d.RuleId == "ORA003");
 
-        var rownumOrder = LintService.Lint(
-            $"SELECT ID FROM {_fx.QualifiedTable} WHERE ROWNUM <= 10 ORDER BY ID",
-            null,
-            SqlDialect.Oracle);
-        Assert.Contains(rownumOrder, d => d.Code == "ORA004");
+        var rownumOrder = CheckOracle(
+            $"SELECT ID FROM {_fx.QualifiedTable} WHERE ROWNUM <= 10 ORDER BY ID");
+        Assert.Contains(rownumOrder, d => d.RuleId == "ORA004");
 
-        var safeUpdate = LintService.Lint(
-            $"UPDATE {_fx.QualifiedTable} SET NOTE = q'[x; y]' WHERE ID = 1",
-            null,
-            SqlDialect.Oracle);
-        Assert.DoesNotContain(safeUpdate, d => d.Code == "ORA003");
+        var safeUpdate = CheckOracle(
+            $"UPDATE {_fx.QualifiedTable} SET NOTE = q'[x; y]' WHERE ID = 1");
+        Assert.DoesNotContain(safeUpdate, d => d.RuleId == "ORA003");
     }
 
     [Fact]
@@ -324,12 +320,13 @@ public sealed class OracleLiveParserLinterTests : IClassFixture<OracleLiveFixtur
             Schema: _fx.Schema,
             Columns: cols.Select(c => new ColumnInfo(c.Name, DataType: c.DataType)).ToArray()));
 
-        var diagnostics = LintService.Lint(
+        using var engine = new LintEngine(SqlDialect.Oracle);
+        var result = engine.RunFullLint(new LintConfig(
             $"SELECT BAD_COL_THAT_DOES_NOT_EXIST FROM {_fx.QualifiedTable}",
             schema,
-            SqlDialect.Oracle);
+            Dialect: SqlDialect.Oracle));
 
-        Assert.Contains(diagnostics, d => d.Code == "SQL004");
+        Assert.Contains(result.Issues, d => d.RuleId == "SQL004");
     }
 
     [Fact]

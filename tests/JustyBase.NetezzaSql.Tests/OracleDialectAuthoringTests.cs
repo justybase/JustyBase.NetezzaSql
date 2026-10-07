@@ -1,17 +1,17 @@
-using JustyBase.NetezzaSqlLsp.Services;
 using JustyBase.NetezzaSqlParser.Authoring;
 using JustyBase.NetezzaSqlParser.Caching;
+using JustyBase.NetezzaSqlParser.Completion;
 using JustyBase.NetezzaSqlParser.Dialects;
 using JustyBase.NetezzaSqlParser.Lexer;
 
 namespace JustyBase.Tests.NetezzaSqlParser;
 
 /// <summary>
-/// LSP-level dialect switching tests: the Oracle dialect composes the Oracle
-/// lexer/parser into the parse session and LSP services (lint rules, authoring
-/// catalogs), while the Netezza dialect keeps the shared pipeline unchanged.
+/// Oracle dialect switching tests: the Oracle dialect composes the Oracle
+/// lexer/parser into the parse session and shared authoring services
+/// (lint rules, authoring catalogs), while the Netezza dialect keeps the shared pipeline unchanged.
 /// </summary>
-public sealed class OracleDialectLspTests
+public sealed class OracleDialectAuthoringTests
 {
     // ====== DocumentParseSession dialect ======
 
@@ -103,41 +103,47 @@ public sealed class OracleDialectLspTests
         Assert.Same(netezza, coordinator.GetOrCreate("doc1", SqlDialect.Netezza));
     }
 
-    // ====== LintService dialect rules ======
+    // ====== Quality rules dialect ======
+
+    private static IReadOnlyList<JustyBase.NetezzaSqlParser.Linter.LintIssue> CheckOracle(string sql) =>
+        DialectRuntime.QualityRules(SqlDialect.Oracle).AllRules.SelectMany(r => r.Check(sql)).ToList();
+
+    private static IReadOnlyList<JustyBase.NetezzaSqlParser.Linter.LintIssue> CheckNetezza(string sql) =>
+        DialectRuntime.QualityRules(SqlDialect.Netezza).AllRules.SelectMany(r => r.Check(sql)).ToList();
 
     [Fact]
     public void Lint_OracleDialect_ReportsOra001SelectStar()
     {
-        var diagnostics = LintService.Lint("SELECT * FROM employees", null, SqlDialect.Oracle);
+        var issues = CheckOracle("SELECT * FROM employees");
 
-        Assert.Contains(diagnostics, d => d.Code == "ORA001");
+        Assert.Contains(issues, d => d.RuleId == "ORA001");
     }
 
     [Fact]
     public void Lint_OracleDialect_ReportsOra002DeleteWithoutWhere()
     {
-        var diagnostics = LintService.Lint("DELETE FROM employees", null, SqlDialect.Oracle);
+        var issues = CheckOracle("DELETE FROM employees");
 
-        Assert.Contains(diagnostics, d => d.Code == "ORA002");
+        Assert.Contains(issues, d => d.RuleId == "ORA002");
     }
 
     [Fact]
     public void Lint_NetezzaDialect_DoesNotReportOraRules()
     {
-        var diagnostics = LintService.Lint("SELECT * FROM employees", null, SqlDialect.Netezza);
+        var issues = CheckNetezza("SELECT * FROM employees");
 
-        Assert.DoesNotContain(diagnostics, d => d.Code?.StartsWith("ORA", StringComparison.Ordinal) == true);
+        Assert.DoesNotContain(issues, d => d.RuleId.StartsWith("ORA", StringComparison.Ordinal));
     }
 
     [Fact]
     public void Lint_OracleDialect_DoesNotReportNzRules()
     {
         // SELECT * triggers ORA001; NZ001 must not fire in Oracle mode.
-        var diagnostics = LintService.Lint("SELECT * FROM employees", null, SqlDialect.Oracle);
+        var issues = CheckOracle("SELECT * FROM employees");
 
-        Assert.Contains(diagnostics, d => d.Code == "ORA001");
-        Assert.DoesNotContain(diagnostics, d => d.Code?.StartsWith("NZ", StringComparison.Ordinal) == true);
-        Assert.All(diagnostics, d => Assert.Equal("Oracle SQL", d.Source));
+        Assert.Contains(issues, d => d.RuleId == "ORA001");
+        Assert.DoesNotContain(issues, d => d.RuleId.StartsWith("NZ", StringComparison.Ordinal));
+        Assert.Equal("Oracle SQL", DialectRuntime.DiagnosticSource(SqlDialect.Oracle));
     }
 
     // ====== Completion + hover + signature catalogs ======
@@ -145,31 +151,36 @@ public sealed class OracleDialectLspTests
     [Fact]
     public async Task Completion_OracleDialect_OffersOracleFunctions()
     {
-        var completions = await CompletionService.GetCompletions("SELECT", 0, 6, null, SqlDialect.Oracle);
+        var result = await CompletionOrchestrator.GetCompletions("SELECT", 6, null, SqlDialect.Oracle);
 
-        Assert.NotNull(completions.Items);
-        Assert.Contains(completions.Items!, i => i.Label == "NVL");
-        Assert.Contains(completions.Items!, i => i.Label == "TO_DATE");
+        Assert.Contains(result.EngineItems, i => i.Label == "NVL");
+        Assert.Contains(result.EngineItems, i => i.Label == "TO_DATE");
     }
 
     [Fact]
     public void Hover_OracleDialect_ExplainsOracleDataType()
     {
-        var hover = HoverService.GetHover("SELECT VARCHAR2(10) FROM t", 0, 10, null, SqlDialect.Oracle);
+        const string sql = "SELECT VARCHAR2(10) FROM t";
+        var hover = NzHoverService.GetHover(
+            sql, 10, null,
+            catalog: DialectRuntime.AuthoringCatalog(SqlDialect.Oracle),
+            dialect: SqlDialect.Oracle);
 
         Assert.NotNull(hover);
-        Assert.NotNull(hover!.Contents);
-        Assert.Contains("VARCHAR2", hover.Contents!.Value);
+        Assert.Contains("VARCHAR2", hover!.Content, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
     public void SignatureHelp_OracleDialect_ReturnsOracleSignatures()
     {
-        var help = SignatureHelpService.GetSignatureHelp("SELECT TO_CHAR(", 0, 16, SqlDialect.Oracle);
+        const string sql = "SELECT TO_CHAR(";
+        var help = NzSignatureHelpService.GetSignatureHelp(
+            sql, sql.Length,
+            catalog: DialectRuntime.AuthoringCatalog(SqlDialect.Oracle),
+            dialect: SqlDialect.Oracle);
 
         Assert.NotNull(help);
-        Assert.NotNull(help!.Signatures);
-        Assert.Contains(help.Signatures, s => s.Label.Contains("TO_CHAR", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(help!.Signatures, s => s.Label.Contains("TO_CHAR", StringComparison.OrdinalIgnoreCase));
     }
 
     // ====== Semantic tokens ======
@@ -187,20 +198,27 @@ public sealed class OracleDialectLspTests
     [Fact]
     public void Hover_OracleDialect_ExplainsBindVariable()
     {
-        var sql = "SELECT * FROM t WHERE id = :NEW.ID";
+        const string sql = "SELECT * FROM t WHERE id = :NEW.ID";
         var offset = sql.IndexOf(':');
-        var hover = HoverService.GetHover(sql, 0, offset, null, SqlDialect.Oracle);
+        var hover = NzHoverService.GetHover(
+            sql, offset, null,
+            catalog: DialectRuntime.AuthoringCatalog(SqlDialect.Oracle),
+            dialect: SqlDialect.Oracle);
 
         Assert.NotNull(hover);
-        Assert.Contains(":NEW.ID", hover!.Contents!.Value);
-        Assert.Contains("bind", hover.Contents.Value, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(":NEW.ID", hover!.Content, StringComparison.Ordinal);
+        Assert.Contains("bind", hover.Content, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
     public void SignatureHelp_OracleDialect_ResolvesQualifiedFunction()
     {
         // TO_CHAR is in the Oracle catalog; after a package-style call the short name is used.
-        var help = SignatureHelpService.GetSignatureHelp("SELECT TO_CHAR(", 0, 16, SqlDialect.Oracle);
+        const string sql = "SELECT TO_CHAR(";
+        var help = NzSignatureHelpService.GetSignatureHelp(
+            sql, sql.Length,
+            catalog: DialectRuntime.AuthoringCatalog(SqlDialect.Oracle),
+            dialect: SqlDialect.Oracle);
 
         Assert.NotNull(help);
         Assert.Contains(help!.Signatures, s => s.Label.Contains("TO_CHAR", StringComparison.OrdinalIgnoreCase));
@@ -215,13 +233,11 @@ public sealed class OracleDialectLspTests
     }
 
     [Theory]
-    [InlineData(new[] { "--dialect=oracle" }, SqlDialect.Oracle)]
-    [InlineData(new[] { "--dialect", "oracle" }, SqlDialect.Oracle)]
-    [InlineData(new[] { "--dialect=netezza" }, SqlDialect.Netezza)]
-    [InlineData(new[] { "--dialect", "netezza" }, SqlDialect.Netezza)]
-    [InlineData(new string[0], SqlDialect.Netezza)]
-    public void LspDialectArgs_ParsesEqualsAndSpacedForms(string[] args, SqlDialect expected)
+    [InlineData("oracle", SqlDialect.Oracle)]
+    [InlineData("netezza", SqlDialect.Netezza)]
+    [InlineData(null, SqlDialect.Netezza)]
+    public void DialectRuntime_ParsesEqualsAndSpacedForms(string? name, SqlDialect expected)
     {
-        Assert.Equal(expected, JustyBase.NetezzaSqlLsp.LspDialectArgs.Parse(args));
+        Assert.Equal(expected, DialectRuntime.ParseName(name));
     }
 }

@@ -10,7 +10,7 @@ namespace JustyBase.NetezzaSqlParser.Completion;
 /// the current statement/window, runs <see cref="NzCompletionEngine"/> so the
 /// scope collector populates, then reads the alias/CTE/temp-table hints via
 /// <see cref="NzCompletionEngine.GetScopeHints"/> and attaches them to the
-/// request. Used by headless consumers (LSP, tools) through
+/// request. Used by headless consumers (tools, tests) through
 /// <see cref="SqlWordListService"/>.
 /// </summary>
 /// <remarks>

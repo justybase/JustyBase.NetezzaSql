@@ -1,4 +1,3 @@
-using JustyBase.NetezzaSqlLsp.Services;
 using JustyBase.NetezzaSqlParser.Ast;
 using JustyBase.NetezzaSqlParser.Dialects;
 using JustyBase.NetezzaSqlParser.Lexer;
@@ -96,6 +95,9 @@ public sealed class Db2LiveParserLinterTests : IClassFixture<Db2LiveFixture>
         }
         return (statements, errors);
     }
+
+    private static IReadOnlyList<LintIssue> CheckDb2(string sql) =>
+        DialectRuntime.QualityRules(SqlDialect.Db2).AllRules.SelectMany(r => r.Check(sql)).ToList();
 
     private void AssertParsesAndExecutes(string sql, bool expectRows = false)
     {
@@ -208,37 +210,35 @@ public sealed class Db2LiveParserLinterTests : IClassFixture<Db2LiveFixture>
     {
         if (!RequireLive()) return;
 
-        var selectStar = LintService.Lint($"SELECT * FROM {_fx.QualifiedTable}", null, SqlDialect.Db2);
-        Assert.Contains(selectStar, d => d.Code == "DB2001");
+        var selectStar = CheckDb2($"SELECT * FROM {_fx.QualifiedTable}");
+        Assert.Contains(selectStar, d => d.RuleId == "DB2001");
 
-        var deleteAll = LintService.Lint($"DELETE FROM {_fx.QualifiedTable}", null, SqlDialect.Db2);
-        Assert.Contains(deleteAll, d => d.Code == "DB2002");
+        var deleteAll = CheckDb2($"DELETE FROM {_fx.QualifiedTable}");
+        Assert.Contains(deleteAll, d => d.RuleId == "DB2002");
 
-        var updateAll = LintService.Lint(
-            $"UPDATE {_fx.QualifiedTable} SET NOTE = 'x'",
-            null,
-            SqlDialect.Db2);
-        Assert.Contains(updateAll, d => d.Code == "DB2003");
+        var updateAll = CheckDb2(
+            $"UPDATE {_fx.QualifiedTable} SET NOTE = 'x'");
+        Assert.Contains(updateAll, d => d.RuleId == "DB2003");
 
         Assert.Contains(
-            LintService.Lint("GROOM TABLE T", null, SqlDialect.Db2),
-            d => d.Code == "DB2004");
+            CheckDb2("GROOM TABLE T"),
+            d => d.RuleId == "DB2004");
         Assert.Contains(
-            LintService.Lint("CREATE TABLE T (A INT) DISTRIBUTE ON (A)", null, SqlDialect.Db2),
-            d => d.Code == "DB2005");
+            CheckDb2("CREATE TABLE T (A INT) DISTRIBUTE ON (A)"),
+            d => d.RuleId == "DB2005");
         Assert.Contains(
-            LintService.Lint($"SELECT ID FROM {_fx.QualifiedTable} FETCH FIRST 5 ROWS ONLY", null, SqlDialect.Db2),
-            d => d.Code == "DB2006");
+            CheckDb2($"SELECT ID FROM {_fx.QualifiedTable} FETCH FIRST 5 ROWS ONLY"),
+            d => d.RuleId == "DB2006");
         Assert.Contains(
-            LintService.Lint("SELECT * FROM T LIMIT 10", null, SqlDialect.Db2),
-            d => d.Code == "DB2007");
+            CheckDb2("SELECT * FROM T LIMIT 10"),
+            d => d.RuleId == "DB2007");
         Assert.Contains(
-            LintService.Lint("SELECT * FROM DB..TABLE", null, SqlDialect.Db2),
-            d => d.Code == "DB2008");
+            CheckDb2("SELECT * FROM DB..TABLE"),
+            d => d.RuleId == "DB2008");
 
         Assert.DoesNotContain(
-            LintService.Lint($"SELECT * FROM {_fx.QualifiedTable}", null, SqlDialect.Db2),
-            d => d.Code?.StartsWith("NZ", StringComparison.Ordinal) == true);
+            CheckDb2($"SELECT * FROM {_fx.QualifiedTable}"),
+            d => d.RuleId.StartsWith("NZ", StringComparison.Ordinal));
 
         var registry = new QualityRuleRegistry(Db2LintRules.AllRules);
         Assert.Equal(8, registry.AllRules.Count);

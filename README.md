@@ -2,7 +2,7 @@
 
 Open-source .NET libraries for working with SQL without requiring a live database connection.
 
-The solution ships nine NuGet libraries plus a standalone LSP executable:
+The solution ships nine NuGet libraries:
 
 | Project | Purpose |
 | --- | --- |
@@ -15,7 +15,6 @@ The solution ships nine NuGet libraries plus a standalone LSP executable:
 | `JustyBase.ImportExport` | Shared Netezza import engines and tabular export writers used by Avalonia and Legacy hosts. |
 | `JustyBase.Ai` | UI-agnostic AI chat logic: chat service, tool executor, OpenAI-compatible and Codex backends, prompt building, and chat model contracts. |
 | `JustyBase.Ai.Embedded` | Embedded llama.cpp (`llama-server`) GGUF model management for FIM inline completion and AI chat. |
-| `JustyBase.NetezzaSqlLsp` | NativeAOT Language Server Protocol executable built on the parser package (not published to NuGet). |
 
 ## Status
 
