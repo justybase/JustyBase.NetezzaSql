@@ -108,6 +108,10 @@ public class NzCompletionEngine
         var contextTokens = TokenizePrefix(sql[..cursorPosition]);
         if (contextTokens is null) return Array.Empty<CompletionItem>();
 
+        if (contextTokens.Length >= 3 && contextTokens[^1].Kind == NzToken.LParen
+            && contextTokens[^2].Kind == NzToken.As && contextTokens.Any(token => token.Kind == NzToken.With))
+            return [new CompletionItem("SELECT", CompletionKind.Keyword)];
+
         var filterPartial = partialWord;
         if (contextTokens.Length > 0 &&
             contextTokens[^1].ToStringValue().Equals(partialWord, StringComparison.OrdinalIgnoreCase) &&
@@ -1022,7 +1026,7 @@ public class NzCompletionEngine
                     if (positionVisibleCtes is { Count: > 0 }
                         && !positionVisibleCtes.Contains(table.Name))
                         continue;
-                    list.Add(new CompletionItem(table.Name, CompletionKind.Cte, Priority: 5));
+                    list.Add(new CompletionItem(table.Name, CompletionKind.Cte, Priority: -5));
                     hasCtes = true;
                 }
             }
@@ -1034,7 +1038,7 @@ public class NzCompletionEngine
         {
             foreach (var name in positionVisibleCtes)
             {
-                list.Add(new CompletionItem(name, CompletionKind.Cte, Priority: 5));
+                list.Add(new CompletionItem(name, CompletionKind.Cte, Priority: -5));
             }
         }
     }
@@ -1072,7 +1076,7 @@ public class NzCompletionEngine
                 continue;
             var label = $"{left.Qualifier}.{column.Name} = {right.Qualifier}.{column.Name}";
             list.Add(new CompletionItem(label, CompletionKind.Reference,
-                "Suggested join using matching column names", Priority: 1, InsertText: label));
+                "Suggested join using matching column names", Priority: -10, InsertText: label));
         }
     }
 

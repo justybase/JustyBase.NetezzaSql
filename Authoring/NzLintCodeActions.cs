@@ -434,7 +434,7 @@ public static class NzLintCodeActions
             while (insertAt > issue.StartOffset && char.IsWhiteSpace(sql[insertAt - 1]))
                 insertAt--;
 
-            return sql[..insertAt] + "\nDISTRIBUTE ON RANDOM" + sql[insertAt..];
+            return sql[..insertAt] + " DISTRIBUTE ON RANDOM" + sql[insertAt..];
         });
     }
 
@@ -624,7 +624,7 @@ public static class NzLintCodeActions
         {
             var semi = sql.IndexOf(';', issue.StartOffset);
             var insertAt = semi >= 0 ? semi : sql.Length;
-            return sql.Insert(insertAt, $" {clause} 1=0");
+            return sql.Insert(insertAt, $" {clause} 1 = 0");
         });
     }
 

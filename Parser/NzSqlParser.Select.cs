@@ -698,7 +698,9 @@ public partial class NzSqlParser
         if (Peek().Kind == NzToken.LParen)
         {
             var lp = Advance();
-            var query = ParseSelectStatement();
+            WithClause? nestedWith = null;
+            if (Peek().Kind == NzToken.With) nestedWith = ParseWithClause();
+            var query = ParseSelectStatement(nestedWith);
             Expect(NzToken.RParen);
             string? alias = null;
             char? aliasQuote = null;

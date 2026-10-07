@@ -73,7 +73,7 @@ public sealed class SharedSqlConformanceAuthoringTests
                     AssertDiagnostics(root, sql, schema, id);
                     break;
                 case "semantic":
-                    AssertSemantic(root, sql, schema, dialect, id);
+                    AssertSemantic(root, sql, cursor, schema, dialect, id);
                     break;
                 case "quick-fixes":
                     AssertQuickFix(root, sql, schema, id);
@@ -178,7 +178,7 @@ public sealed class SharedSqlConformanceAuthoringTests
             var label = GetString(item, "label");
             var kind = GetString(item, "kind");
             var found = actual.Any(candidate =>
-                SameIdentifier(candidate.Label, label)
+                (label.Length == 0 || SameIdentifier(candidate.Label, label))
                 && (kind.Length == 0 || candidate.Kind.Equals(kind, StringComparison.OrdinalIgnoreCase))
                 && OptionalMatches(item, "detail", candidate.Detail)
                 && OptionalMatches(item, "documentation", candidate.Documentation)
@@ -197,7 +197,7 @@ public sealed class SharedSqlConformanceAuthoringTests
             var label = GetString(item, "label");
             var kind = GetString(item, "kind");
             Assert.DoesNotContain(actual, candidate =>
-                SameIdentifier(candidate.Label, label)
+                (label.Length == 0 || SameIdentifier(candidate.Label, label))
                 && (kind.Length == 0 || candidate.Kind.Equals(kind, StringComparison.OrdinalIgnoreCase)));
         }
     }
@@ -243,6 +243,7 @@ public sealed class SharedSqlConformanceAuthoringTests
         if (!expected.TryGetProperty("exact", out var exact))
             return;
         Assert.Equal(exact.GetArrayLength(), actual.Length);
+        AssertOrderedItems(expected, "exact", actual, id);
         for (var index = 0; index < actual.Length; index++)
         {
             var item = exact[index];
@@ -355,7 +356,7 @@ public sealed class SharedSqlConformanceAuthoringTests
         LintSeverity.Hint => "hint",
         _ => throw new ArgumentOutOfRangeException(nameof(severity), severity, null)
     };
-    private static void AssertSemantic(JsonElement root, string sql, ISchemaProvider? schema, SqlDialect dialect, string id)
+    private static void AssertSemantic(JsonElement root, string sql, int cursor, ISchemaProvider? schema, SqlDialect dialect, string id)
     {
         var expected = root.GetProperty("expect");
         if (expected.TryGetProperty("diagnostics", out _))
@@ -363,6 +364,15 @@ public sealed class SharedSqlConformanceAuthoringTests
             var issues = CollectLintIssues(sql, schema, GetString(expected, "pipeline", "full"));
             AssertDiagnosticExpectation(expected, issues, sql, schema, id);
             return;
+        }
+
+        if (expected.TryGetProperty("definition", out var definition))
+        {
+            var actual = NzSymbolService.GetDefinition(sql, cursor);
+            Assert.NotNull(actual);
+            Assert.Equal(definition.GetProperty("start").GetInt32(), actual.StartAbsolute);
+            Assert.Equal(definition.GetProperty("end").GetInt32(), actual.EndAbsolute);
+            Assert.Equal(GetString(definition, "text"), sql[actual.StartAbsolute..actual.EndAbsolute]);
         }
 
         using var runtime = new ParsingRuntime(dialect);
@@ -460,6 +470,28 @@ public sealed class SharedSqlConformanceAuthoringTests
         Assert.NotNull(issue);
         var fix = NzLintCodeActions.GetQuickFix(issue!, sql, schema);
         Assert.True(fix.HasValue, $"[{id}] production diagnostic {code} did not produce a quick fix.");
+        if (expected.TryGetProperty("titleContains", out var title)
+            || expected.TryGetProperty("safety", out _)
+            || expected.TryGetProperty("edits", out _))
+        {
+            var action = NzLintCodeActions.GetQuickFixInfo(issue!, sql, schema);
+            Assert.NotNull(action);
+            if (title.ValueKind == JsonValueKind.String) Assert.Contains(title.GetString()!, action.Title);
+            if (expected.TryGetProperty("safety", out var safety))
+                Assert.Equal(safety.GetString(), action.Safety == SqlQuickFixSafety.Safe ? "safe" : "review-required");
+            if (expected.TryGetProperty("edits", out var edits))
+            {
+                var actual = action.Edits.OrderBy(edit => edit.StartOffset).ThenBy(edit => edit.EndOffset).ToArray();
+                var wanted = edits.EnumerateArray().OrderBy(edit => edit.GetProperty("start").GetInt32()).ThenBy(edit => edit.GetProperty("end").GetInt32()).ToArray();
+                Assert.Equal(wanted.Length, actual.Length);
+                for (var index = 0; index < wanted.Length; index++)
+                {
+                    Assert.Equal(wanted[index].GetProperty("start").GetInt32(), actual[index].StartOffset);
+                    Assert.Equal(wanted[index].GetProperty("end").GetInt32(), actual[index].EndOffset);
+                    Assert.Equal(GetString(wanted[index], "text"), actual[index].NewText);
+                }
+            }
+        }
         var fixedSql = fix!.Value.Apply(sql);
 
         if (expected.TryGetProperty("resultSql", out var expectedSql))
@@ -530,11 +562,8 @@ public sealed class SharedSqlConformanceAuthoringTests
         var expected = root.GetProperty("expect");
         if (expected.TryGetProperty("contains", out var contains))
             Assert.Contains(contains.GetString() ?? string.Empty, hover!.Content, StringComparison.OrdinalIgnoreCase);
-        if (expected.TryGetProperty("targetKind", out _))
-        {
-            throw new Xunit.Sdk.XunitException(
-                $"[{id}] production SqlHoverInfo exposes content and offsets but no target kind.");
-        }
+        if (expected.TryGetProperty("targetKind", out var targetKind))
+            Assert.Equal(targetKind.GetString(), hover!.TargetKind, ignoreCase: true);
     }
 
     private static async Task AssertRecovery(

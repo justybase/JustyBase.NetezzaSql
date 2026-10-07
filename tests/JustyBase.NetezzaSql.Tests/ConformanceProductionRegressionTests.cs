@@ -10,6 +10,41 @@ namespace JustyBase.Tests.NetezzaSqlParser;
 
 public sealed class ConformanceProductionRegressionTests
 {
+    [Fact]
+    public void Completion_JoinReferencesRankBeforeGenericColumns()
+    {
+        var schema = new InMemorySchemaProvider();
+        schema.AddTable(new TableInfo("USERS", Columns: [new ColumnInfo("ID"), new ColumnInfo("NAME")]));
+        schema.AddTable(new TableInfo("ORDERS", Columns: [new ColumnInfo("ID"), new ColumnInfo("ORDER_ID")]));
+        const string sql = "SELECT * FROM USERS U JOIN ORDERS O ON ";
+        Assert.Contains(new NzCompletionEngine(schema).GetCompletions(sql, sql.Length).Take(3), item => item.Kind == CompletionKind.Reference);
+    }
+
+    [Theory]
+    [InlineData("DELETE FROM t", "SQL043", " WHERE 1 = 0")]
+    [InlineData("UPDATE t SET id = 1", "SQL044", " WHERE 1 = 0")]
+    [InlineData("CREATE TABLE t AS SELECT 1", "SQL045", " DISTRIBUTE ON RANDOM")]
+    public void QuickFix_ExposesExactGuardAndDistributionInsertion(string sql, string code, string insertion)
+    {
+        using var engine = new LintEngine();
+        var issue = engine.RunFullLint(new LintConfig(sql, new InMemorySchemaProvider())).Issues.First(i => i.RuleId == code);
+        var action = NzLintCodeActions.GetQuickFixInfo(issue, sql);
+        Assert.NotNull(action);
+        var edit = Assert.Single(action.Edits);
+        Assert.Equal(sql.Length, edit.StartOffset);
+        Assert.Equal(sql.Length, edit.EndOffset);
+        Assert.Equal(insertion, edit.NewText);
+    }
+
+    [Fact]
+    public void Completion_CteRanksBeforeUnrelatedPhysicalTable()
+    {
+        var schema = new InMemorySchemaProvider();
+        schema.AddTable(new TableInfo("RECENT_LOG", Columns: [new ColumnInfo("ID")]));
+        const string sql = "WITH recent AS (SELECT 1 AS id) SELECT * FROM rec";
+        Assert.Equal("recent", new NzCompletionEngine(schema).GetCompletions(sql, sql.Length)[0].Label, ignoreCase: true);
+    }
+
     [Theory]
     [InlineData("SELECT * FROM t t ", "LEFT")]
     [InlineData("SELECT id FROM t ORDER BY ", "BY")]
@@ -66,6 +101,52 @@ public sealed class ConformanceProductionRegressionTests
             "SELECT E.CUSTOMER_ID FROM JUST_DATA.SALES.EMPTY_META E", schema)).Issues;
         Assert.Contains(issues, issue => issue.RuleId == "SQL005" && issue.Severity == LintSeverity.Warning);
         Assert.DoesNotContain(issues, issue => issue.RuleId == "SQL004");
+    }
+
+    [Theory]
+    [InlineData("SELECT c.id FROM customers c WHERE EXISTS (SELECT 1 FROM orders o WHERE o.id=|c.id)", "customers c", "c")]
+    [InlineData("SELECT c.id FROM customers c WHERE EXISTS (SELECT |c.id FROM orders c)", "orders c", "c")]
+    [InlineData("WITH recent AS (SELECT 1) SELECT * FROM (WITH recent AS (SELECT 2) SELECT * FROM |recent) d", "(WITH recent", "recent")]
+    [InlineData("SELECT a.id FROM customers a UNION ALL SELECT |b.id FROM orders b", "orders b", "b")]
+    [InlineData("CREATE TEMP TABLE tmp_quality (id INTEGER); SELECT * FROM |tmp_quality", "TABLE tmp_quality", "tmp_quality")]
+    [InlineData("CREATE TABLE ctas_quality AS SELECT 1 AS id; SELECT * FROM |ctas_quality", "TABLE ctas_quality", "ctas_quality")]
+    public void SymbolDefinition_RespectsQueryAndScriptScopes(string markedSql, string anchor, string name)
+    {
+        var cursor = markedSql.IndexOf('|');
+        var sql = markedSql.Replace("|", "", StringComparison.Ordinal);
+        var expected = sql.IndexOf(anchor, StringComparison.Ordinal) + anchor.Length - name.Length;
+        var definition = NzSymbolService.GetDefinition(sql, cursor);
+        Assert.NotNull(definition);
+        Assert.Equal(expected, definition.StartAbsolute);
+        Assert.Equal(expected + name.Length, definition.EndAbsolute);
+    }
+
+    [Theory]
+    [InlineData("SELECT c.CUSTOMER_ID FROM JUST_DATA.SALES.CUSTOMERS c", "CUSTOMER_ID", "Column")]
+    [InlineData("SELECT * FROM JUST_DATA.SALES.CUSTOMERS", "CUSTOMERS", "Table")]
+    public void Hover_ExposesResolvedTargetKind(string sql, string word, string expectedKind)
+    {
+        var schema = new InMemorySchemaProvider();
+        schema.AddTable(new TableInfo("CUSTOMERS", "SALES", "JUST_DATA", Columns: [new ColumnInfo("CUSTOMER_ID")]));
+        var hover = NzHoverService.GetHover(sql, sql.IndexOf(word, StringComparison.Ordinal) + 2, schema);
+        Assert.NotNull(hover);
+        Assert.Equal(expectedKind, hover.GetType().GetProperty("TargetKind")?.GetValue(hover)?.ToString());
+    }
+
+    [Fact]
+    public void IncompleteCteBody_OffersSelect()
+    {
+        const string sql = "WITH x AS (";
+        Assert.Contains(new NzCompletionEngine().GetCompletions(sql, sql.Length), item => item.Label == "SELECT");
+    }
+
+    [Fact]
+    public void SymbolDefinition_ResolvesAliasAtCaretBeforeDot()
+    {
+        const string sql = "SELECT c.id FROM customers c";
+        var definition = NzSymbolService.GetDefinition(sql, sql.IndexOf("c.id", StringComparison.Ordinal) + 1);
+        Assert.NotNull(definition);
+        Assert.Equal(sql.LastIndexOf('c'), definition.StartAbsolute);
     }
 
     [Theory]
@@ -134,6 +215,7 @@ public sealed class ConformanceProductionRegressionTests
 
     [Theory]
     [InlineData("WITH x AS (")]
+    [InlineData("SELECT 'unfinished ")]
     [InlineData("SEL")]
     [InlineData("INSERT INTO t (id, ")]
     public void IncompleteAuthoringInput_RetainsStatementAndErrors(string sql)

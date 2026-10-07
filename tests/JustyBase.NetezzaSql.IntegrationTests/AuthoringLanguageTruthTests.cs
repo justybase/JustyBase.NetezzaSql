@@ -21,7 +21,8 @@ public sealed class AuthoringLanguageTruthTests
         {
             ("netezza.diagnostics.nzl008-empty-in-list.024", "SELECT 1 WHERE 1 IN ()", false),
             ("netezza.diagnostics.nzs002-fetch-first-rejected.025", "SELECT 1 FETCH FIRST 5 ROWS ONLY", false),
-            ("netezza.semantic.statement-model-multiple-ctes.029", "WITH a AS (SELECT 1 AS X), b AS (SELECT 2 AS Y) SELECT * FROM a JOIN b ON a.X = b.Y", true)
+            ("netezza.semantic.statement-model-multiple-ctes.029", "WITH a AS (SELECT 1 AS X), b AS (SELECT 2 AS Y) SELECT * FROM a JOIN b ON a.X = b.Y", true),
+            ("netezza.semantic.quality-cte-shadowing", "WITH recent AS (SELECT 1 AS id) SELECT * FROM (WITH recent AS (SELECT 2 AS id) SELECT * FROM recent) d", true)
         })
         {
             bool valid;

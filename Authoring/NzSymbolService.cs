@@ -18,6 +18,10 @@ public static class NzSymbolService
         {
             var index = NzSymbolCollector.Collect(text);
             var occurrence = index.FindOccurrenceAt(offset);
+            // At a qualifier's trailing caret, the dot belongs to the qualified
+            // reference. Resolve the identifier immediately to its left.
+            if (occurrence is null && offset > 0 && text[offset] == '.')
+                occurrence = index.FindOccurrenceAt(offset - 1);
             if (occurrence is null)
                 return null;
 
