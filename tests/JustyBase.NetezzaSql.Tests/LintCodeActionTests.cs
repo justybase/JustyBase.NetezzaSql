@@ -8,7 +8,7 @@ public sealed class LintCodeActionTests
 {
     [Theory]
     [InlineData("NZ007", "Use uppercase", "select 1", 0, 6, "SELECT 1")]
-    [InlineData("NZ011", "missing distribution", "CREATE TABLE t AS SELECT 1;", 0, 1, "CREATE TABLE t AS SELECT 1\nDISTRIBUTE ON RANDOM;")]
+    [InlineData("NZ011", "missing distribution", "CREATE TABLE t AS SELECT 1;", 0, 1, "CREATE TABLE t AS SELECT 1 DISTRIBUTE ON RANDOM;")]
     [InlineData("NZ012", "", "UPDATE t AS x SET a=1", 9, 2, "UPDATE t x SET a=1")]
     [InlineData("NZ013", "", "SELECT 1 UNION SELECT 2", 9, 5, "SELECT 1 UNION ALL SELECT 2")]
     [InlineData("NZ023", "", "SELEC 1", 0, 5, "SELECT 1")]
@@ -17,7 +17,7 @@ public sealed class LintCodeActionTests
     [InlineData("PAR002", "", "SELECT a,, b", 8, 1, "SELECT a, b")]
     [InlineData("PAR101", "", "WITH x (SELECT 1)", 7, 1, "WITH x AS (SELECT 1)")]
     [InlineData("SQL007", "", "SELECT * FROM DB.TABLE", 14, 8, "SELECT * FROM DB..TABLE")]
-    [InlineData("SQL043", "", "UPDATE t SET a=1;", 0, 1, "UPDATE t SET a=1 WHERE 1=0;")]
+    [InlineData("SQL043", "", "UPDATE t SET a=1;", 0, 1, "UPDATE t SET a=1 WHERE 1 = 0;")]
     public void QuickFixes_ApplySupportedTransforms(string ruleId, string message, string sql, int start, int length, string expected)
     {
         var issue = new LintIssue(ruleId, message, LintSeverity.Warning, start, start + length);

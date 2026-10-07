@@ -1,6 +1,6 @@
 namespace JustyBase.NetezzaSqlParser.Authoring;
 
-public sealed record SqlHoverInfo(string Content, int StartOffset, int EndOffset);
+public sealed record SqlHoverInfo(string Content, int StartOffset, int EndOffset, string? TargetKind = null);
 
 public sealed record SqlSignatureHelpInfo(
     SqlSignatureInfo[] Signatures,

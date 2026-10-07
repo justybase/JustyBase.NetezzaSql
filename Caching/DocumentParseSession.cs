@@ -1,3 +1,4 @@
+using JustyBase.NetezzaSqlParser.Visitor;
 using JustyBase.NetezzaSqlParser.Ast;
 using JustyBase.NetezzaSqlParser.Dialects;
 
@@ -178,6 +179,14 @@ public sealed class DocumentParseSession : IDisposable
         }
         catch (Superpower.ParseException ex)
         {
+            var unfinished = NzSqlStructuralScanner.Scan(sql, dialect)
+                .FirstOrDefault(issue => issue.Code == "PAR110" && issue.Position.Absolute > 0);
+            if (unfinished is not null)
+            {
+                var recovered = ParseSql(sql[..unfinished.Position.Absolute], dialect);
+                return new ParseResult(recovered.Statements,
+                    recovered.Errors.Concat(new[] { unfinished }).ToArray(), false);
+            }
             return new ParseResult([], [new ValidationError(
                 $"Lexer error: {ex.Message}", "error",
                 new SourcePosition(1, 1, 0), "LEX001")], false);

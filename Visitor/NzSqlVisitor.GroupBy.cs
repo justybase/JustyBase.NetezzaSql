@@ -45,7 +45,7 @@ public partial class NzSqlVisitor
                 continue;
 
             AddError("Non-aggregated SELECT item must appear in GROUP BY clause",
-                "error", "SQL028", item.Expression.Position);
+                "information", "SQL028", item.Expression.Position);
         }
     }
 
@@ -59,7 +59,7 @@ public partial class NzSqlVisitor
             if (IsExpressionDeterministic(item.Expression)) continue;
 
             AddError("Column must be aggregated or included in GROUP BY when aggregate functions are present",
-                "error", "SQL028", item.Expression.Position);
+                "information", "SQL028", item.Expression.Position);
         }
     }
 

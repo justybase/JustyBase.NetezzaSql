@@ -19,10 +19,10 @@ public static class NzSqlStructuralScanner
             if (sql[i] == ',' && sql[i + 1] == ',')
             {
                 if (LintHelpers.IsInsideStringOrComment(sql, i)) continue;
-                var pos = SourcePosition.FromOffset(sql, i);
+                var pos = SourcePosition.FromOffset(sql, i + 1);
                 yield return new ValidationError(
                     "Consecutive commas are not allowed",
-                    "error", pos, "PAR002", pos.Line, pos.Column + 2);
+                    "error", pos, "PAR002", pos.Line, pos.Column + 1);
             }
         }
 
@@ -125,6 +125,42 @@ public static class NzSqlStructuralScanner
         }
 
         // PAR003: Duplicate keywords
+        if (dialect == SqlDialect.Netezza)
+        {
+            for (var i = 0; i < tokens.Length; i++)
+            {
+                var token = tokens[i];
+                string? code = null;
+                string? message = null;
+                string? replacement = null;
+                if (token.Kind == NzToken.In && i + 2 < tokens.Length
+                    && tokens[i + 1].Kind == NzToken.LParen && tokens[i + 2].Kind == NzToken.RParen)
+                {
+                    code = "NZL008";
+                    message = "Netezza does not accept an empty IN list.";
+                }
+                else if (token.Kind == NzToken.Fetch && i + 1 < tokens.Length
+                    && tokens[i + 1].ToStringValue().Equals("FIRST", StringComparison.OrdinalIgnoreCase))
+                {
+                    code = "NZS002";
+                    message = "Netezza does not support FETCH FIRST; use LIMIT.";
+                }
+                else if (i + 1 < tokens.Length && tokens[i + 1].Kind == NzToken.Null
+                    && token.ToStringValue() is "=" or "<>" or "!=")
+                {
+                    code = "NZL006";
+                    message = "Use IS NULL or IS NOT NULL to compare with NULL.";
+                    replacement = token.ToStringValue() == "=" ? "IS" : "IS NOT";
+                }
+                if (code is not null)
+                {
+                    var pos = SourcePosition.FromToken(token);
+                    yield return new ValidationError(message!, code == "NZL006" ? "warning" : "error",
+                        pos, code, pos.Line, pos.Column + token.Span.Length, SuggestedFix: replacement);
+                }
+            }
+        }
+
         var duplicateKeywords = new HashSet<NzToken>
         {
             NzToken.From, NzToken.Where, NzToken.Join, NzToken.On,

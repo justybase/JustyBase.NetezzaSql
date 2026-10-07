@@ -16,6 +16,7 @@ internal sealed class NzSymbolCollector
         public ScopeFrame? Parent { get; }
         public Dictionary<string, SymbolOccurrence> Ctes { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, SymbolOccurrence> Aliases { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, SymbolOccurrence> Tables { get; } = new(StringComparer.OrdinalIgnoreCase);
 
         public ScopeFrame(ScopeFrame? parent) => Parent = parent;
     }
@@ -89,6 +90,26 @@ internal sealed class NzSymbolCollector
             case MergeStatement merge:
                 CollectMerge(merge, tokens, startIndex, endIndex, scope);
                 break;
+            case CreateTableStatement create:
+            {
+                var nameIndex = FindIdentifierIndex(tokens, startIndex, endIndex, create.Table.Name);
+                if (nameIndex >= 0)
+                {
+                    var token = tokens[nameIndex];
+                    var definition = AddDefinition(create.Table.Name, SqlSymbolKind.Table,
+                        token.Span.Position.Absolute, token.Span.Position.Absolute + token.Span.Length);
+                    var global = scope;
+                    while (global.Parent is not null) global = global.Parent;
+                    global.Tables[create.Table.Name.ToUpperInvariant()] = definition;
+                }
+                if (create.AsSelect is not null)
+                {
+                    var queryStart = FindTokenIndex(tokens, startIndex, endIndex,
+                        token => token.Span.Position.Absolute >= create.AsSelect.Position.Absolute);
+                    if (queryStart >= 0) CollectSelect(create.AsSelect, tokens, queryStart, endIndex, scope);
+                }
+                break;
+            }
         }
     }
 
@@ -96,12 +117,13 @@ internal sealed class NzSymbolCollector
     {
         var selectScope = new ScopeFrame(scope);
 
-        if (stmt.With is not null)
-            CollectWithClause(stmt.With, tokens, startIndex, endIndex, selectScope);
+        var mainStartIndex = stmt.With is not null
+            ? CollectWithClause(stmt.With, tokens, startIndex, endIndex, selectScope)
+            : startIndex;
 
         if (stmt.From is not null)
         {
-            var fromIdx = FindTokenIndex(tokens, startIndex, endIndex, t => t.Kind == NzToken.From);
+            var fromIdx = FindTokenIndex(tokens, mainStartIndex, endIndex, t => t.Kind == NzToken.From);
             var cursor = fromIdx >= 0 ? fromIdx + 1 : startIndex;
             foreach (var tr in stmt.From)
                 cursor = CollectTableReference(tr, tokens, cursor, endIndex, selectScope);
@@ -122,13 +144,20 @@ internal sealed class NzSymbolCollector
         if (stmt.OrderBy is not null)
             foreach (var order in stmt.OrderBy)
                 CollectExpression(order.Expression, tokens, selectScope);
+        if (stmt.CompoundSelects is not null)
+            foreach (var branch in stmt.CompoundSelects)
+            {
+                var branchStart = FindTokenIndex(tokens, startIndex, endIndex,
+                    token => token.Span.Position.Absolute >= branch.Position.Absolute);
+                if (branchStart >= 0) CollectSelect(branch, tokens, branchStart, endIndex, scope);
+            }
     }
 
-    private void CollectWithClause(WithClause withClause, Token<NzToken>[] tokens, int startIndex, int endIndex, ScopeFrame scope)
+    private int CollectWithClause(WithClause withClause, Token<NzToken>[] tokens, int startIndex, int endIndex, ScopeFrame scope)
     {
         var withIndex = FindTokenIndex(tokens, startIndex, endIndex, t => t.Kind == NzToken.With);
         if (withIndex < 0)
-            return;
+            return startIndex;
 
         var cursor = withIndex + 1;
         if (cursor < tokens.Length && tokens[cursor].Kind == NzToken.Recursive)
@@ -181,6 +210,7 @@ internal sealed class NzSymbolCollector
                 CollectSelect(cte.Query, tokens, bodyOpen + 1, bodyClose, childScope);
             }
         }
+        return cursor;
     }
 
     private int CollectTableReference(TableReference reference, Token<NzToken>[] tokens, int cursor, int endIndex, ScopeFrame scope)
@@ -231,7 +261,7 @@ internal sealed class NzSymbolCollector
             var tableRange = FindTableNameRange(tokens, cursor, endIndex, source.Table);
             if (tableRange is not null)
             {
-                AddReference(source.Table.Name, SqlSymbolKind.Cte,
+                AddReference(source.Table.Name, cteDef.Kind,
                     tokens[tableRange.Value.StartIndex].Span.Position.Absolute,
                     tokens[tableRange.Value.EndIndex].Span.Position.Absolute + tokens[tableRange.Value.EndIndex].Span.Length,
                     cteDef.Id);
@@ -460,7 +490,7 @@ internal sealed class NzSymbolCollector
     private void CollectNestedSelect(SelectStatement nested, Token<NzToken>[] tokens, int startAbsolute, ScopeFrame scope)
     {
         var openIndex = FindTokenIndex(tokens, 0, tokens.Length, t =>
-            t.Kind == NzToken.LParen && t.Span.Position.Absolute == startAbsolute);
+            t.Kind == NzToken.LParen && t.Span.Position.Absolute >= startAbsolute);
         if (openIndex < 0)
             return;
 
@@ -491,7 +521,8 @@ internal sealed class NzSymbolCollector
         var current = scope;
         while (current is not null)
         {
-            if (current.Ctes.TryGetValue(name.ToUpperInvariant(), out occurrence!))
+            if (current.Ctes.TryGetValue(name.ToUpperInvariant(), out occurrence!)
+                || current.Tables.TryGetValue(name.ToUpperInvariant(), out occurrence!))
                 return true;
             current = current.Parent;
         }

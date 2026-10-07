@@ -543,7 +543,7 @@ public sealed partial class NzCompletionEngineTests
         Assert.Contains(i, x => x.Label == "ORDER BY" && x.Kind == CompletionKind.Keyword);
         Assert.Contains(i, x => x.Label == "LIMIT" && x.Kind == CompletionKind.Keyword);
         Assert.Contains(i, x => x.Label == "OFFSET" && x.Kind == CompletionKind.Keyword);
-        Assert.Contains(i, x => x.Label == "FETCH" && x.Kind == CompletionKind.Keyword);
+        Assert.DoesNotContain(i, x => x.Label == "FETCH" && x.Kind == CompletionKind.Keyword);
         Assert.DoesNotContain(i, x => x.Label == "employees");
         Assert.DoesNotContain(i, x => x.Label == "ON");
     }

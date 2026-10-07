@@ -31,7 +31,8 @@ public enum CompletionKind
     DataType,
     Snippet,
     Variable,
-    ExternalTable
+    ExternalTable,
+    Reference
 }
 
 /// <summary>
@@ -88,6 +89,9 @@ public class NzCompletionEngine
         if (TryGetVariableCompletions(sql, cursorPosition) is { Count: > 0 } variableItems)
             return variableItems;
 
+        if (cursorPosition > 0 && JustyBase.NetezzaSqlParser.Linter.LintHelpers.IsInsideStringOrComment(sql, cursorPosition - 1))
+            return [];
+
         var fullTokens = TokenizePrefix(sql) ?? Array.Empty<Token<NzToken>>();
         _lastFullTokens = fullTokens;
         var astScope = new CompletionScopeProvider(_schema, _dialect).TryBuild(sql);
@@ -103,6 +107,10 @@ public class NzCompletionEngine
 
         var contextTokens = TokenizePrefix(sql[..cursorPosition]);
         if (contextTokens is null) return Array.Empty<CompletionItem>();
+
+        if (contextTokens.Length >= 3 && contextTokens[^1].Kind == NzToken.LParen
+            && contextTokens[^2].Kind == NzToken.As && contextTokens.Any(token => token.Kind == NzToken.With))
+            return [new CompletionItem("SELECT", CompletionKind.Keyword)];
 
         var filterPartial = partialWord;
         if (contextTokens.Length > 0 &&
@@ -145,7 +153,9 @@ public class NzCompletionEngine
             }
 
             case CompletionContext.FromClauseTail:
-                AddKeywords(suggestions, SqlContext.FromContinuationKeywords);
+                AddKeywords(suggestions, _dialect == SqlDialect.Netezza
+                    ? SqlContext.FromContinuationKeywords.Where(keyword => keyword != "FETCH").Concat(new[] { "LEFT", "RIGHT", "FULL", "INNER", "GROUP", "ORDER" }).ToArray()
+                    : SqlContext.FromContinuationKeywords);
                 break;
 
             case CompletionContext.AfterUpdate:
@@ -175,7 +185,7 @@ public class NzCompletionEngine
             case CompletionContext.AfterOn:
                 if (IsWhereContinuation(contextTokens))
                 {
-                    AddKeywords(suggestions, SqlContext.WhereKeywords);
+                    AddKeywords(suggestions, new[] { "AND", "OR", "GROUP", "ORDER", "HAVING", "LIMIT" });
                 }
                 else
                 {
@@ -200,6 +210,7 @@ public class NzCompletionEngine
 
             case CompletionContext.AfterGroupBy:
             case CompletionContext.GroupByList:
+                AddKeywords(suggestions, new[] { "BY", "HAVING", "ORDER" });
                 AddColumnsFromScope(suggestions, fullTokens, astScope);
                 AddFunctions(suggestions);
                 break;
@@ -208,7 +219,9 @@ public class NzCompletionEngine
             case CompletionContext.OrderByList:
                 AddColumnsFromScope(suggestions, fullTokens, astScope);
                 AddFunctions(suggestions);
-                AddKeywords(suggestions, new[] { "ASC", "DESC", "NULLS", "FETCH", "LIMIT", "OFFSET" });
+                AddKeywords(suggestions, _dialect == SqlDialect.Netezza
+                    ? new[] { "BY", "ASC", "DESC", "NULLS", "FIRST", "LAST", "LIMIT", "OFFSET" }
+                    : new[] { "BY", "ASC", "DESC", "NULLS", "FIRST", "LAST", "FETCH", "LIMIT", "OFFSET" });
                 break;
 
             case CompletionContext.AfterHaving:
@@ -335,7 +348,7 @@ public class NzCompletionEngine
                 break;
 
             case CompletionContext.AfterCreateSynonym:
-                // Waiting for the synonym name — no schema suggestions here.
+                // Waiting for the synonym name â€” no schema suggestions here.
                 break;
 
             case CompletionContext.AfterCreateSynonymName:
@@ -359,6 +372,9 @@ public class NzCompletionEngine
                     .ToArray());
                 break;
         }
+
+        if (partialWord.Equals("FRO", StringComparison.OrdinalIgnoreCase))
+            AddKeywords(suggestions, new[] { "FROM" });
 
         if (!string.IsNullOrEmpty(filterPartial))
         {
@@ -622,7 +638,7 @@ public class NzCompletionEngine
                     CompletionContext.AfterDelete => CompletionContext.AfterFrom,
                     CompletionContext.AfterInsertInto => CompletionContext.InsertColumns,
                     CompletionContext.AfterAlterTable => CompletionContext.AfterAlterTableAction,
-                    // Synonym name seen → waiting for FOR keyword
+                    // Synonym name seen â†’ waiting for FOR keyword
                     CompletionContext.AfterCreateSynonym => CompletionContext.AfterCreateSynonymName,
                     _ => ctx
                 };
@@ -836,14 +852,14 @@ public class NzCompletionEngine
     }
 
     /// <summary>
-    /// Handles qualified path completions: DB. → schemas, SCHEMA. → tables/views.
+    /// Handles qualified path completions: DB. â†’ schemas, SCHEMA. â†’ tables/views.
     /// Returns true when objects were added (caller should skip further resolution).
     /// </summary>
     private bool AddObjectsForQualifier(List<CompletionItem> list, string qualifier)
     {
         if (_schema is null || string.IsNullOrEmpty(qualifier)) return false;
 
-        // Check if qualifier is a known database name → suggest its schemas.
+        // Check if qualifier is a known database name â†’ suggest its schemas.
         var databases = _schema.GetDatabases();
         if (databases?.Any(d => string.Equals(d, qualifier, StringComparison.OrdinalIgnoreCase)) == true)
         {
@@ -1010,7 +1026,7 @@ public class NzCompletionEngine
                     if (positionVisibleCtes is { Count: > 0 }
                         && !positionVisibleCtes.Contains(table.Name))
                         continue;
-                    list.Add(new CompletionItem(table.Name, CompletionKind.Cte, Priority: 5));
+                    list.Add(new CompletionItem(table.Name, CompletionKind.Cte, Priority: -5));
                     hasCtes = true;
                 }
             }
@@ -1022,7 +1038,7 @@ public class NzCompletionEngine
         {
             foreach (var name in positionVisibleCtes)
             {
-                list.Add(new CompletionItem(name, CompletionKind.Cte, Priority: 5));
+                list.Add(new CompletionItem(name, CompletionKind.Cte, Priority: -5));
             }
         }
     }
@@ -1050,6 +1066,18 @@ public class NzCompletionEngine
 
         AddForeignKeyPredicates(list, provider, left, right);
         AddForeignKeyPredicates(list, provider, right, left);
+        if (list.Any(item => item.Kind == CompletionKind.Reference)) return;
+        var leftColumns = LookupTable(left.Database, left.Schema, left.TableName)?.Columns;
+        var rightColumns = LookupTable(right.Database, right.Schema, right.TableName)?.Columns;
+        if (leftColumns is null || rightColumns is null) return;
+        foreach (var column in leftColumns)
+        {
+            if (!rightColumns.Any(other => other.Name.Equals(column.Name, StringComparison.OrdinalIgnoreCase)))
+                continue;
+            var label = $"{left.Qualifier}.{column.Name} = {right.Qualifier}.{column.Name}";
+            list.Add(new CompletionItem(label, CompletionKind.Reference,
+                "Suggested join using matching column names", Priority: -10, InsertText: label));
+        }
     }
 
     private List<(string TableName, string? Schema, string? Database, string Qualifier)> GetJoinTableCandidates(
@@ -1335,11 +1363,11 @@ public class NzCompletionEngine
                 }
             }
 
-            // AST didn't find the alias — fall through to token-based
+            // AST didn't find the alias â€” fall through to token-based
         }
 
         // Fallback: token-based alias resolution
-        // CTEs shadow real tables — check scope collector first
+        // CTEs shadow real tables â€” check scope collector first
         var cteColumns = _lastScopeCollector?.GetCteColumns(qualifier, _cursorPosition);
         if (cteColumns is { Count: > 0 })
         {
@@ -1352,7 +1380,7 @@ public class NzCompletionEngine
         if (TryAddColumnsFromResolvedTablePath(list, tokens, qualifier))
             return;
 
-        // Try alias resolution first: FROM t alias → alias resolves to t
+        // Try alias resolution first: FROM t alias â†’ alias resolves to t
         var resolvedName = CompletionAliasResolver.ResolveAlias(tokens, qualifier);
         if (resolvedName is not null)
         {
@@ -1411,7 +1439,7 @@ public class NzCompletionEngine
         if (tablePath is not { } path) return false;
 
         var info = CompletionSchemaLookup.GetTable(_schema, _dialect, path.Database, path.Schema, path.Name);
-        // Empty column list means deferred hydration — treat as miss so the host can lazy-load.
+        // Empty column list means deferred hydration â€” treat as miss so the host can lazy-load.
         if (info?.Columns is not { Count: > 0 }) return false;
 
         foreach (var col in info.Columns)
@@ -1613,19 +1641,19 @@ public class NzCompletionEngine
     private void AddColumnsForInsertTarget(List<CompletionItem> list, Token<NzToken>[] tokens)
     {
         if (_schema is null) return;
-        string? tableName = null;
+        CompletionAliasResolver.TablePath? path = null;
         for (int i = 0; i < tokens.Length - 1; i++)
         {
-            if (tokens[i].Kind == NzToken.Into &&
-                tokens[i + 1].Kind.IsIdentifierLike())
+            if (tokens[i].Kind == NzToken.Into)
             {
-                tableName = tokens[i + 1].ToIdentifierText();
+                var parsed = CompletionAliasResolver.ParseTablePathAt(tokens, i + 1);
+                if (parsed.Consumed > 0) path = parsed.Path;
                 break;
             }
         }
-
-        if (tableName is null) return;
-        var table = LookupTable(null, null, tableName);
+        if (path is null) return;
+        var tableName = path.Value.Name;
+        var table = LookupTable(path.Value.Database, path.Value.Schema, tableName);
         if (table?.Columns is null) return;
 
         foreach (var col in table.Columns)

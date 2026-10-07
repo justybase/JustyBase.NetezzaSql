@@ -143,8 +143,8 @@ public static class NzHoverService
             }
 
             var word = text[wordStart..wordEnd];
-            var content = ResolveHover(cursorToken.Value, tokens, word, schema, catalog);
-            return content is null ? null : new SqlHoverInfo(content, wordStart, wordEnd);
+            var content = ResolveHover(cursorToken.Value, tokens, word, schema, catalog, out var targetKind);
+            return content is null ? null : new SqlHoverInfo(content, wordStart, wordEnd, targetKind);
         }
         catch
         {
@@ -152,16 +152,19 @@ public static class NzHoverService
         }
     }
 
-    private static string? ResolveHover(Token<NzToken> token, Token<NzToken>[] allTokens, string word, ISchemaProvider? schema, ISqlAuthoringCatalog catalog)
+    private static string? ResolveHover(Token<NzToken> token, Token<NzToken>[] allTokens, string word, ISchemaProvider? schema, ISqlAuthoringCatalog catalog, out string? targetKind)
     {
+        targetKind = null;
         if (token.Kind == NzToken.OracleBindVariable)
         {
+            targetKind = "Variable";
             var bind = token.ToStringValue();
             return $"**{bind}** — Oracle bind variable";
         }
 
         if (token.Kind == NzToken.OracleQualifiedFunction)
         {
+            targetKind = "Function";
             var full = token.ToStringValue();
             var shortName = full.Contains('.') ? full[(full.LastIndexOf('.') + 1)..] : full;
             if (NzSignatureHelpService.TryGetSignature(shortName, catalog, out var qSig))
@@ -171,6 +174,7 @@ public static class NzHoverService
 
         if (!token.Kind.IsIdentifierLike())
         {
+            targetKind = "Keyword";
             string? keywordDoc = token.Kind switch
             {
                 NzToken.GroupBy => GetKeywordDoc("GROUP BY", catalog),
@@ -187,7 +191,10 @@ public static class NzHoverService
 
         var name = token.ToStringValue().UnquoteIdentifier();
         if (IsDataType(name, catalog))
+        {
+            targetKind = "Type";
             return GetDataTypeDetail(name);
+        }
 
         if (string.Equals(name, "TRUE", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(name, "FALSE", StringComparison.OrdinalIgnoreCase))
@@ -199,12 +206,27 @@ public static class NzHoverService
         if (index < 0)
             return null;
 
+        if (schema is not null)
+        {
+            var schemaName = index >= 2 && allTokens[index - 1].Kind == NzToken.Dot
+                ? allTokens[index - 2].ToIdentifierText() : null;
+            var databaseName = index >= 4 && allTokens[index - 3].Kind == NzToken.Dot
+                ? allTokens[index - 4].ToIdentifierText() : null;
+            var table = schema.GetTable(databaseName, schemaName, name);
+            if (table?.Columns is not null)
+            {
+                targetKind = "Table";
+                return string.Join("\n", new[] { $"**{name}**" }.Concat(table.Columns.Select(column => $"- `{column.Name}`")));
+            }
+        }
+
         bool isColumnRef = index >= 2 &&
             allTokens[index - 1].Kind == NzToken.Dot &&
             allTokens[index - 2].Kind.IsIdentifierLike();
 
         if (isColumnRef)
         {
+            targetKind = "Column";
             var tableName = allTokens[index - 2].ToIdentifierText();
             return ResolveColumnRef(name, tableName, schema);
         }
@@ -221,11 +243,13 @@ public static class NzHoverService
         bool isFunction = index + 1 < allTokens.Length && allTokens[index + 1].Kind == NzToken.LParen;
         if (NzSignatureHelpService.TryGetSignature(name, catalog, out var signature))
         {
+            targetKind = "Function";
             return FormatFunctionDetail(name, signature);
         }
 
         if (isFunction)
         {
+            targetKind = "Function";
             return $"**{name.ToUpperInvariant()}()**";
         }
 
@@ -234,6 +258,7 @@ public static class NzHoverService
             var info = schema.GetTable(null, null, name);
             if (info?.Columns is not null && info.Columns.Count > 0)
             {
+                targetKind = "Table";
                 var lines = new List<string> { $"**{name}**" };
                 lines.AddRange(info.Columns.Select(col => $"- `{col.Name}`"));
                 return string.Join("\n", lines);
@@ -245,6 +270,7 @@ public static class NzHoverService
                 var qualifiedInfo = schema.GetTable(null, qualifier, name);
                 if (qualifiedInfo?.Columns is not null && qualifiedInfo.Columns.Count > 0)
                 {
+                    targetKind = "Table";
                     var lines = new List<string> { $"**{qualifier}.{name}**" };
                     lines.AddRange(qualifiedInfo.Columns.Select(col => $"- `{col.Name}`"));
                     return string.Join("\n", lines);

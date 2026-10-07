@@ -124,6 +124,10 @@ public partial class NzSqlVisitor
                 // Table is in scope but columns are not hydrated yet (deferred metadata /
                 // lazy load). Same as unqualified refs: skip — cannot validate ≠ invalid.
                 // Hosts should hydrate columns before lint when they want SQL004 checks.
+                if (!table.IsCte && !table.IsTempTable)
+                    AddError($"Columns for relation '{table.Name}' are not available yet",
+                        "warning", "SQL005", cr.Position, cr.Position.Line,
+                        cr.Position.Column + cr.Qualifier.Length + 1 + cr.Name.Length);
                 return;
             }
 
@@ -361,7 +365,8 @@ public partial class NzSqlVisitor
         if (isVarLen)
         {
             if (paramCount == 0)
-                AddError($"Character type '{type.Name}' used without length", "warning", "SQL012", pos);
+                AddError($"Character type '{type.Name}' used without length", "warning", "SQL012", type.Position,
+                    type.Position.Line, type.Position.Column + type.Name.Length);
             else if (paramCount > 1)
                 AddError($"Character type '{type.Name}' accepts at most 1 parameter", "error", "SQL014", pos);
         }
