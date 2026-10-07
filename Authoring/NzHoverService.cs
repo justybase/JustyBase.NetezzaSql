@@ -258,6 +258,7 @@ public static class NzHoverService
             var info = schema.GetTable(null, null, name);
             if (info?.Columns is not null && info.Columns.Count > 0)
             {
+                targetKind = "Table";
                 var lines = new List<string> { $"**{name}**" };
                 lines.AddRange(info.Columns.Select(col => $"- `{col.Name}`"));
                 return string.Join("\n", lines);
@@ -269,6 +270,7 @@ public static class NzHoverService
                 var qualifiedInfo = schema.GetTable(null, qualifier, name);
                 if (qualifiedInfo?.Columns is not null && qualifiedInfo.Columns.Count > 0)
                 {
+                    targetKind = "Table";
                     var lines = new List<string> { $"**{qualifier}.{name}**" };
                     lines.AddRange(qualifiedInfo.Columns.Select(col => $"- `{col.Name}`"));
                     return string.Join("\n", lines);

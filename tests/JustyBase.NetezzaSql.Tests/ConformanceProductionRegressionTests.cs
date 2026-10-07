@@ -124,6 +124,7 @@ public sealed class ConformanceProductionRegressionTests
     [Theory]
     [InlineData("SELECT c.CUSTOMER_ID FROM JUST_DATA.SALES.CUSTOMERS c", "CUSTOMER_ID", "Column")]
     [InlineData("SELECT * FROM JUST_DATA.SALES.CUSTOMERS", "CUSTOMERS", "Table")]
+    [InlineData("SELECT * FROM JUST_DATA..CUSTOMERS", "CUSTOMERS", "Table")]
     public void Hover_ExposesResolvedTargetKind(string sql, string word, string expectedKind)
     {
         var schema = new InMemorySchemaProvider();
