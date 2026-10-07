@@ -9,7 +9,7 @@ pwsh .\eng\Verify-Local.ps1
 This script runs, in order:
 
 1. `dotnet restore` and `dotnet build` (Release)
-2. `dotnet test` on the full solution (Release, excluding `Category=Performance`)
+2. `dotnet test` on the full solution (Release, excluding `Category=Performance` and `Category=SqlConformance` — the shared `JustyBase.SqlConformance` corpus is a private repo and only runs locally when `JUSTYBASE_SQL_CONFORMANCE_PATH` is set)
 3. `pwsh .\eng\Test-Coverage.ps1` — per-library line/branch gates (parser, DDL, catalog, **Core**, **ImportExport**, **Ai**, **Sqlite**, Netezza integration)
 4. `git diff --check` — trailing whitespace and conflict markers
 

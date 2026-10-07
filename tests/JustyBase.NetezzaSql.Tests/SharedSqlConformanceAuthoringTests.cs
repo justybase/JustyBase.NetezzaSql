@@ -16,6 +16,7 @@ namespace JustyBase.Tests.NetezzaSqlParser;
 /// Implementation AST and service types are reduced to the language-neutral corpus
 /// assertions here; no production parser code is shared with the corpus.
 /// </summary>
+[Trait("Category", "SqlConformance")]
 public sealed class SharedSqlConformanceAuthoringTests
 {
     private static readonly HashSet<string> Categories = new(StringComparer.Ordinal)
@@ -26,8 +27,10 @@ public sealed class SharedSqlConformanceAuthoringTests
 
     public static IEnumerable<object[]> SharedCases()
     {
+        var yielded = false;
         foreach (var (json, dialect) in LoadCases())
         {
+            yielded = true;
             using var document = JsonDocument.Parse(json);
             var root = document.RootElement;
             var category = GetString(root, "category");
@@ -39,6 +42,8 @@ public sealed class SharedSqlConformanceAuthoringTests
 
             yield return [GetString(root, "id"), json, dialect];
         }
+        if (!yielded)
+            yield return [SharedSqlConformanceTests.MissingRepoSentinelId, "{}", SqlDialect.Netezza];
     }
 
     [Theory]
@@ -48,6 +53,8 @@ public sealed class SharedSqlConformanceAuthoringTests
         string caseJson,
         SqlDialect dialect)
     {
+        if (id == SharedSqlConformanceTests.MissingRepoSentinelId)
+            throw new DirectoryNotFoundException(SharedSqlConformanceTests.MissingRepoMessage);
         using var document = JsonDocument.Parse(caseJson);
         var root = document.RootElement;
         var category = GetString(root, "category");
@@ -655,7 +662,9 @@ public sealed class SharedSqlConformanceAuthoringTests
 
     private static IEnumerable<(string Json, SqlDialect Dialect)> LoadCases()
     {
-        foreach (var file in Directory.EnumerateFiles(Path.Combine(ConformanceRoot(), "dialects"), "*.jsonl", SearchOption.AllDirectories).Order())
+        if (!TryGetConformanceRoot(out var conformanceRoot) || conformanceRoot is null)
+            yield break;
+        foreach (var file in Directory.EnumerateFiles(Path.Combine(conformanceRoot, "dialects"), "*.jsonl", SearchOption.AllDirectories).Order())
         foreach (var line in File.ReadLines(file))
         {
             if (string.IsNullOrWhiteSpace(line))
@@ -678,15 +687,24 @@ public sealed class SharedSqlConformanceAuthoringTests
         }
     }
 
-    private static string ConformanceRoot()
+    private static string ConformanceRoot() =>
+        TryGetConformanceRoot(out var root) && root is not null
+            ? root
+            : throw new DirectoryNotFoundException("Set JUSTYBASE_SQL_CONFORMANCE_PATH to the local JustyBase.SqlConformance repository.");
+
+    private static bool TryGetConformanceRoot(out string? root)
     {
         var configured = Environment.GetEnvironmentVariable("JUSTYBASE_SQL_CONFORMANCE_PATH");
         if (!string.IsNullOrWhiteSpace(configured))
         {
             var full = Path.GetFullPath(configured);
             if (Directory.Exists(Path.Combine(full, "dialects")))
-                return full;
-            throw new DirectoryNotFoundException($"JUSTYBASE_SQL_CONFORMANCE_PATH has no dialects/: {full}");
+            {
+                root = full;
+                return true;
+            }
+            root = null;
+            return false;
         }
         for (var current = new DirectoryInfo(AppContext.BaseDirectory); current is not null; current = current.Parent)
         {
@@ -697,9 +715,13 @@ public sealed class SharedSqlConformanceAuthoringTests
             };
             var found = candidates.FirstOrDefault(candidate => candidate.Length > 0 && Directory.Exists(Path.Combine(candidate, "dialects")));
             if (found is not null)
-                return found;
+            {
+                root = found;
+                return true;
+            }
         }
-        throw new DirectoryNotFoundException("Set JUSTYBASE_SQL_CONFORMANCE_PATH to the local JustyBase.SqlConformance repository.");
+        root = null;
+        return false;
     }
 
     private sealed record CompletionContractItem(string Label, string Kind, string? Detail, string? Documentation);

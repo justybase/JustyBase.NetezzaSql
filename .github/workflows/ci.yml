@@ -28,7 +28,7 @@ jobs:
         run: dotnet build JustyBase.NetezzaSql.sln --no-restore --configuration Release
 
       - name: Test
-        run: dotnet test JustyBase.NetezzaSql.sln --no-build --configuration Release --logger trx --collect:"XPlat Code Coverage" --filter "Category!=Performance"
+        run: dotnet test JustyBase.NetezzaSql.sln --no-build --configuration Release --logger trx --collect:"XPlat Code Coverage" --filter "Category!=Performance&Category!=SqlConformance"
 
       - name: Parser performance budgets
         run: dotnet test tests/JustyBase.NetezzaSql.Tests/JustyBase.NetezzaSql.Tests.csproj --no-build --configuration Release --filter "Category=Performance"

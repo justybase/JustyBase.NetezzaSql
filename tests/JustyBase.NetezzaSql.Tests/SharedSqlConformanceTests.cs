@@ -5,6 +5,7 @@ using Xunit;
 
 namespace JustyBase.Tests.NetezzaSqlParser;
 
+[Trait("Category", "SqlConformance")]
 public sealed class SharedSqlConformanceTests
 {
     private static readonly HashSet<string> ParserCategories = new(StringComparer.Ordinal)
@@ -12,10 +13,17 @@ public sealed class SharedSqlConformanceTests
         "parser", "syntax", "ddl", "dml", "functions", "nzplsql", "recovery", "statement"
     };
 
+    internal const string MissingRepoSentinelId = "__conformance_repo_missing__";
+    internal const string MissingRepoMessage =
+        "Shared SQL conformance repository was not found. Set JUSTYBASE_SQL_CONFORMANCE_PATH " +
+        "or check out the private JustyBase.SqlConformance repo next to this one.";
+
     public static IEnumerable<object[]> SharedParserCases()
     {
+        var yielded = false;
         foreach (var (caseJson, dialect) in LoadCases())
         {
+            yielded = true;
             using var document = JsonDocument.Parse(caseJson);
             var root = document.RootElement;
             var category = GetString(root, "category");
@@ -41,6 +49,8 @@ public sealed class SharedSqlConformanceTests
                 expectedValid?.ToString() ?? string.Empty, statementCount ?? -1
             ];
         }
+        if (!yielded)
+            yield return [MissingRepoSentinelId, SqlDialect.Netezza, "", "", "", "", "", "", -1];
     }
 
     // Unresolved Netezza template cases from this implementation remain local smoke baselines.
@@ -48,8 +58,10 @@ public sealed class SharedSqlConformanceTests
     // current .NET parser behavior without treating it as cross-implementation truth.
     public static IEnumerable<object[]> DotnetUnverifiedTemplateBaselineCases()
     {
+        var yielded = false;
         foreach (var (caseJson, dialect) in LoadCases())
         {
+            yielded = true;
             using var document = JsonDocument.Parse(caseJson);
             var root = document.RootElement;
             if (!ParserCategories.Contains(GetString(root, "category"))
@@ -78,6 +90,8 @@ public sealed class SharedSqlConformanceTests
                 expectedValid.Value, GetString(root, "sql"), GetString(root, "cursorMarker")
             ];
         }
+        if (!yielded)
+            yield return [MissingRepoSentinelId, SqlDialect.Netezza, "", false, "", ""];
     }
 
     [Theory]
@@ -90,6 +104,8 @@ public sealed class SharedSqlConformanceTests
         string sourceSql,
         string cursorMarker)
     {
+        if (id == MissingRepoSentinelId)
+            throw new DirectoryNotFoundException(MissingRepoMessage);
         var sql = RenderSql(sourceSql);
         if (cursorMarker.Length > 0)
         {
@@ -119,6 +135,8 @@ public sealed class SharedSqlConformanceTests
         string expectedValidText,
         int expectedStatementCount)
     {
+        if (id == MissingRepoSentinelId)
+            throw new DirectoryNotFoundException(MissingRepoMessage);
         var sql = RenderSql(sourceSql);
         if (cursorMarker.Length > 0)
         {
@@ -166,6 +184,8 @@ public sealed class SharedSqlConformanceTests
     [Fact]
     public void Shared_parser_contracts_have_no_unresolved_P0_cases()
     {
+        if (!TryGetConformanceRoot(out _))
+            throw new DirectoryNotFoundException(MissingRepoMessage);
         var unresolved = LoadCases()
             .Where(item =>
             {
@@ -193,7 +213,8 @@ public sealed class SharedSqlConformanceTests
 
     private static IEnumerable<(string caseJson, SqlDialect dialect)> LoadCases()
     {
-        var root = ConformanceRoot();
+        if (!TryGetConformanceRoot(out var root) || root is null)
+            yield break;
         foreach (var file in Directory.EnumerateFiles(Path.Combine(root, "dialects"), "*.jsonl", SearchOption.AllDirectories).Order())
         {
             foreach (var line in File.ReadLines(file))
@@ -260,15 +281,25 @@ public sealed class SharedSqlConformanceTests
             ? value.GetString() ?? fallback
             : fallback;
 
-    private static string ConformanceRoot()
+    private static string ConformanceRoot() =>
+        TryGetConformanceRoot(out var root) && root is not null
+            ? root
+            : throw new DirectoryNotFoundException(
+                "Shared SQL conformance repository was not found. Set JUSTYBASE_SQL_CONFORMANCE_PATH.");
+
+    private static bool TryGetConformanceRoot(out string? root)
     {
         var configured = Environment.GetEnvironmentVariable("JUSTYBASE_SQL_CONFORMANCE_PATH");
         if (!string.IsNullOrWhiteSpace(configured))
         {
             var full = Path.GetFullPath(configured);
             if (Directory.Exists(Path.Combine(full, "dialects")))
-                return full;
-            throw new DirectoryNotFoundException($"JUSTYBASE_SQL_CONFORMANCE_PATH does not contain dialects/: {full}");
+            {
+                root = full;
+                return true;
+            }
+            root = null;
+            return false;
         }
 
         for (var current = new DirectoryInfo(AppContext.BaseDirectory); current is not null; current = current.Parent)
@@ -281,10 +312,13 @@ public sealed class SharedSqlConformanceTests
             var found = candidates.FirstOrDefault(candidate =>
                 candidate.Length > 0 && Directory.Exists(Path.Combine(candidate, "dialects")));
             if (found is not null)
-                return found;
+            {
+                root = found;
+                return true;
+            }
         }
 
-        throw new DirectoryNotFoundException(
-            "Shared SQL conformance repository was not found. Set JUSTYBASE_SQL_CONFORMANCE_PATH.");
+        root = null;
+        return false;
     }
 }
