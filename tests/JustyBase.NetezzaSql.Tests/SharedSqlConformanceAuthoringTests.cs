@@ -492,6 +492,7 @@ public sealed class SharedSqlConformanceAuthoringTests
         var path = Path.Combine(ConformanceRoot(), "fixtures", "metadata", dialect, name + ".json");
         using var document = JsonDocument.Parse(File.ReadAllText(path));
         var schema = new InMemorySchemaProvider();
+        var qualificationProposals = new List<TableQualificationProposal>();
         foreach (var database in document.RootElement.GetProperty("databases").EnumerateArray())
         {
             var databaseName = GetString(database, "name");
@@ -500,16 +501,17 @@ public sealed class SharedSqlConformanceAuthoringTests
             foreach (var schemaElement in schemas.EnumerateArray())
             {
                 var schemaName = GetString(schemaElement, "name");
-                AddMetadataObjects(schema, schemaElement, "tables", databaseName, schemaName, isView: false);
-                AddMetadataObjects(schema, schemaElement, "views", databaseName, schemaName, isView: true);
+                AddMetadataObjects(schema, schemaElement, "tables", databaseName, schemaName, isView: false, qualificationProposals);
+                AddMetadataObjects(schema, schemaElement, "views", databaseName, schemaName, isView: true, qualificationProposals);
             }
         }
+        schema.SetTableQualificationProposals(qualificationProposals);
         return schema;
     }
 
     private static void AddMetadataObjects(
         InMemorySchemaProvider provider, JsonElement schema, string property,
-        string database, string schemaName, bool isView)
+        string database, string schemaName, bool isView, List<TableQualificationProposal> qualificationProposals)
     {
         if (!schema.TryGetProperty(property, out var objects))
             return;
@@ -521,9 +523,12 @@ public sealed class SharedSqlConformanceAuthoringTests
                     DataType: GetString(column, "type", GetString(column, "dataType")),
                     Description: GetString(column, "description"))).ToArray()
                 : Array.Empty<ColumnInfo>();
+            var tableName = GetString(item, "name");
             provider.AddTable(new TableInfo(
-                GetString(item, "name"), schemaName, database,
+                tableName, schemaName, database,
                 Columns: columns, IsView: isView));
+            qualificationProposals.Add(new TableQualificationProposal(
+                database, schemaName, tableName, $"{database}.{schemaName}.{tableName}", IsPreferred: true));
         }
     }
 
