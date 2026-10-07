@@ -121,6 +121,8 @@ public sealed class SharedSqlConformanceAuthoringTests
 
         AssertContainsItems(expected, "contains", items, id);
         AssertAbsentItems(expected, "notContains", items, id);
+        if (expected.TryGetProperty("available", out var available))
+            Assert.Equal(available.GetBoolean(), items.Length > 0);
         AssertOrderedItems(expected, "top", items, id);
         AssertTopN(expected, items, id);
         AssertExactItems(expected, items, id);
@@ -238,16 +240,16 @@ public sealed class SharedSqlConformanceAuthoringTests
     {
         var expected = root.GetProperty("expect");
         var pipeline = GetString(expected, "pipeline", "full");
-        var actual = CollectLintIssues(sql, schema, pipeline)
-            .Select(issue => issue.RuleId)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        AssertDiagnosticExpectation(root.GetProperty("expect"), actual, id);
+        var actual = CollectLintIssues(sql, schema, pipeline);
+        AssertDiagnosticExpectation(expected, actual, sql, schema, id);
     }
 
-    private static void AssertDiagnosticExpectation(JsonElement expected, HashSet<string> actual, string id)
+    private static void AssertDiagnosticExpectation(
+        JsonElement expected, IReadOnlyList<LintIssue> actual, string sql, ISchemaProvider? schema, string id)
     {
         if (!expected.TryGetProperty("diagnostics", out var diagnostics))
             return;
+        var actualCodes = actual.Select(issue => issue.RuleId).ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var property in new[] { "anyOfCodes", "containsCodes" })
         {
             if (!diagnostics.TryGetProperty(property, out var codes))
@@ -256,29 +258,91 @@ public sealed class SharedSqlConformanceAuthoringTests
             if (property == "anyOfCodes")
             {
                 if (expectedCodes.Length > 0)
-                    Assert.True(expectedCodes.Any(actual.Contains),
-                        $"[{id}] expected any of [{string.Join(", ", expectedCodes)}], received [{string.Join(", ", actual)}].");
+                    Assert.True(expectedCodes.Any(actualCodes.Contains),
+                        $"[{id}] expected any of [{string.Join(", ", expectedCodes)}], received [{string.Join(", ", actualCodes)}].");
             }
             else
             {
                 foreach (var code in expectedCodes)
-                    Assert.True(actual.Contains(code), $"[{id}] expected diagnostic {code}, received [{string.Join(", ", actual)}].");
+                    Assert.True(actualCodes.Contains(code), $"[{id}] expected diagnostic {code}, received [{string.Join(", ", actualCodes)}].");
             }
         }
         if (diagnostics.TryGetProperty("notContainsCodes", out var excluded))
             foreach (var code in excluded.EnumerateArray().Select(item => item.GetString()!))
-                Assert.DoesNotContain(code, actual);
+                Assert.DoesNotContain(code, actualCodes);
+
+        if (diagnostics.TryGetProperty("containsSeverities", out var severities))
+        {
+            foreach (var severity in severities.EnumerateObject())
+            {
+                var issue = actual.FirstOrDefault(candidate =>
+                    candidate.RuleId.Equals(severity.Name, StringComparison.OrdinalIgnoreCase));
+                Assert.NotNull(issue);
+                Assert.Equal(severity.Value.GetString(), SeverityName(issue!.Severity));
+            }
+        }
+
+        if (diagnostics.TryGetProperty("containsRanges", out var ranges))
+        {
+            foreach (var range in ranges.EnumerateArray())
+            {
+                var code = GetString(range, "code");
+                var start = range.GetProperty("start").GetInt32();
+                var end = range.GetProperty("end").GetInt32();
+                var issue = actual.FirstOrDefault(candidate =>
+                    candidate.RuleId.Equals(code, StringComparison.OrdinalIgnoreCase)
+                    && candidate.StartOffset == start && candidate.EndOffset == end);
+                Assert.NotNull(issue);
+                if (range.TryGetProperty("text", out var text))
+                {
+                    Assert.True(start >= 0 && end >= start && end <= sql.Length,
+                        $"[{id}] expected range for {code} falls outside the SQL text.");
+                    Assert.Equal(text.GetString(), sql[start..end]);
+                }
+            }
+        }
+
+        if (diagnostics.TryGetProperty("containsFixes", out var fixes))
+        {
+            foreach (var expectedFix in fixes.EnumerateArray())
+            {
+                var code = GetString(expectedFix, "code");
+                var candidates = actual.Where(issue =>
+                    issue.RuleId.Equals(code, StringComparison.OrdinalIgnoreCase));
+                var matchingFix = candidates
+                    .Select(issue => NzLintCodeActions.GetQuickFix(issue, sql, schema))
+                    .FirstOrDefault(fix => fix.HasValue);
+                Assert.True(matchingFix.HasValue,
+                    $"[{id}] production diagnostics did not provide a usable {code} quick fix.");
+                if (expectedFix.TryGetProperty("titleContains", out var title))
+                    Assert.Contains(title.GetString() ?? "", matchingFix!.Value.Description, StringComparison.OrdinalIgnoreCase);
+                var fixedSql = matchingFix!.Value.Apply(sql);
+                if (expectedFix.TryGetProperty("newTextContains", out var newText))
+                    Assert.Contains(newText.GetString() ?? "", fixedSql, StringComparison.OrdinalIgnoreCase);
+                if (expectedFix.TryGetProperty("safety", out _))
+                {
+                    throw new Xunit.Sdk.XunitException(
+                        $"[{id}] the production quick-fix API does not expose the required safety classification.");
+                }
+            }
+        }
     }
 
+    private static string SeverityName(LintSeverity severity) => severity switch
+    {
+        LintSeverity.Error => "error",
+        LintSeverity.Warning => "warning",
+        LintSeverity.Information => "information",
+        LintSeverity.Hint => "hint",
+        _ => throw new ArgumentOutOfRangeException(nameof(severity), severity, null)
+    };
     private static void AssertSemantic(JsonElement root, string sql, ISchemaProvider? schema, SqlDialect dialect, string id)
     {
         var expected = root.GetProperty("expect");
         if (expected.TryGetProperty("diagnostics", out _))
         {
-            var codes = CollectLintIssues(sql, schema, GetString(expected, "pipeline", "full"))
-                .Select(issue => issue.RuleId)
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            AssertDiagnosticExpectation(expected, codes, id);
+            var issues = CollectLintIssues(sql, schema, GetString(expected, "pipeline", "full"));
+            AssertDiagnosticExpectation(expected, issues, sql, schema, id);
             return;
         }
 
@@ -352,13 +416,16 @@ public sealed class SharedSqlConformanceAuthoringTests
         }
     }
 
-    private static string StatementKindName(Statement statement) => statement switch
+    internal static string StatementKindName(Statement statement) => statement switch
     {
         SelectStatement => "select",
         InsertStatement => "insert",
         UpdateStatement => "update",
         DeleteStatement => "delete",
-        CreateTableStatement or CreateViewStatement or CreateProcedureStatement => "create",
+        CreateTableStatement or CreateViewStatement or CreateProcedureStatement
+            or CreateExternalTableStatement or CreateSequenceStatement => "create",
+        AlterTableStatement => "alter",
+        DropStatement => "drop",
         _ => statement.GetType().Name.Replace("Statement", string.Empty, StringComparison.Ordinal).ToLowerInvariant()
     };
 
@@ -372,28 +439,11 @@ public sealed class SharedSqlConformanceAuthoringTests
     {
         var expected = root.GetProperty("expect");
         var code = GetString(expected, "code");
-        var startOffset = -1;
-        var endOffset = -1;
-        if (expected.TryGetProperty("range", out var range)
-            && range.TryGetProperty("start", out var start)
-            && range.TryGetProperty("end", out var end))
-        {
-            startOffset = start.GetInt32();
-            endOffset = end.GetInt32();
-        }
-        else if (GetString(expected, "find") is { Length: > 0 } needle)
-        {
-            startOffset = sql.IndexOf(needle, StringComparison.OrdinalIgnoreCase);
-            endOffset = startOffset < 0 ? -1 : startOffset + needle.Length;
-        }
-        Assert.True(startOffset >= 0 && endOffset >= startOffset,
-            $"[{id}] quick-fix fixture must define a range or find text for {code}.");
-
-        var suggestedFix = GetString(expected, "suggestedFix");
-        var issue = new LintIssue(code, string.Empty, LintSeverity.Error,
-            startOffset, endOffset, SuggestedFix: suggestedFix.Length > 0 ? suggestedFix : null);
-        var fix = NzLintCodeActions.GetQuickFix(issue, sql, schema);
-        Assert.True(fix.HasValue, $"[{id}] diagnostic {code} did not produce a quick fix.");
+        var issue = CollectLintIssues(sql, schema, "full").FirstOrDefault(candidate =>
+            candidate.RuleId.Equals(code, StringComparison.OrdinalIgnoreCase));
+        Assert.NotNull(issue);
+        var fix = NzLintCodeActions.GetQuickFix(issue!, sql, schema);
+        Assert.True(fix.HasValue, $"[{id}] production diagnostic {code} did not produce a quick fix.");
         var fixedSql = fix!.Value.Apply(sql);
 
         if (expected.TryGetProperty("resultSql", out var expectedSql))
@@ -404,8 +454,20 @@ public sealed class SharedSqlConformanceAuthoringTests
             Assert.True(fix.Value.Description.Contains(suggested.GetString()!, StringComparison.OrdinalIgnoreCase)
                 || fixedSql.Contains(suggested.GetString()!, StringComparison.OrdinalIgnoreCase),
                 $"[{id}] quick fix did not use the expected suggestion.");
+        if (expected.TryGetProperty("range", out var range)
+            && range.TryGetProperty("start", out var start)
+            && range.TryGetProperty("end", out var end))
+        {
+            Assert.Equal(start.GetInt32(), issue!.StartOffset);
+            Assert.Equal(end.GetInt32(), issue.EndOffset);
+        }
+        if (expected.TryGetProperty("find", out var find))
+        {
+            Assert.True(issue!.StartOffset >= 0 && issue.EndOffset >= issue.StartOffset && issue.EndOffset <= sql.Length,
+                $"[{id}] production quick-fix range falls outside the SQL text.");
+            Assert.Contains(find.GetString() ?? string.Empty, sql[issue.StartOffset..issue.EndOffset], StringComparison.OrdinalIgnoreCase);
+        }
     }
-
     private static IReadOnlyList<LintIssue> CollectLintIssues(
         string sql, ISchemaProvider? schema, string pipeline)
     {
@@ -452,6 +514,11 @@ public sealed class SharedSqlConformanceAuthoringTests
         var expected = root.GetProperty("expect");
         if (expected.TryGetProperty("contains", out var contains))
             Assert.Contains(contains.GetString() ?? string.Empty, hover!.Content, StringComparison.OrdinalIgnoreCase);
+        if (expected.TryGetProperty("targetKind", out _))
+        {
+            throw new Xunit.Sdk.XunitException(
+                $"[{id}] production SqlHoverInfo exposes content and offsets but no target kind.");
+        }
     }
 
     private static async Task AssertRecovery(
@@ -459,25 +526,36 @@ public sealed class SharedSqlConformanceAuthoringTests
     {
         using var runtime = new ParsingRuntime(dialect);
         var parsed = runtime.Parse(sql);
-        if (root.GetProperty("expect").TryGetProperty("statementDetected", out var detected) && detected.GetBoolean())
-            Assert.NotEmpty(parsed.Statements);
-        if (root.GetProperty("expect").TryGetProperty("aliasesDetected", out var aliases))
+        var expected = root.GetProperty("expect");
+        if (expected.TryGetProperty("statementDetected", out var detected))
         {
-            var actualAliases = parsed.Statements.SelectMany(statement => statement switch
-            {
-                SelectStatement select => EnumerateSources(select).Select(source => source.Alias).Where(alias => alias is not null),
-                _ => Array.Empty<string?>()
-            }).ToArray();
+            if (detected.GetBoolean())
+                Assert.NotEmpty(parsed.Statements);
+            else
+                Assert.Empty(parsed.Statements);
+        }
+        var selects = parsed.Statements.OfType<SelectStatement>().SelectMany(FlattenSelects).ToArray();
+        if (expected.TryGetProperty("aliasesDetected", out var aliases))
+        {
+            var actualAliases = selects.SelectMany(EnumerateSources)
+                .Select(source => source.Alias).Where(alias => alias is not null).ToArray();
             foreach (var alias in aliases.EnumerateArray().Select(item => item.GetString()!))
                 Assert.Contains(actualAliases, actual => SameIdentifier(actual, alias));
         }
-        if (root.GetProperty("expect").TryGetProperty("completionAvailable", out var completionAvailable)
-            && completionAvailable.GetBoolean())
+        if (expected.TryGetProperty("ctesDetected", out var ctes))
+        {
+            var actualCtes = selects.SelectMany(select => select.With?.Ctes ?? Array.Empty<CteDefinition>())
+                .Select(cte => cte.Name).ToArray();
+            foreach (var cte in ctes.EnumerateArray().Select(item => item.GetString()!))
+                Assert.Contains(actualCtes, actual => SameIdentifier(actual, cte));
+        }
+        if (expected.TryGetProperty("completionAvailable", out var completionAvailable))
         {
             var items = await CompletionOrchestrator.GetCompletions(
                 sql, cursor, schema, dialect,
                 options: new CompletionOrchestrationOptions { ForcedAutocomplete = true });
-            Assert.NotEmpty(items.EngineItems);
+            var available = items.EngineItems.Count > 0 || items.WordListItems.Count > 0;
+            Assert.Equal(completionAvailable.GetBoolean(), available);
         }
     }
 

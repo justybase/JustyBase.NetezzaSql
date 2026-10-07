@@ -142,6 +142,19 @@ public sealed class SharedSqlConformanceTests
         if (expectedStatementCount >= 0)
             Assert.True(result.Statements.Count == expectedStatementCount, $"[{id}] expected {expectedStatementCount} statements, observed {result.Statements.Count}.");
 
+        using (var document = JsonDocument.Parse(FindCase(id)))
+        {
+            var expected = document.RootElement.GetProperty("expect");
+            if (expected.TryGetProperty("statementTypes", out var statementTypes))
+            {
+                var expectedTypes = statementTypes.EnumerateArray().Select(item => item.GetString()!).ToArray();
+                var actualTypes = result.Statements
+                    .Select(SharedSqlConformanceAuthoringTests.StatementKindName)
+                    .ToArray();
+                Assert.Equal(expectedTypes, actualTypes);
+            }
+        }
+
         if (category == "recovery")
         {
             using var document = JsonDocument.Parse(FindCase(id));
