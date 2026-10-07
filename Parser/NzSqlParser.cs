@@ -64,7 +64,7 @@ public partial class NzSqlParser
         _pos + ahead < _tokens.Length ? _tokens[_pos + ahead] :
             new Token<NzToken>(NzToken.Unknown, TextSpan.Empty);
 
-    protected Token<NzToken> Advance() => _tokens[_pos++];
+    protected Token<NzToken> Advance() => _pos < _tokens.Length ? _tokens[_pos++] : Peek();
 
     private bool Match(NzToken kind)
     {
@@ -259,6 +259,10 @@ public partial class NzSqlParser
             EndColumn: t.Position.Column + Math.Max(t.Span.Length, 1),
             SuggestedFix: typoSuggestion));
         Advance();
+        if (_pos == _tokens.Length && t.Kind == NzToken.Identifier
+            && t.ToStringValue().Length >= 2
+            && "SELECT".StartsWith(t.ToStringValue(), StringComparison.OrdinalIgnoreCase))
+            return RecoveredSelect(FromToken(t));
         return null;
     }
 
@@ -271,8 +275,13 @@ public partial class NzSqlParser
             return ParseInsertWithClause(with);
         AddParserError("WITH clause must be followed by SELECT or INSERT",
             Peek(), "PAR109");
+        if (_pos >= _tokens.Length)
+            return RecoveredSelect(with.Position, with);
         return null;
     }
+
+    private static SelectStatement RecoveredSelect(SourcePosition position, WithClause? with = null)
+        => new(position, null, [], null, null, null, null, null, null, null, null, with);
 
     protected void SkipSemicolons()
     {

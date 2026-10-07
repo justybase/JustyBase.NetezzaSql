@@ -302,10 +302,10 @@ public sealed partial class NzCompletionEngineTests
     // ====== New tests: LIMIT/FETCH in ORDER BY ======
 
     [Fact]
-    public void AfterOrderBy_suggests_limit_and_fetch()
+    public void AfterOrderBy_suggests_limit_and_excludes_unsupported_fetch()
     {
         var i = _engine.GetCompletions("SELECT * FROM employees ORDER BY ", 33);
-        Assert.Contains(i, x => x.Label == "FETCH");
+        Assert.DoesNotContain(i, x => x.Label == "FETCH");
         Assert.Contains(i, x => x.Label == "LIMIT");
     }
 
@@ -567,7 +567,8 @@ public sealed partial class NzCompletionEngineTests
 
         Assert.Contains(i, x => x.Label == "AND" && x.Kind == CompletionKind.Keyword);
         Assert.Contains(i, x => x.Label == "OR" && x.Kind == CompletionKind.Keyword);
-        Assert.Contains(i, x => x.Label == "IN" && x.Kind == CompletionKind.Keyword);
+        Assert.Contains(i, x => x.Label == "GROUP" && x.Kind == CompletionKind.Keyword);
+        Assert.DoesNotContain(i, x => x.Label == "NOT");
         Assert.DoesNotContain(i, x => x.Kind == CompletionKind.Column);
         Assert.DoesNotContain(i, x => x.Kind == CompletionKind.Function);
     }

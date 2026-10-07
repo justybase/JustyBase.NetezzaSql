@@ -31,7 +31,7 @@ public sealed class CompletionWildcardResolverTests
         var item = Resolve("SELECT e.* FROM TESTDB..EMPLOYEES e");
         Assert.NotNull(item);
         Assert.Equal(CompletionKind.Snippet, item!.Kind);
-        Assert.Contains("e.EMPLOYEE_ID", item.Label, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("e.EMPLOYEE_ID", item.InsertText, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -40,8 +40,8 @@ public sealed class CompletionWildcardResolverTests
         var sql = "SELECT sq.* FROM (SELECT EMPLOYEE_ID, FIRST_NAME FROM TESTDB..EMPLOYEES) sq";
         var item = Resolve(sql);
         Assert.NotNull(item);
-        Assert.Contains("sq.EMPLOYEE_ID", item!.Label, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("sq.FIRST_NAME", item!.Label, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("sq.EMPLOYEE_ID", item!.InsertText, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("sq.FIRST_NAME", item!.InsertText, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -50,7 +50,7 @@ public sealed class CompletionWildcardResolverTests
         var sql = "WITH cte AS (SELECT EMPLOYEE_ID, SALARY FROM TESTDB..EMPLOYEES) SELECT cte.* FROM cte";
         var item = Resolve(sql);
         Assert.NotNull(item);
-        Assert.Contains("cte.EMPLOYEE_ID", item!.Label, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("cte.EMPLOYEE_ID", item!.InsertText, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -59,7 +59,7 @@ public sealed class CompletionWildcardResolverTests
         var sql = "SELECT EMPLOYEES.* FROM TESTDB..EMPLOYEES";
         var item = Resolve(sql);
         Assert.NotNull(item);
-        Assert.Contains("EMPLOYEES.EMPLOYEE_ID", item!.Label, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("EMPLOYEES.EMPLOYEE_ID", item!.InsertText, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -68,6 +68,6 @@ public sealed class CompletionWildcardResolverTests
         var sql = "SELECT d.* FROM TESTDB..EMPLOYEES e JOIN TESTDB..DEPARTMENTS d ON 1=1";
         var item = Resolve(sql);
         Assert.NotNull(item);
-        Assert.Contains("d.DEPARTMENT_ID", item!.Label, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("d.DEPARTMENT_ID", item!.InsertText, StringComparison.OrdinalIgnoreCase);
     }
 }

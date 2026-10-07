@@ -143,6 +143,8 @@ public partial class NzSqlParser
         else
         {
             AddParserError("Expected VALUES or SELECT after INSERT", Peek(), "PAR117");
+            if (_pos >= _tokens.Length)
+                return new InsertStatement(FromToken(insertTok), table, columns, null, null);
             return null;
         }
 

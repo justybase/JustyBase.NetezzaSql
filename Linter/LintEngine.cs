@@ -291,7 +291,7 @@ public sealed class LintEngine : IDisposable
                 structural.Position.Absolute,
                 structural.Position.Absolute + 1,
                 structural.Position.Line, structural.Position.Column,
-                structural.EndLine, structural.EndColumn));
+                structural.EndLine, structural.EndColumn, structural.SuggestedFix));
             parserErrorCount++;
         }
 
@@ -311,7 +311,7 @@ public sealed class LintEngine : IDisposable
                 perr.Severity == "error" ? LintSeverity.Error : LintSeverity.Warning,
                 offset, perrEndOffset,
                 perr.Position.Line, perr.Position.Column,
-                perr.EndLine, perr.EndColumn));
+                perr.EndLine, perr.EndColumn, perr.SuggestedFix));
             parserErrorCount++;
         }
 

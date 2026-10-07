@@ -462,9 +462,9 @@ public sealed class NzValidatorServiceTests
     }
 
     [Fact]
-    public void Validate_QualifiedColumnRefUncachedTable_DoesNotWarnSql005()
+    public void Validate_QualifiedColumnRefUncachedTable_WarnsWithoutClaimingMissingTable()
     {
-        // Deferred / empty column cache must not look like a missing table (false SQL005).
+        // Deferred columns report availability as a warning, never a missing-table error.
         var provider = new InMemorySchemaProvider();
         provider.AddTable(new TableInfo("UNKNOWN_TABLE", null, null, Columns: null));
         provider.AddTable(new TableInfo("EMPTY_COLS", "ADMIN", "JUST_DATA", Columns: []));
@@ -472,12 +472,12 @@ public sealed class NzValidatorServiceTests
             "SELECT A.OPERATOR FROM JUST_DATA.ADMIN.EMPTY_COLS A WHERE A.OPERATOR > 0",
             provider);
 
-        Assert.DoesNotContain(result.Warnings, w => w.Code == "SQL005");
+        Assert.Contains(result.Warnings, w => w.Code == "SQL005");
         Assert.DoesNotContain(result.Errors, e => e.Code == "SQL005");
     }
 
     [Fact]
-    public void Validate_DimAccountOperator_DeferredEmptyColumns_NoSql005()
+    public void Validate_DimAccountOperator_DeferredEmptyColumns_WarnsWithoutMissingTable()
     {
         // Regression: autocomplete could suggest OPERATOR while lint emitted
         // SQL005 "table not found in schema cache" because columns were deferred ([]).
@@ -494,7 +494,7 @@ public sealed class NzValidatorServiceTests
             """,
             provider);
 
-        Assert.DoesNotContain(result.Warnings, w => w.Code == "SQL005");
+        Assert.Contains(result.Warnings, w => w.Code == "SQL005");
         Assert.DoesNotContain(result.Errors, e => e.Code == "SQL005");
         Assert.DoesNotContain(result.Errors, e => e.Code == "SQL006");
     }

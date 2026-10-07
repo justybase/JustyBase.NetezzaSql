@@ -104,7 +104,7 @@ public sealed class NzCompletionParityGateTests
         var sql = "SELECT e.* FROM TESTDB..EMPLOYEES e";
         var cursor = sql.IndexOf('*', StringComparison.Ordinal) + 1;
         var items = _engine.GetCompletions(sql, cursor);
-        Assert.Contains(items, i => i.Kind == CompletionKind.Snippet && i.Label.Contains("e."));
+        Assert.Contains(items, i => i.Kind == CompletionKind.Snippet && i.InsertText!.Contains("e."));
     }
 
     [Fact]
@@ -275,7 +275,7 @@ public sealed class NzCompletionParityGateTests
         var sql = "SELECT sq.* FROM (SELECT EMPLOYEE_ID FROM TESTDB..EMPLOYEES) sq";
         var cursor = sql.IndexOf('*', StringComparison.Ordinal) + 1;
         var items = _engine.GetCompletions(sql, cursor);
-        Assert.Contains(items, i => i.Kind == CompletionKind.Snippet && i.Label.Contains("sq.EMPLOYEE_ID", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(items, i => i.Kind == CompletionKind.Snippet && i.InsertText!.Contains("sq.EMPLOYEE_ID", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

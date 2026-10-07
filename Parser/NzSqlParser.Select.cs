@@ -569,6 +569,10 @@ public partial class NzSqlParser
                 SourcePosition.FromToken(Peek()), "PARSE001"));
             return null;
         }
+        if (Peek().Kind == NzToken.Identifier
+            && Peek(1).Kind is NzToken.NumberLiteral or NzToken.LParen
+            && _typoChecker.CheckTypo(Peek().ToStringValue()) == "WHERE")
+            return null;
         if (IsContextualIdentifier(Peek().Kind))
         {
             var token = Advance();
@@ -737,7 +741,8 @@ public partial class NzSqlParser
         {
             // Check this is truly a table alias, not a keyword
             var nxt = Peek(1).Kind;
-            if (nxt != NzToken.Dot && nxt != NzToken.LParen)
+            if (nxt != NzToken.Dot && nxt != NzToken.LParen
+                && !(nxt == NzToken.NumberLiteral && _typoChecker.CheckTypo(Peek().ToStringValue()) == "WHERE"))
             {
                 var aliasToken = Advance();
                 tableAlias = StripQuotes(aliasToken.ToStringValue());

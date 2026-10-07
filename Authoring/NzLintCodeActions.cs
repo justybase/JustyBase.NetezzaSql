@@ -10,6 +10,27 @@ namespace JustyBase.NetezzaSqlParser.Authoring;
 /// </summary>
 public static class NzLintCodeActions
 {
+    public static SqlQuickFixInfo? GetQuickFixInfo(LintIssue issue, string sql, ISchemaProvider? schema = null)
+    {
+        var action = GetQuickFix(issue, sql, schema);
+        if (action is null) return null;
+        var result = action.Value.Apply(sql);
+        var start = 0;
+        while (start < sql.Length && start < result.Length && sql[start] == result[start]) start++;
+        var end = sql.Length;
+        var resultEnd = result.Length;
+        while (end > start && resultEnd > start && sql[end - 1] == result[resultEnd - 1])
+        { end--; resultEnd--; }
+        var safety = issue.RuleId.ToUpperInvariant() switch
+        {
+            "PAR004" or "PAR002" or "SQL012" or "SQL046" or "NZ012" or "NZL006"
+                or "SQL007" or "NZP012" or "SQL048" => SqlQuickFixSafety.Safe,
+            _ => SqlQuickFixSafety.ReviewRequired
+        };
+        return new SqlQuickFixInfo(action.Value.Description, safety,
+            result == sql ? [] : [new SqlTextEdit(start, end, result[start..resultEnd])]);
+    }
+
     private static readonly HashSet<string> SafeFixAllCodes = new(StringComparer.OrdinalIgnoreCase)
     {
         "SQL007", "SQL012", "NZ007", "NZ012", "SQL046", "NZP012",
@@ -40,7 +61,7 @@ public static class NzLintCodeActions
             && issue.EndOffset <= fullSql.Length)
         {
             var suggested = issue.SuggestedFix!;
-            return ($"Apply suggested fix: {suggested}", sql =>
+            return (issue.RuleId == "SQL048" ? $"Qualify as {suggested}" : issue.RuleId == "NZL006" ? $"Use {suggested} NULL" : $"Apply suggested fix: {suggested}", sql =>
             {
                 if (issue.StartOffset >= sql.Length || issue.EndOffset > sql.Length) return sql;
                 return sql[..issue.StartOffset] + suggested + sql[issue.EndOffset..];
@@ -612,8 +633,10 @@ public static class NzLintCodeActions
         if (issue.StartOffset < 0) return null;
         return ("Remove duplicate comma", sql =>
         {
-            if (issue.StartOffset + 1 >= sql.Length) return sql;
-            if (sql[issue.StartOffset] == ',' && sql[issue.StartOffset + 1] == ',')
+            if (issue.StartOffset >= sql.Length) return sql;
+            if (issue.StartOffset > 0 && sql[issue.StartOffset] == ',' && sql[issue.StartOffset - 1] == ',')
+                return sql[..issue.StartOffset] + sql[(issue.StartOffset + 1)..];
+            if (issue.StartOffset + 1 < sql.Length && sql[issue.StartOffset] == ',' && sql[issue.StartOffset + 1] == ',')
                 return sql[..(issue.StartOffset + 1)] + sql[(issue.StartOffset + 2)..];
             return sql;
         });

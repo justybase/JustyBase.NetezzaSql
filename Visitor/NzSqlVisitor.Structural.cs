@@ -33,7 +33,7 @@ public partial class NzSqlVisitor
         if (stmt.Where is not null && (stmt.From is null || stmt.From.Count == 0))
         {
             AddError("WHERE clause without FROM is not valid",
-                "error", "SQL042", stmt.Where.Position);
+                "warning", "SQL042", stmt.Where.Position);
         }
 
         if ((stmt.From is null || stmt.From.Count == 0)

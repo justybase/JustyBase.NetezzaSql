@@ -390,9 +390,9 @@ JOIN ABC_123 x ON 1=1",
     public void Compare_WithJsParser_WehreTypoAfterFrom()
     {
         var result = SqlTestHelpers.Validate("SELECT * FROM t WEHRE 1=1", _schema);
-        // JS: PAR001 - "Redundant input, expecting EOF but found: 1" (typo NOT detected)
-        // C#: WEHRE consumed as alias, 1=1 unexpected -> PAR001
-        Assert.Contains(result.Errors, e => e.Code == "PAR001");
+        // Authoring contract: a WHERE typo preceding a predicate must expose
+        // the typo diagnostic and its replacement instead of consuming an alias.
+        Assert.Contains(result.Errors, e => e.Code == "PAR004" && e.SuggestedFix == "WHERE");
     }
 
 
