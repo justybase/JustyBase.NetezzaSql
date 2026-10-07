@@ -27,7 +27,7 @@ $targets = @(
 foreach ($target in $targets) {
     $resultsDirectory = Join-Path $coverageRoot "$($target.Name)-results"
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $resultsDirectory
-    dotnet test $target.TestProject --no-build --configuration $Configuration --settings (Join-Path $PSScriptRoot "coverage/$($target.Name).runsettings") --collect:'XPlat Code Coverage' --results-directory $resultsDirectory --filter "Category!=Performance"
+    dotnet test $target.TestProject --no-build --configuration $Configuration --settings (Join-Path $PSScriptRoot "coverage/$($target.Name).runsettings") --collect:'XPlat Code Coverage' --results-directory $resultsDirectory --filter "Category!=Performance&Category!=SqlConformance"
     if ($LASTEXITCODE -ne 0) { throw "Tests failed while collecting $($target.Name) coverage." }
 
     $report = Get-ChildItem -Path $resultsDirectory -Recurse -Filter 'coverage.cobertura.xml' | Select-Object -First 1

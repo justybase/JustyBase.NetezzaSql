@@ -9,6 +9,7 @@ namespace JustyBase.Tests.NetezzaSqlParser;
 /// All checks still call the production parser and authoring services through the
 /// established shared conformance tests; this class only maps outcomes to JSON rows.
 /// </summary>
+[Trait("Category", "SqlConformance")]
 public sealed class SharedSqlConformanceReportTests
 {
     private const string EmitVariable = "JUSTYBASE_EMIT_CONFORMANCE_REPORT";
