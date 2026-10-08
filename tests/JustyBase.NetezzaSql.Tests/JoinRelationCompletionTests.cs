@@ -93,7 +93,7 @@ public sealed class JoinRelationCompletionTests
         var items = engine.GetCompletions(sql, sql.Length);
 
         var predicate = Assert.Single(items, item => item.Detail == "foreign key");
-        Assert.Equal("C.SALES_REP_ID = O.ORDER_ID", predicate.Label);
+        Assert.Equal("O.ORDER_ID = C.SALES_REP_ID", predicate.Label);
     }
 
     [Fact]

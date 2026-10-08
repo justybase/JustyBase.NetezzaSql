@@ -125,6 +125,10 @@ public sealed class SharedSqlConformanceAuthoringTests
                 item.Label, NormalizeKind(item.Kind), item.Detail, item.Description, null)))
             .ToArray();
         var expected = root.GetProperty("expect");
+        if (Environment.GetEnvironmentVariable("CONFORMANCE_DUMP_COMPLETION") is { Length: > 0 } dumpPath)
+        {
+            File.AppendAllText(dumpPath, $"COMPLETION_DUMP {id} {JsonSerializer.Serialize(items.Take(14).Select(i => new[] { i.Label, i.Kind, i.InsertText, i.Detail }))}" + Environment.NewLine);
+        }
 
         AssertContainsItems(expected, "contains", items, id);
         AssertAbsentItems(expected, "notContains", items, id);
@@ -182,7 +186,7 @@ public sealed class SharedSqlConformanceAuthoringTests
                 && (kind.Length == 0 || candidate.Kind.Equals(kind, StringComparison.OrdinalIgnoreCase))
                 && OptionalMatches(item, "detail", candidate.Detail)
                 && OptionalMatches(item, "documentation", candidate.Documentation)
-                && OptionalMatches(item, "insertText", candidate.InsertText));
+                && OptionalMatches(item, "insertText", candidate.InsertText) && InsertTextContains(item, candidate.InsertText));
             Assert.True(found,
                 $"[{id}] missing completion {label} ({kind}) from [{string.Join(", ", actual.Select(candidate => candidate.Label))}].");
         }
@@ -198,7 +202,8 @@ public sealed class SharedSqlConformanceAuthoringTests
             var kind = GetString(item, "kind");
             Assert.DoesNotContain(actual, candidate =>
                 (label.Length == 0 || SameIdentifier(candidate.Label, label))
-                && (kind.Length == 0 || candidate.Kind.Equals(kind, StringComparison.OrdinalIgnoreCase)));
+                && (kind.Length == 0 || candidate.Kind.Equals(kind, StringComparison.OrdinalIgnoreCase))
+                && InsertTextContains(item, candidate.InsertText));
         }
     }
 
@@ -218,7 +223,7 @@ public sealed class SharedSqlConformanceAuthoringTests
                 Assert.True(OptionalMatches(item, "kind", candidate.Kind));
                 Assert.True(OptionalMatches(item, "detail", candidate.Detail));
                 Assert.True(OptionalMatches(item, "documentation", candidate.Documentation));
-                Assert.True(OptionalMatches(item, "insertText", candidate.InsertText));
+                Assert.True(OptionalMatches(item, "insertText", candidate.InsertText) && InsertTextContains(item, candidate.InsertText));
             }
             index++;
         }
@@ -682,6 +687,20 @@ public sealed class SharedSqlConformanceAuthoringTests
                 Columns: columns, IsView: isView));
             qualificationProposals.Add(new TableQualificationProposal(
                 database, schemaName, tableName, $"{database}.{schemaName}.{tableName}", IsPreferred: true));
+            if (item.TryGetProperty("foreignKeys", out var foreignKeys))
+            {
+                foreach (var foreignKey in foreignKeys.EnumerateArray())
+                {
+                    var references = foreignKey.GetProperty("references");
+                    provider.AddForeignKey(database, schemaName, tableName, new ForeignKeyRelation(
+                        foreignKey.GetProperty("columns").EnumerateArray().Select(column => column.GetString()!).ToArray(),
+                        GetString(references, "table"),
+                        references.GetProperty("columns").EnumerateArray().Select(column => column.GetString()!).ToArray(),
+                        ReferencedSchema: references.TryGetProperty("schema", out _) ? GetString(references, "schema") : null,
+                        ReferencedDatabase: references.TryGetProperty("database", out _) ? GetString(references, "database") : null,
+                        Name: foreignKey.TryGetProperty("name", out _) ? GetString(foreignKey, "name") : null));
+                }
+            }
         }
     }
 
@@ -711,6 +730,11 @@ public sealed class SharedSqlConformanceAuthoringTests
         !item.TryGetProperty(property, out var expected)
         || expected.ValueKind == JsonValueKind.Null
         || string.Equals(expected.GetString(), actual, StringComparison.OrdinalIgnoreCase);
+
+    private static bool InsertTextContains(JsonElement item, string? actual) =>
+        !item.TryGetProperty("insertTextContains", out var parts)
+        || parts.EnumerateArray().All(part =>
+            (actual ?? string.Empty).Contains(part.GetString() ?? string.Empty, StringComparison.OrdinalIgnoreCase));
 
     private static bool SameIdentifier(string? left, string? right) =>
         string.Equals(left?.Trim('"'), right?.Trim('"'), StringComparison.OrdinalIgnoreCase);

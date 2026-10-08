@@ -203,7 +203,14 @@ public class NzCompletionEngine
                     break;
                 AddKeywords(suggestions, SqlContext.JoinKeywords);
                 var joinScope = TryGetFromClauseObjectScope(contextTokens);
-                AddTablesAndViews(suggestions, joinScope.Database ?? _activeDatabase, joinScope.Schema);
+                var joinTargets = new List<CompletionItem>();
+                if (joinScope.Schema is null && joinScope.Database is null && !partialWord.Contains('.'))
+                    AddJoinTargetCompletions(joinTargets, contextTokens, partialWord);
+                suggestions.AddRange(joinTargets);
+                var relations = new List<CompletionItem>();
+                AddTablesAndViews(relations, joinScope.Database ?? _activeDatabase, joinScope.Schema);
+                suggestions.AddRange(relations.Where(item =>
+                    joinTargets.All(target => !target.Label.Equals(item.Label, StringComparison.OrdinalIgnoreCase))));
                 AddCtes(suggestions, fullTokens, astScope);
                 break;
             }
@@ -1064,8 +1071,8 @@ public class NzCompletionEngine
             return;
         }
 
-        AddForeignKeyPredicates(list, provider, left, right);
-        AddForeignKeyPredicates(list, provider, right, left);
+        AddForeignKeyPredicates(list, provider, left, right, fromIsLeft: true);
+        AddForeignKeyPredicates(list, provider, right, left, fromIsLeft: false);
         if (list.Any(item => item.Kind == CompletionKind.Reference)) return;
         var leftColumns = LookupTable(left.Database, left.Schema, left.TableName)?.Columns;
         var rightColumns = LookupTable(right.Database, right.Schema, right.TableName)?.Columns;
@@ -1140,7 +1147,8 @@ public class NzCompletionEngine
         List<CompletionItem> list,
         IForeignKeyProvider provider,
         (string TableName, string? Schema, string? Database, string Qualifier) from,
-        (string TableName, string? Schema, string? Database, string Qualifier) to)
+        (string TableName, string? Schema, string? Database, string Qualifier) to,
+        bool fromIsLeft)
     {
         var fromInfo = _schema?.GetTable(from.Database, from.Schema, from.TableName);
         var toInfo = _schema?.GetTable(to.Database, to.Schema, to.TableName);
@@ -1171,14 +1179,164 @@ public class NzCompletionEngine
             if (relation.Columns.Count == 0 || relation.Columns.Count != relation.ReferencedColumns.Count)
                 continue;
 
+            // Predicates always read left-to-right in FROM order, even when the
+            // foreign key is declared on the right-hand table.
             var predicates = relation.Columns
-                .Zip(relation.ReferencedColumns, (local, referenced) =>
-                    $"{from.Qualifier}.{local} = {to.Qualifier}.{referenced}");
+                .Zip(relation.ReferencedColumns, (local, referenced) => fromIsLeft
+                    ? $"{from.Qualifier}.{local} = {to.Qualifier}.{referenced}"
+                    : $"{to.Qualifier}.{referenced} = {from.Qualifier}.{local}");
             var label = string.Join(" AND ", predicates);
 
             if (list.All(item => !item.Label.Equals(label, StringComparison.OrdinalIgnoreCase)))
-                list.Add(new CompletionItem(label, CompletionKind.Column, Detail: "foreign key", Priority: -10));
+                list.Add(new CompletionItem(label, CompletionKind.Reference, Detail: "foreign key", Priority: -30, InsertText: label));
         }
+    }
+
+    /// <summary>
+    /// Suggests "target alias ON predicate" snippets after JOIN for tables related
+    /// to a visible source by declared foreign keys (either direction, same or
+    /// other schema), falling back to same-schema key-named columns.
+    /// </summary>
+    private void AddJoinTargetCompletions(List<CompletionItem> list, Token<NzToken>[] contextTokens, string partialWord)
+    {
+        if (_schema is not ISchemaProvider schemaProvider || _schema is not IForeignKeyProvider provider)
+            return;
+
+        var sourceTokens = partialWord.Length > 0 && contextTokens.Length > 0
+            ? contextTokens[..^1]
+            : contextTokens;
+        var sources = ExtractTableReferences(CurrentQueryTokens(sourceTokens)).ToList();
+        if (sources.Count == 0)
+            return;
+
+        var visibleAliases = sources.Select(source => source.Alias ?? source.TableName).ToList();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var source in sources)
+        {
+            var sourceInfo = schemaProvider.GetTable(source.Database, source.Schema, source.TableName);
+            var database = sourceInfo?.Database ?? source.Database ?? _activeDatabase;
+            var schema = sourceInfo?.Schema ?? source.Schema;
+            var sourceQualifier = source.Alias ?? source.TableName;
+            var keyColumns = CollectJoinKeyColumns(schemaProvider, provider, database, schema);
+            var outgoing = provider.GetForeignKeys(database, schema, source.TableName) ?? Array.Empty<ForeignKeyRelation>();
+
+            foreach (var (candidateSchema, candidateName) in EnumerateJoinTargets(schemaProvider, database))
+            {
+                if (string.Equals(candidateSchema, schema, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(candidateName, source.TableName, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (partialWord.Length > 0 && !candidateName.StartsWith(partialWord, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var sameSchema = string.Equals(candidateSchema, schema, StringComparison.OrdinalIgnoreCase);
+                var candidateInfo = schemaProvider.GetTable(database, candidateSchema, candidateName);
+                var incoming = provider.GetForeignKeys(database, candidateSchema, candidateName) ?? Array.Empty<ForeignKeyRelation>();
+
+                var groups = new List<(string Predicates, int Priority, string Detail)>();
+                foreach (var relation in outgoing)
+                {
+                    if (!relation.ReferencedTable.Equals(candidateName, StringComparison.OrdinalIgnoreCase)
+                        || !IsReferencedRelation(relation.ReferencedSchema, candidateSchema)
+                        || relation.Columns.Count == 0
+                        || relation.Columns.Count != relation.ReferencedColumns.Count)
+                        continue;
+                    var predicates = relation.Columns.Zip(relation.ReferencedColumns,
+                        (local, referenced) => $"{sourceQualifier}.{local} = {{TARGET}}.{referenced}");
+                    groups.Add((string.Join(" AND ", predicates), sameSchema ? -30 : -20, "JOIN with declared foreign key"));
+                }
+                foreach (var relation in incoming)
+                {
+                    if (!relation.ReferencedTable.Equals(source.TableName, StringComparison.OrdinalIgnoreCase)
+                        || !IsReferencedRelation(relation.ReferencedSchema, schema)
+                        || relation.Columns.Count == 0
+                        || relation.Columns.Count != relation.ReferencedColumns.Count)
+                        continue;
+                    var predicates = relation.Columns.Zip(relation.ReferencedColumns,
+                        (local, referenced) => $"{sourceQualifier}.{referenced} = {{TARGET}}.{local}");
+                    groups.Add((string.Join(" AND ", predicates), sameSchema ? -30 : -20, "JOIN with declared foreign key"));
+                }
+                if (groups.Count == 0 && sameSchema && candidateInfo is not null && sourceInfo is not null)
+                {
+                    var pairs = new List<string>();
+                    foreach (var sourceColumn in sourceInfo.Columns ?? Array.Empty<ColumnInfo>())
+                    {
+                        foreach (var candidateColumn in candidateInfo.Columns ?? Array.Empty<ColumnInfo>())
+                        {
+                            if (!sourceColumn.Name.Equals(candidateColumn.Name, StringComparison.OrdinalIgnoreCase))
+                                continue;
+                            var sourceKey = keyColumns.Contains($"{schema}.{source.TableName}.{sourceColumn.Name}");
+                            var candidateKey = keyColumns.Contains($"{candidateSchema}.{candidateName}.{candidateColumn.Name}");
+                            if (!sourceKey && !candidateKey)
+                                continue;
+                            pairs.Add($"{sourceQualifier}.{sourceColumn.Name} = {{TARGET}}.{candidateColumn.Name}");
+                        }
+                    }
+                    if (pairs.Count > 0)
+                        groups.Add((string.Join(" AND ", pairs), -10, "JOIN with name match"));
+                }
+
+                foreach (var (predicates, priority, detail) in groups)
+                {
+                    var alias = ChooseJoinAlias(candidateName, visibleAliases);
+                    var targetPath = sameSchema || candidateSchema is null ? candidateName : $"{candidateSchema}.{candidateName}";
+                    var insertText = $"{targetPath} {alias} ON {predicates.Replace("{TARGET}", alias)}";
+                    if (!seen.Add(insertText))
+                        continue;
+                    list.Add(new CompletionItem(candidateName, CompletionKind.Table, detail, priority, insertText));
+                }
+            }
+        }
+    }
+
+    private static bool IsReferencedRelation(string? referencedSchema, string? relationSchema) =>
+        referencedSchema is not { Length: > 0 }
+        || string.Equals(referencedSchema, relationSchema, StringComparison.OrdinalIgnoreCase);
+
+    private static IEnumerable<(string? Schema, string Name)> EnumerateJoinTargets(ISchemaProvider provider, string? database)
+    {
+        foreach (var schemaName in provider.GetSchemas(database) ?? Array.Empty<string>())
+        {
+            foreach (var table in provider.GetTableNames(database, schemaName) ?? Array.Empty<(string Name, TableKind Kind)>())
+            {
+                if (table.Kind == TableKind.Table)
+                    yield return (schemaName, table.Name);
+            }
+        }
+    }
+
+    /// <summary>Columns that act as keys: declared FK columns on either side of a relation.</summary>
+    private static HashSet<string> CollectJoinKeyColumns(
+        ISchemaProvider schemaProvider, IForeignKeyProvider provider, string? database, string? schema)
+    {
+        var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var table in schemaProvider.GetTableNames(database, schema) ?? Array.Empty<(string Name, TableKind Kind)>())
+        {
+            foreach (var relation in provider.GetForeignKeys(database, schema, table.Name) ?? Array.Empty<ForeignKeyRelation>())
+            {
+                foreach (var column in relation.Columns)
+                    keys.Add($"{schema}.{table.Name}.{column}");
+                var referencedSchema = relation.ReferencedSchema ?? schema;
+                foreach (var column in relation.ReferencedColumns)
+                    keys.Add($"{referencedSchema}.{relation.ReferencedTable}.{column}");
+            }
+        }
+        return keys;
+    }
+
+    private static string ChooseJoinAlias(string tableName, IReadOnlyCollection<string> visibleAliases)
+    {
+        var initials = new string(tableName
+            .Split('_', StringSplitOptions.RemoveEmptyEntries)
+            .Where(part => char.IsLetter(part[0]))
+            .Select(part => char.ToUpperInvariant(part[0]))
+            .ToArray());
+        var baseAlias = initials.Length > 0 ? initials : "T";
+        var alias = baseAlias;
+        var suffix = 2;
+        while (visibleAliases.Any(existing => existing.Equals(alias, StringComparison.OrdinalIgnoreCase)))
+            alias = $"{baseAlias}{suffix++}";
+        return alias;
     }
 
     private void AddColumnsFromScope(List<CompletionItem> list, Token<NzToken>[] tokens, ScopeBuilder? astScope = null)
