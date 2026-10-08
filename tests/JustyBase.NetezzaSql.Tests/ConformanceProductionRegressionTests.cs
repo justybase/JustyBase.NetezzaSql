@@ -226,4 +226,28 @@ public sealed class ConformanceProductionRegressionTests
         Assert.NotEmpty(result.Statements);
         Assert.False(result.Valid);
     }
+    [Fact]
+    public void DialectLintEngine_OffersProceduralFragmentFix()
+    {
+        const string sql = "IF x THEN ELSE ELSEIF y THEN END IF;";
+        using var engine = new LintEngine(JustyBase.NetezzaSqlParser.Dialects.SqlDialect.Netezza);
+        var issue = Assert.Single(engine.RunCheapRules(sql), item => item.RuleId == "NZP012");
+        Assert.Equal("ELSEIF", sql[issue.StartOffset..issue.EndOffset]);
+        var fix = NzLintCodeActions.GetQuickFixInfo(issue, sql);
+        Assert.NotNull(fix);
+        Assert.Equal(SqlQuickFixSafety.Safe, fix.Safety);
+        Assert.Equal("IF x THEN ELSE ELSIF y THEN END IF;", NzLintCodeActions.GetQuickFix(issue, sql)!.Value.Apply(sql));
+    }
+
+    [Fact]
+    public void UpdateAsDiagnostic_CoversBothCharactersAfterUnicodeAndCrLf()
+    {
+        const string sql = "-- 😀 zażółć\r\nUPDATE t AS a SET a.col = 1;";
+        using var engine = new LintEngine(JustyBase.NetezzaSqlParser.Dialects.SqlDialect.Netezza);
+        var issues = engine.RunExpensiveAnalysis(new LintConfig(sql, new InMemorySchemaProvider())).Issues;
+        var issue = issues.First(item => item.RuleId == "SQL046");
+        Assert.Equal(sql.IndexOf("AS", StringComparison.Ordinal), issue.StartOffset);
+        Assert.Equal("AS", sql[issue.StartOffset..issue.EndOffset]);
+        Assert.Contains("UPDATE t a SET", NzLintCodeActions.GetQuickFix(issue, sql)!.Value.Apply(sql));
+    }
 }

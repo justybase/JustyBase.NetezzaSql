@@ -27,59 +27,31 @@ public static class NzSignatureHelpService
             if (tokens.Length == 0)
                 return null;
 
-            string? functionName = null;
-            int parenDepth = 0;
+            // Keep each open parenthesis frame: commas belong only to their
+            // immediate frame, and closing a nested call restores its parent.
+            var frames = new List<(string? Function, int Parameter)>();
             for (int i = 0; i < tokens.Length; i++)
             {
                 var token = tokens[i];
-                if (token.Span.Position.Absolute > offset)
-                    break;
-
+                if (token.Span.Position.Absolute >= offset) break;
                 if (token.Kind == NzToken.LParen)
                 {
-                    parenDepth++;
-                    if (i > 0 && IsFunctionNameToken(tokens[i - 1].Kind) && parenDepth == 1)
-                        functionName = ShortFunctionName(tokens[i - 1].ToStringValue());
+                    var name = i > 0 && IsFunctionNameToken(tokens[i - 1].Kind)
+                        ? ShortFunctionName(tokens[i - 1].ToStringValue()) : null;
+                    frames.Add((name, 0));
                 }
-                else if (token.Kind == NzToken.RParen)
+                else if (token.Kind == NzToken.RParen && frames.Count > 0)
+                    frames.RemoveAt(frames.Count - 1);
+                else if (token.Kind == NzToken.Comma && frames.Count > 0)
                 {
-                    parenDepth = Math.Max(0, parenDepth - 1);
+                    var frame = frames[^1];
+                    frames[^1] = (frame.Function, frame.Parameter + 1);
                 }
             }
-
-            if (functionName is null || !TryGetSignatures(functionName, catalog, out var signatures))
+            var current = frames.LastOrDefault(frame => frame.Function is not null);
+            if (current.Function is null || !TryGetSignatures(current.Function, catalog, out var signatures))
                 return null;
-
-            int activeParameter = 0;
-            int depth = 0;
-            bool inFunction = false;
-            for (int i = 0; i < tokens.Length; i++)
-            {
-                var token = tokens[i];
-                if (token.Span.Position.Absolute > offset)
-                    break;
-
-                if (token.Kind == NzToken.LParen)
-                {
-                    if (depth == 0 && i > 0 && IsFunctionNameToken(tokens[i - 1].Kind) &&
-                        string.Equals(ShortFunctionName(tokens[i - 1].ToStringValue()), functionName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        inFunction = true;
-                        activeParameter = 0;
-                    }
-                    depth++;
-                }
-                else if (token.Kind == NzToken.RParen)
-                {
-                    depth = Math.Max(0, depth - 1);
-                    if (depth == 0)
-                        inFunction = false;
-                }
-                else if (token.Kind == NzToken.Comma && inFunction && depth == 1)
-                {
-                    activeParameter++;
-                }
-            }
+            var activeParameter = current.Parameter;
 
             int activeSignature = SelectSignature(signatures, activeParameter);
             var active = signatures[activeSignature];

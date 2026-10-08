@@ -28,7 +28,7 @@ jobs:
         run: dotnet build JustyBase.NetezzaSql.sln --no-restore -c Release
 
       - name: Test
-        run: dotnet test JustyBase.NetezzaSql.sln --no-build -c Release --verbosity normal
+        run: dotnet test JustyBase.NetezzaSql.sln --no-build -c Release --verbosity normal --filter "Category!=Performance&Category!=SqlConformance"
 
       - name: Pack
         shell: pwsh

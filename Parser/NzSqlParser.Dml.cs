@@ -174,7 +174,8 @@ public partial class NzSqlParser
                 alias = Advance().ToStringValue();
             _errors.Add(new ValidationError(
                 "UPDATE table AS alias is not supported in Netezza — use UPDATE table alias without AS",
-                "error", SourcePosition.FromToken(asTok), "SQL046"));
+                "error", SourcePosition.FromToken(asTok), "SQL046",
+                EndLine: asTok.Position.Line, EndColumn: asTok.Position.Column + asTok.Span.Length));
         }
         else if (Peek().Kind == NzToken.Identifier)
         {

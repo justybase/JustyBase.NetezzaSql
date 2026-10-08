@@ -129,7 +129,7 @@ public static class NetezzaSqlCatalog
         Function("STDDEV", NetezzaFunctionCategory.Aggregate, Signature("STDDEV(expression)", "Returns standard deviation.", Parameter("expression", "Numeric expression."))),
         Function("STRING_AGG", NetezzaFunctionCategory.Aggregate, Signature("STRING_AGG(expression, delimiter)", "Aggregates strings with a delimiter.", Parameter("expression", "Value to concatenate."), Parameter("delimiter", "Separator."))),
         Function("SUBSTR", NetezzaFunctionCategory.String, Signature("SUBSTR(string, start [, length])", "Extracts a substring.", Parameter("string", "Input string."), Parameter("start", "Start position."), Parameter("length", "Optional length."))),
-        Function("SUBSTRING", NetezzaFunctionCategory.String, Signature("SUBSTRING(string, start [, length])", "Extracts a substring.", Parameter("string", "Input string."), Parameter("start", "Start position."), Parameter("length", "Optional length."))),
+        Function("SUBSTRING", NetezzaFunctionCategory.String, Signature("SUBSTRING(string, start, length)", "Extracts a substring.", Parameter("string", "Input string."), Parameter("start", "Start position."), Parameter("length", "Optional length."))),
         Function("SUM", NetezzaFunctionCategory.Aggregate, Signature("SUM(expression)", "Returns the sum of values.", Parameter("expression", "Numeric expression."))),
         Function("TO_CHAR", NetezzaFunctionCategory.Conversion, Signature("TO_CHAR(value, format)", "Formats a value as text.", Parameter("value", "Value to format."), Parameter("format", "Format pattern."))),
         Function("TO_DATE", NetezzaFunctionCategory.Conversion, Signature("TO_DATE(string, format)", "Converts text to a date.", Parameter("string", "Date text."), Parameter("format", "Date format."))),
@@ -166,7 +166,8 @@ public static class NetezzaSqlCatalog
 
     public static IReadOnlyList<NetezzaBuiltinFunction> BuiltinFunctions { get; } =
         SqlAuthoringCatalogComposer.MergeFunctions(
-            AnsiSqlCatalog.BuiltinFunctions,
+            // Netezza supplies the canonical comma-form SUBSTRING label.
+            AnsiSqlCatalog.BuiltinFunctions.Where(function => function.Name != "SUBSTRING"),
             CoreBuiltinFunctions
             .Concat(AdditionalFunctionNames.Select(name => Function(
                 name,

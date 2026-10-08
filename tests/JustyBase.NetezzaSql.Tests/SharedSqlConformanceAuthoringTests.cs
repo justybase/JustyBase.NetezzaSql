@@ -375,6 +375,29 @@ public sealed class SharedSqlConformanceAuthoringTests
             Assert.Equal(GetString(definition, "text"), sql[actual.StartAbsolute..actual.EndAbsolute]);
         }
 
+        if (expected.TryGetProperty("navigation", out var navigation))
+        {
+            var symbol = NzSymbolService.GetSymbol(sql, cursor);
+            Assert.NotNull(symbol);
+            Assert.Equal(GetString(navigation, "name"), symbol.OldName);
+            var kind = symbol.Kind switch
+            {
+                SqlSymbolKind.Cte => "cte",
+                SqlSymbolKind.Alias => "table_alias",
+                SqlSymbolKind.Table => "table",
+                _ => throw new ArgumentOutOfRangeException()
+            };
+            Assert.Equal(GetString(navigation, "kind"), kind);
+            var actualDefinition = Assert.Single(symbol.Occurrences, occurrence => occurrence.IsDefinition);
+            AssertNavigationRange(navigation.GetProperty("definition"), actualDefinition, sql);
+            var expectedReferences = navigation.GetProperty("references").EnumerateArray().ToArray();
+            var actualReferences = symbol.Occurrences.Where(occurrence => !occurrence.IsDefinition)
+                .OrderBy(occurrence => occurrence.StartAbsolute).ToArray();
+            Assert.Equal(expectedReferences.Length, actualReferences.Length);
+            for (var index = 0; index < expectedReferences.Length; index++)
+                AssertNavigationRange(expectedReferences[index], actualReferences[index], sql);
+        }
+
         using var runtime = new ParsingRuntime(dialect);
         var parsed = runtime.Parse(sql);
         Assert.True(parsed.Valid, $"[{id}] expected a valid semantic-model input: {string.Join(" | ", parsed.Errors.Select(error => error.Code + ": " + error.Message))}");
@@ -416,6 +439,13 @@ public sealed class SharedSqlConformanceAuthoringTests
                     && (source.Table is null || SameIdentifier(source.Table.Name, relation)));
             }
         }
+    }
+
+    private static void AssertNavigationRange(JsonElement expected, SymbolOccurrence actual, string sql)
+    {
+        Assert.Equal(expected.GetProperty("start").GetInt32(), actual.StartAbsolute);
+        Assert.Equal(expected.GetProperty("end").GetInt32(), actual.EndAbsolute);
+        Assert.Equal(GetString(expected, "text"), sql[actual.StartAbsolute..actual.EndAbsolute]);
     }
 
     private static IEnumerable<SelectStatement> FlattenSelects(SelectStatement select)

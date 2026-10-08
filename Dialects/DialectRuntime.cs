@@ -13,7 +13,7 @@ namespace JustyBase.NetezzaSqlParser.Dialects;
 /// </summary>
 public static class DialectRuntime
 {
-    private static readonly QualityRuleRegistry NetezzaRules = new(NzLintRules.AllRules);
+    private static readonly QualityRuleRegistry NetezzaRules = new();
     private static readonly QualityRuleRegistry OracleRules = new(OracleLintRules.AllRules);
     private static readonly QualityRuleRegistry Db2Rules = new(Db2LintRules.AllRules);
     private static readonly QualityRuleRegistry MssqlRules = new(MssqlLintRules.AllRules);

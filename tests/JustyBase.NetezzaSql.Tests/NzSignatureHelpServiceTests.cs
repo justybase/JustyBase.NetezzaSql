@@ -27,4 +27,20 @@ public sealed class NzSignatureHelpServiceTests
 
         Assert.Null(result);
     }
+    [Theory]
+    [InlineData("SELECT ROUND(AVG(", "AVG(expression)", 0)]
+    [InlineData("SELECT ROUND(AVG(x), ", "ROUND(value [, scale])", 1)]
+    [InlineData("SELECT SUBSTRING('a,b', ", "SUBSTRING(string, start, length)", 1)]
+    [InlineData("SELECT NVL((1 + 2), ", "NVL(value, replacement)", 1)]
+    public void SignatureHelp_TracksInnermostOpenCall(string sql, string label, int parameter)
+    {
+        var result = NzSignatureHelpService.GetSignatureHelp(sql, sql.Length);
+        Assert.NotNull(result);
+        Assert.Equal(label, result.Signatures[result.ActiveSignature].Label);
+        Assert.Equal(parameter, result.ActiveParameter);
+    }
+
+    [Fact]
+    public void SignatureHelp_ReturnsNullAfterClosedCall()
+        => Assert.Null(NzSignatureHelpService.GetSignatureHelp("SELECT AVG(x) ", 14));
 }
