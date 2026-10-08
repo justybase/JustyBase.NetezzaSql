@@ -7,12 +7,13 @@ namespace JustyBase.Netezza.Tests;
 /// <summary>
 /// In-memory <see cref="DbConnection"/> that serves scripted catalog rows based on the SQL text
 /// the loader issues. Rows are matched by marker fragments (<c>_V_OBJECT_DATA</c>, <c>_V_RELATION_COLUMN</c>,
-/// <c>_v_database</c>, <c>_V_PROCEDURE</c>) so the loader's stage selection is exercised.
+/// <c>_V_RELATION_KEYDATA</c>, <c>_v_database</c>, <c>_V_PROCEDURE</c>) so the loader's stage selection is exercised.
 /// </summary>
 internal sealed class FakeCatalogConnection : DbConnection
 {
     private readonly IReadOnlyList<object?[]> _objectRows;
     private readonly IReadOnlyList<object?[]> _columnRows;
+    private readonly IReadOnlyList<object?[]> _keyRows;
     private readonly IReadOnlyList<object?[]> _databaseRows;
     private readonly IReadOnlyList<object?[]> _procedureRows;
     private readonly string? _failMarker;
@@ -23,12 +24,14 @@ internal sealed class FakeCatalogConnection : DbConnection
         IEnumerable<object?[]>? columnRows = null,
         IEnumerable<object?[]>? databaseRows = null,
         IEnumerable<object?[]>? procedureRows = null,
-        string? failMarker = null)
+        string? failMarker = null,
+        IEnumerable<object?[]>? keyRows = null)
     {
         _objectRows = objectRows?.ToList() ?? [];
         _columnRows = columnRows?.ToList() ?? [];
         _databaseRows = databaseRows?.ToList() ?? [];
         _procedureRows = procedureRows?.ToList() ?? [];
+        _keyRows = keyRows?.ToList() ?? [];
         _failMarker = failMarker;
     }
 
@@ -66,7 +69,11 @@ internal sealed class FakeCatalogConnection : DbConnection
         }
 
         IReadOnlyList<object?[]>? rows = null;
-        if (commandText.Contains("_V_RELATION_COLUMN", StringComparison.OrdinalIgnoreCase))
+        if (commandText.Contains("_V_RELATION_KEYDATA", StringComparison.OrdinalIgnoreCase))
+        {
+            rows = _keyRows;
+        }
+        else if (commandText.Contains("_V_RELATION_COLUMN", StringComparison.OrdinalIgnoreCase))
         {
             rows = _columnRows;
         }

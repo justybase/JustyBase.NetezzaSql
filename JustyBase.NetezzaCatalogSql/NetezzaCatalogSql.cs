@@ -327,6 +327,41 @@ public static partial class NetezzaCatalogSql
     }
 
     /// <summary>
+    /// Key constraints for every table in one database including the declared
+    /// referenced endpoint (<c>PKDATABASE</c>/<c>PKSCHEMA</c>/<c>PKRELATION</c>),
+    /// ordered per constraint so composite keys keep catalog order.
+    /// A single query per database keeps catalog load free of N+1 key fetches.
+    /// </summary>
+    public static string GetBulkRelationKeysSql(string database)
+    {
+        database = NormalizeDatabaseIdentifier(database, nameof(database));
+
+        return
+            $"""
+            SELECT
+                X.OBJID::INT AS OBJID
+                , X.SCHEMA
+                , X.RELATION
+                , X.CONSTRAINTNAME
+                , X.CONTYPE
+                , X.CONSEQ
+                , X.ATTNAME
+                , X.PKDATABASE
+                , X.PKSCHEMA
+                , X.PKRELATION
+                , X.PKATTNAME
+                , X.UPDT_TYPE
+                , X.DEL_TYPE
+            FROM
+                {database}.._V_RELATION_KEYDATA X
+            WHERE
+                X.OBJID NOT IN (4,5)
+            ORDER BY
+                X.OBJID, X.CONSTRAINTNAME, X.CONSEQ
+            """;
+    }
+
+    /// <summary>
     /// Object DESCRIPTION (table comment) for a single object.
     /// Mirrors JustyBaseLite NZ_QUERIES.getObjectComment.
     /// </summary>

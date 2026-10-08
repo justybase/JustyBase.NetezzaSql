@@ -82,6 +82,10 @@ public static class NetezzaSchemaLoader
             await AttachColumnsAsync(connection, database, tables, cancellationToken).ConfigureAwait(false);
         }
 
+        // Keys are independent of column deferral: declared relationships must be
+        // available to authoring even when column hydration is lazy.
+        await AttachKeysAsync(connection, database, tables, cancellationToken).ConfigureAwait(false);
+
         IReadOnlyList<NetezzaProcedureDefinition>? procedures = null;
         if (options.LoadProcedures)
         {
@@ -282,6 +286,165 @@ public static class NetezzaSchemaLoader
                 tables[i] = table with { Columns = columns };
             }
         }
+    }
+
+    private static async Task AttachKeysAsync(
+        DbConnection connection,
+        string database,
+        List<NetezzaSchemaTable> tables,
+        CancellationToken cancellationToken)
+    {
+        await EnsureOpenAsync(connection, cancellationToken).ConfigureAwait(false);
+
+        if (tables.Count == 0)
+        {
+            return;
+        }
+
+        var rows = new List<NetezzaSchemaKeyRow>();
+        await using var command = connection.CreateCommand();
+        command.CommandText = JustyBase.NetezzaCatalogSql.NetezzaCatalogSql.GetBulkRelationKeysSql(database);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            rows.Add(new NetezzaSchemaKeyRow(
+                ReadInt(reader, 0),
+                ReadStringOrNull(reader, 1),
+                ReadStringOrNull(reader, 2),
+                ReadStringOrNull(reader, 3) ?? string.Empty,
+                ReadStringOrNull(reader, 4) ?? string.Empty,
+                ReadStringOrNull(reader, 6) ?? string.Empty,
+                NonEmpty(ReadStringOrNull(reader, 7)),
+                NonEmpty(ReadStringOrNull(reader, 8)),
+                NonEmpty(ReadStringOrNull(reader, 9)),
+                NonEmpty(ReadStringOrNull(reader, 10))));
+        }
+
+        if (rows.Count == 0)
+        {
+            return;
+        }
+
+        var updated = AttachReferenceKeys(tables, rows, database);
+        for (int i = 0; i < tables.Count; i++)
+        {
+            tables[i] = updated[i];
+        }
+    }
+
+    /// <summary>
+    /// Groups raw catalog key rows into per-object <see cref="NetezzaReferenceKey"/> records.
+    /// Catalog order (<c>OBJID, CONSTRAINTNAME, CONSEQ</c>) is preserved so composite keys
+    /// stay paired. Pure and offline-testable; the loader supplies rows from
+    /// <c>GetBulkRelationKeysSql</c>.
+    /// </summary>
+    public static IReadOnlyList<NetezzaSchemaTable> AttachReferenceKeys(
+        IReadOnlyList<NetezzaSchemaTable> tables,
+        IReadOnlyList<NetezzaSchemaKeyRow> rows,
+        string database)
+    {
+        ArgumentNullException.ThrowIfNull(tables);
+        ArgumentNullException.ThrowIfNull(rows);
+
+        var byCatalogId = new Dictionary<int, NetezzaSchemaTable>();
+        foreach (var table in tables)
+        {
+            if (table.CatalogId != 0 && !byCatalogId.ContainsKey(table.CatalogId))
+            {
+                byCatalogId[table.CatalogId] = table;
+            }
+        }
+
+        var buildersByObjectId = new Dictionary<int, Dictionary<string, KeyAccumulator>>();
+        foreach (var row in rows)
+        {
+            if (!byCatalogId.ContainsKey(row.ObjectId))
+            {
+                continue; // orphan key row — no matching catalog object.
+            }
+
+            if (!buildersByObjectId.TryGetValue(row.ObjectId, out var builders))
+            {
+                buildersByObjectId[row.ObjectId] = builders =
+                    new Dictionary<string, KeyAccumulator>(StringComparer.OrdinalIgnoreCase);
+            }
+
+            string accumulatorKey = $"{row.ConstraintType}\u0000{row.ConstraintName}";
+            if (!builders.TryGetValue(accumulatorKey, out var accumulator))
+            {
+                builders[accumulatorKey] = accumulator = new KeyAccumulator(row.ConstraintName, row.ConstraintType);
+            }
+
+            if (!string.IsNullOrEmpty(row.Column))
+            {
+                accumulator.Columns.Add(row.Column);
+            }
+
+            if (!string.IsNullOrEmpty(row.ReferencedColumn))
+            {
+                accumulator.ReferencedColumns.Add(row.ReferencedColumn);
+                accumulator.ReferencedDatabase ??= row.ReferencedDatabase;
+                accumulator.ReferencedSchema ??= row.ReferencedSchema;
+                accumulator.ReferencedTable ??= row.ReferencedTable;
+            }
+        }
+
+        var result = new List<NetezzaSchemaTable>(tables.Count);
+        foreach (var table in tables)
+        {
+            if (table.CatalogId == 0
+                || !buildersByObjectId.TryGetValue(table.CatalogId, out var builders))
+            {
+                result.Add(table);
+                continue;
+            }
+
+            var keys = new List<NetezzaReferenceKey>(builders.Count);
+            foreach (var accumulator in builders.Values)
+            {
+                if (accumulator.Columns.Count == 0)
+                {
+                    continue;
+                }
+
+                var columns = accumulator.Columns.ToArray();
+                keys.Add(accumulator.IsPrimaryKey
+                    ? new NetezzaReferenceKey(
+                        accumulator.Name,
+                        accumulator.Type,
+                        columns,
+                        table.Database,
+                        table.Schema,
+                        table.Name,
+                        columns)
+                    : new NetezzaReferenceKey(
+                        accumulator.Name,
+                        accumulator.Type,
+                        columns,
+                        accumulator.ReferencedDatabase ?? table.Database,
+                        accumulator.ReferencedSchema,
+                        accumulator.ReferencedTable,
+                        accumulator.ReferencedColumns.Count > 0 ? accumulator.ReferencedColumns.ToArray() : columns));
+            }
+
+            result.Add(keys.Count > 0 ? table with { Keys = keys } : table);
+        }
+
+        return result;
+    }
+
+    private static string? NonEmpty(string? value) => string.IsNullOrEmpty(value) ? null : value;
+
+    private sealed class KeyAccumulator(string name, string type)
+    {
+        public string Name { get; } = name;
+        public string Type { get; } = type;
+        public List<string> Columns { get; } = [];
+        public string? ReferencedDatabase { get; set; }
+        public string? ReferencedSchema { get; set; }
+        public string? ReferencedTable { get; set; }
+        public List<string> ReferencedColumns { get; } = [];
+        public bool IsPrimaryKey => string.Equals(Type, "p", StringComparison.OrdinalIgnoreCase);
     }
 
     private static async Task<IReadOnlyList<NetezzaProcedureDefinition>> LoadProceduresAsync(

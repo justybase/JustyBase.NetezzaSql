@@ -29,9 +29,9 @@ public class CompletionScopeProvider
     }
 
     /// <summary>Attempt to parse SQL and build completion scope. Null on failure or parser errors.</summary>
-    public ScopeBuilder? TryBuild(string sql)
+    public ScopeBuilder? TryBuild(string sql, int? cursor = null)
     {
-        var tokens = Tokenize(sql);
+        var tokens = Tokenize(sql, _dialect);
         if (tokens is null) return null;
 
         var parser = DialectRuntime.CreateParser(tokens, _dialect);
@@ -44,14 +44,14 @@ public class CompletionScopeProvider
         // when parsing could not produce a statement at all.
 
         var builder = new ScopeBuilder();
-        var walker = new ScopeWalker(builder, _schema, _dialect);
+        var walker = new ScopeWalker(builder, _schema, _dialect, cursor);
         walker.Build(stmt);
         return builder;
     }
 
-    private Token<NzToken>[]? Tokenize(string sql)
+    internal static Token<NzToken>[]? Tokenize(string sql, SqlDialect dialect)
     {
-        try { return DialectRuntime.Tokenize(sql, _dialect).ToArray(); }
+        try { return DialectRuntime.Tokenize(sql, dialect).ToArray(); }
         catch { return null; }
     }
 }
@@ -67,12 +67,14 @@ internal class ScopeWalker
     private readonly ScopeBuilder _scope;
     private readonly ISchemaProvider? _schema;
     private readonly SqlDialect _dialect;
+    private readonly int? _cursor;
 
-    public ScopeWalker(ScopeBuilder scope, ISchemaProvider? schema, SqlDialect dialect)
+    public ScopeWalker(ScopeBuilder scope, ISchemaProvider? schema, SqlDialect dialect, int? cursor = null)
     {
         _scope = scope;
         _schema = schema;
         _dialect = dialect;
+        _cursor = cursor;
     }
 
     public void Build(Statement stmt)
@@ -94,6 +96,7 @@ internal class ScopeWalker
     private void WalkSelect(SelectStatement stmt)
     {
         _scope.EnterScope();
+        var level = _scope.CurrentScope.Level;
 
         // Register CTEs first (scope-level, before FROM)
         if (stmt.With is not null)
@@ -103,7 +106,7 @@ internal class ScopeWalker
         if (stmt.From is not null)
         {
             foreach (var tr in stmt.From)
-                WalkTableReference(tr);
+                WalkTableReference(tr, level);
         }
 
         // Subqueries in compound selects contribute their scope
@@ -113,8 +116,110 @@ internal class ScopeWalker
                 WalkSelect(cs);
         }
 
+        // Expression subqueries (EXISTS / IN / scalar) contribute their own
+        // scope at the cursor without leaking sibling scopes.
+        foreach (var item in stmt.SelectList)
+            WalkExpression(item.Expression, level);
+        WalkExpression(stmt.Where, level);
+        WalkExpression(stmt.Having, level);
+        if (stmt.GroupBy is not null)
+            foreach (var expression in stmt.GroupBy)
+                WalkExpression(expression, level);
+
         // Scopes NOT exited — so the caller sees all tables registered
         // by this SELECT and its parent scopes
+    }
+
+    // ====== EXPRESSION SUBQUERIES ======
+
+    private void WalkCursorSubquery(SelectStatement query, int level)
+    {
+        if (_cursor is null)
+        {
+            WalkSelect(query);
+            return;
+        }
+        while (_scope.CurrentScope.Level > level)
+            _scope.ExitScope();
+        if (query.Position.Absolute <= _cursor)
+            WalkSelect(query);
+    }
+
+    private void WalkExpression(Expression? expression, int level)
+    {
+        switch (expression)
+        {
+            case null:
+                return;
+            case SubqueryExpression subquery:
+                WalkCursorSubquery(subquery.Query, level);
+                return;
+            case ExistsExpression exists:
+                WalkCursorSubquery(exists.Subquery, level);
+                return;
+            case InExpression inExpression:
+                WalkExpression(inExpression.Left, level);
+                if (inExpression.Values is not null)
+                    foreach (var value in inExpression.Values)
+                        WalkExpression(value, level);
+                if (inExpression.Subquery is not null)
+                    WalkCursorSubquery(inExpression.Subquery, level);
+                return;
+            case BinaryExpression binary:
+                WalkExpression(binary.Left, level);
+                WalkExpression(binary.Right, level);
+                return;
+            case UnaryExpression unary:
+                WalkExpression(unary.Operand, level);
+                return;
+            case BetweenExpression between:
+                WalkExpression(between.Value, level);
+                WalkExpression(between.Low, level);
+                WalkExpression(between.High, level);
+                return;
+            case IsExpression isExpression:
+                WalkExpression(isExpression.Left, level);
+                return;
+            case QuantifiedComparisonExpression quantified:
+                WalkExpression(quantified.Left, level);
+                WalkExpression(quantified.Right, level);
+                return;
+            case CaseExpression caseExpression:
+                WalkExpression(caseExpression.Value, level);
+                foreach (var clause in caseExpression.WhenClauses)
+                {
+                    WalkExpression(clause.When, level);
+                    WalkExpression(clause.Then, level);
+                }
+                WalkExpression(caseExpression.ElseClause, level);
+                return;
+            case CastExpression cast:
+                WalkExpression(cast.Expression, level);
+                return;
+            case CastFunctionExpression castFunction:
+                WalkExpression(castFunction.Expression, level);
+                return;
+            case ExtractExpression extract:
+                WalkExpression(extract.Source, level);
+                return;
+            case FilterClause filter:
+                WalkExpression(filter.Condition, level);
+                return;
+            case FunctionCall function:
+                if (function.Arguments is not null)
+                    foreach (var argument in function.Arguments)
+                        WalkExpression(argument, level);
+                if (function.Filter is not null)
+                    WalkExpression(function.Filter.Condition, level);
+                if (function.Over?.PartitionBy is not null)
+                    foreach (var partition in function.Over.PartitionBy)
+                        WalkExpression(partition, level);
+                return;
+            case ArrayExpression array:
+                foreach (var item in array.Items)
+                    WalkExpression(item, level);
+                return;
+        }
     }
 
     // ====== CTE Registration ======
@@ -213,42 +318,44 @@ internal class ScopeWalker
 
     // ====== FROM / JOIN / TABLE SOURCE ======
 
-    private void WalkTableReference(TableReference tr)
+    private void WalkTableReference(TableReference tr, int level)
     {
-        WalkTableSource(tr.Source);
+        WalkTableSource(tr.Source, level);
         if (tr.Joins is not null)
             foreach (var join in tr.Joins)
-                WalkJoinClause(join);
+                WalkJoinClause(join, level);
     }
 
-    private void WalkTableSource(TableSource source)
+    private void WalkTableSource(TableSource source, int level)
     {
         if (source.Table is not null)
         {
             var table = BuildTableInfo(source.Table, source.Alias);
+            if (_scope.FindTable(source.Table.Name) is { IsCte: true })
+                table = table with { IsCte = true };
             _scope.AddTable(table);
         }
 
         if (source.Subquery is not null)
         {
-            WalkSelect(source.Subquery);
+            WalkCursorSubquery(source.Subquery, level);
             if (source.Alias is not null)
             {
                 var subCols = InferSubqueryColumns(source.Subquery);
                 _scope.AddTable(new TableInfo(source.Alias, IsCte: false, IsTempTable: false,
-                    Columns: subCols.Count > 0 ? subCols : null));
+                    Columns: subCols.Count > 0 ? subCols : null, IsDerived: true));
             }
         }
 
         if (source.FunctionSource && source.Alias is not null)
         {
-            _scope.AddTable(new TableInfo(source.Alias, IsCte: false, IsTempTable: false));
+            _scope.AddTable(new TableInfo(source.Alias, IsCte: false, IsTempTable: false, IsDerived: true));
         }
     }
 
-    private void WalkJoinClause(JoinClause join)
+    private void WalkJoinClause(JoinClause join, int level)
     {
-        WalkTableSource(join.Source);
+        WalkTableSource(join.Source, level);
     }
 
     // ====== INSERT / UPDATE / DELETE / MERGE ======
@@ -265,30 +372,33 @@ internal class ScopeWalker
     private void WalkUpdate(UpdateStatement stmt)
     {
         _scope.EnterScope();
+        var level = _scope.CurrentScope.Level;
         _scope.AddTable(BuildTableInfo(stmt.Target, stmt.Alias));
 
         if (stmt.From is not null)
             foreach (var tr in stmt.From)
-                WalkTableReference(tr);
+                WalkTableReference(tr, level);
     }
 
     private void WalkDelete(DeleteStatement stmt)
     {
         _scope.EnterScope();
+        var level = _scope.CurrentScope.Level;
         if (stmt.Target is not null)
             _scope.AddTable(BuildTableInfo(stmt.Target, stmt.Alias));
         if (stmt.From is not null)
         {
             foreach (var tr in stmt.From)
-                WalkTableReference(tr);
+                WalkTableReference(tr, level);
         }
     }
 
     private void WalkMerge(MergeStatement stmt)
     {
         _scope.EnterScope();
+        var level = _scope.CurrentScope.Level;
         _scope.AddTable(BuildTableInfo(stmt.Target, stmt.TargetAlias));
-        WalkTableSource(stmt.Source);
+        WalkTableSource(stmt.Source, level);
     }
 
     private void WalkCreateTable(CreateTableStatement stmt)
@@ -369,5 +479,109 @@ internal class ScopeWalker
 
         if (source.Subquery is not null)
             columns.AddRange(InferSubqueryColumns(source.Subquery));
+    }
+}
+
+public enum SqlScopeRelationKind
+{
+    Table,
+    Cte,
+    DerivedTable,
+    ScriptLocalTable,
+}
+
+public sealed record SqlScopeRelation(string Name, string Alias, SqlScopeRelationKind Kind);
+
+public sealed record SqlScopeAtCursor(
+    IReadOnlyList<SqlScopeRelation> VisibleRelations,
+    IReadOnlyList<string> VisibleCtes,
+    IReadOnlyList<string> VisibleAliases);
+
+/// <summary>
+/// Direct semantic scope primitive for editor contracts: the relations, CTEs
+/// and reference names visible at one cursor offset. It deliberately exposes
+/// no scope ids, parents, depths, AST nodes or shadowing data.
+/// </summary>
+public static class SqlScopeAtCursorResolver
+{
+    public static SqlScopeAtCursor? Resolve(
+        string sql,
+        int cursorPosition,
+        ISchemaProvider? schema = null,
+        SqlDialect dialect = SqlDialect.Netezza)
+    {
+        var relations = new List<SqlScopeRelation>();
+        var ctes = new List<string>();
+        var aliases = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenAliases = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        void Add(string name, string alias, SqlScopeRelationKind kind)
+        {
+            var key = $"{alias}\u0000{name}\u0000{kind}";
+            if (!seen.Add(key)) return;
+            if (seenAliases.Add(alias)) aliases.Add(alias);
+            relations.Add(new SqlScopeRelation(name, alias, kind));
+        }
+
+        var tokens = CompletionScopeProvider.Tokenize(sql, dialect);
+        TokenScopeCollector? collector = null;
+        if (tokens is not null)
+        {
+            collector = new TokenScopeCollector(schema, dialect);
+            collector.Collect(tokens, sql.Length);
+            foreach (var temp in collector.GetTempTableNames())
+                Add(temp, temp, SqlScopeRelationKind.ScriptLocalTable);
+        }
+
+        // The AST walker builds scope for a single statement; multi-statement
+        // scripts rely on the token collector for script-local relations.
+        if (!sql.Contains(';'))
+        {
+            var builder = new CompletionScopeProvider(schema, dialect).TryBuild(sql, cursorPosition);
+            if (builder is not null)
+            {
+                foreach (var table in builder.GetAllVisibleTables())
+                {
+                    var kind = table.IsCte
+                        ? SqlScopeRelationKind.Cte
+                        : table.IsTempTable
+                            ? SqlScopeRelationKind.ScriptLocalTable
+                            : table.IsDerived
+                                ? SqlScopeRelationKind.DerivedTable
+                                : SqlScopeRelationKind.Table;
+                    Add(table.Name, table.Alias ?? table.Name, kind);
+                }
+                var scope = builder.CurrentScope;
+                while (scope is not null)
+                {
+                    foreach (var cte in scope.Ctes.Values)
+                    {
+                        if (!ctes.Contains(cte.Name, StringComparer.OrdinalIgnoreCase))
+                            ctes.Add(cte.Name);
+                    }
+                    scope = scope.Parent;
+                }
+            }
+        }
+
+        if (collector is not null)
+        {
+            var tempNames = collector.GetTempTableNames().ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var name in collector.GetCteNamesInScope(cursorPosition))
+            {
+                if (tempNames.Contains(name)) continue;
+                if (!ctes.Contains(name, StringComparer.OrdinalIgnoreCase))
+                    ctes.Add(name);
+                if (!relations.Any(relation =>
+                        relation.Kind == SqlScopeRelationKind.Cte &&
+                        string.Equals(relation.Name, name, StringComparison.OrdinalIgnoreCase)))
+                {
+                    Add(name, name, SqlScopeRelationKind.Cte);
+                }
+            }
+        }
+
+        return new SqlScopeAtCursor(relations, ctes, aliases);
     }
 }

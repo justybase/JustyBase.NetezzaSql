@@ -1,6 +1,19 @@
 namespace JustyBase.NetezzaSqlParser.Completion;
 
 /// <summary>
+/// Neutral completion trigger kind shared by UI hosts and the headless orchestrator.
+/// It carries no editor-specific numeric constants.
+/// </summary>
+public enum CompletionTriggerKind
+{
+    /// <summary>Passive/automatic request such as typing a character or whitespace.</summary>
+    Automatic,
+
+    /// <summary>Explicit request such as Ctrl+Space or a dot invocation.</summary>
+    Explicit,
+}
+
+/// <summary>
 /// Shared trigger rules for classic completion lists. The caller owns the UI
 /// event and decides when to invoke the headless orchestrator.
 /// </summary>

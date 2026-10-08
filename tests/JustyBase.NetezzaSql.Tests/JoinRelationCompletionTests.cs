@@ -130,6 +130,24 @@ public sealed class JoinRelationCompletionTests
     }
 
     [Fact]
+    public void Engine_AutomaticTrigger_StillOffersDeclaredJoinTargets()
+    {
+        var schema = CreateSchema();
+        schema.AddForeignKey("TESTDB", "PUBLIC", "ORDERS",
+            new ForeignKeyRelation(["CUSTOMER_ID"], "CUSTOMERS", ["ID"], ReferencedSchema: "PUBLIC"));
+
+        const string sql = "SELECT * FROM ORDERS O JOIN ";
+        var engine = new NzCompletionEngine(schema, dialect: SqlDialect.Netezza)
+        {
+            TriggerKind = CompletionTriggerKind.Automatic,
+        };
+
+        var items = engine.GetCompletions(sql, sql.Length);
+
+        Assert.Contains(items, item => item.Detail == "JOIN with declared foreign key");
+    }
+
+    [Fact]
     public void Engine_NoForeignKeyProvider_SuggestsNoPredicates()
     {
         var schema = new InMemorySchemaProvider();

@@ -70,5 +70,51 @@ internal sealed class DefaultNetezzaSchemaProviderAdapter : INetezzaSchemaProvid
             Columns: columns,
             IsView: table.IsView || table.Kind == NetezzaObjectKind.View,
             IsExternal: table.Kind == NetezzaObjectKind.ExternalTable));
+
+        AddDeclaredForeignKeys(provider, table);
+    }
+
+    /// <summary>
+    /// Projects declared foreign keys from the neutral snapshot into the parser's
+    /// <see cref="IForeignKeyProvider"/> capability. Primary keys are not registered as
+    /// relations: the completion layer discovers reverse relationships from foreign keys,
+    /// so duplicating them would double-count.
+    /// </summary>
+    private static void AddDeclaredForeignKeys(InMemorySchemaProvider provider, NetezzaSchemaTable table)
+    {
+        if (table.Keys is not { Count: > 0 })
+        {
+            return;
+        }
+
+        foreach (var key in table.Keys)
+        {
+            if (!key.IsForeignKey
+                || key.Columns.Count == 0
+                || string.IsNullOrEmpty(key.ReferencedTable))
+            {
+                continue;
+            }
+
+            var referencedColumns = key.ReferencedColumns is { Count: > 0 }
+                ? key.ReferencedColumns
+                : key.Columns;
+            if (referencedColumns.Count != key.Columns.Count)
+            {
+                continue; // malformed key row — never invent a partial pairing.
+            }
+
+            provider.AddForeignKey(
+                table.Database,
+                table.Schema,
+                table.Name,
+                new ForeignKeyRelation(
+                    key.Columns,
+                    key.ReferencedTable,
+                    referencedColumns,
+                    key.ReferencedSchema,
+                    key.ReferencedDatabase,
+                    key.ConstraintName));
+        }
     }
 }

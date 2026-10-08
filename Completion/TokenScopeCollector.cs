@@ -118,12 +118,13 @@ public class TokenScopeCollector
                 bool isTemp = false;
                 if (j < tokens.Length && (tokens[j].Kind == NzToken.Temp || tokens[j].Kind == NzToken.Temporary))
                 { isTemp = true; j++; }
-                if (!isTemp) continue;
-                if (j < tokens.Length && tokens[j].Kind != NzToken.Table) continue;
+                if (j >= tokens.Length || tokens[j].Kind != NzToken.Table) continue;
                 j++;
                 if (j >= tokens.Length || !tokens[j].Kind.IsIdentifierLike()) continue;
 
                 var tableName = tokens[j].ToIdentifierText();
+                if (!isTemp && !IsCreateTableAsSelect(tokens, j))
+                    continue;
                 var columns = ExtractCteColumnsForEntry(tokens, j);
                 if (_schema is not null)
                 {
@@ -135,8 +136,21 @@ public class TokenScopeCollector
                             if (existing.Add(sc)) columns.Add(sc);
                     }
                 }
-                // Temp tables are global (no scope filtering)
+                // Temp and CTAS tables are script-local (no scope filtering)
                 _globalEntries[tableName] = columns;
+            }
+            else if (tokens[i].Kind == NzToken.Drop)
+            {
+                int j = i + 1;
+                if (j >= tokens.Length || tokens[j].Kind != NzToken.Table) continue;
+                j++;
+                if (j < tokens.Length && tokens[j].Kind == NzToken.If)
+                {
+                    j++;
+                    if (j < tokens.Length && tokens[j].Kind == NzToken.Exists) j++;
+                }
+                if (j >= tokens.Length || !tokens[j].Kind.IsIdentifierLike()) continue;
+                _globalEntries.Remove(tokens[j].ToIdentifierText());
             }
         }
 
@@ -188,6 +202,11 @@ public class TokenScopeCollector
 
         return null;
     }
+
+    /// <summary>
+    /// Returns script-local temp table names created anywhere in the script.
+    /// </summary>
+    public IEnumerable<string> GetTempTableNames() => _globalEntries.Keys;
 
     /// <summary>
     /// Returns CTE names that are visible at the given cursor position.
@@ -268,6 +287,35 @@ public class TokenScopeCollector
     }
 
     // ====== Column extraction helpers ======
+
+    private static bool IsCreateTableAsSelect(Token<NzToken>[] tokens, int nameIndex)
+    {
+        int depth = 0;
+        for (int i = nameIndex + 1; i < tokens.Length; i++)
+        {
+            var kind = tokens[i].Kind;
+            if (kind == NzToken.LParen)
+            {
+                depth++;
+            }
+            else if (kind == NzToken.RParen)
+            {
+                if (depth == 0) return false;
+                depth--;
+            }
+            else if (depth == 0 && (kind == NzToken.Semicolon || kind == NzToken.Create || kind == NzToken.Drop))
+            {
+                return false;
+            }
+            else if (depth == 0 && kind == NzToken.As)
+            {
+                int next = i + 1;
+                return next < tokens.Length
+                    && (tokens[next].Kind == NzToken.Select || tokens[next].Kind == NzToken.With);
+            }
+        }
+        return false;
+    }
 
     private static List<string> ExtractCteColumnsForEntry(Token<NzToken>[] tokens, int cteNameIndex)
     {

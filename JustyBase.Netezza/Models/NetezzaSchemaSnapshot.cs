@@ -51,6 +51,7 @@ public sealed record NetezzaSchemaSnapshot(
 /// <param name="CatalogId">Optional catalog object id (<c>_V_OBJECT_DATA.OBJID</c>), used to correlate column rows.</param>
 /// <param name="Created">Optional catalog creation timestamp (<c>_V_OBJECT_DATA.CREATEDATE</c>).</param>
 /// <param name="TextType">Optional raw catalog object type (<c>_V_OBJECT_DATA.OBJTYPE</c>, e.g. <c>TABLE</c>, <c>FLUID</c>).</param>
+/// <param name="Keys">Declared key constraints (primary and foreign) for this object; <see langword="null"/> when unknown.</param>
 public sealed record NetezzaSchemaTable(
     string Name,
     string? Schema = null,
@@ -62,7 +63,36 @@ public sealed record NetezzaSchemaTable(
     string? Owner = null,
     int CatalogId = 0,
     DateTime? Created = null,
-    string? TextType = null);
+    string? TextType = null,
+    IReadOnlyList<NetezzaReferenceKey>? Keys = null);
+
+/// <summary>
+/// Neutral declared key metadata from the catalog. One record is one constraint
+/// (primary key or foreign key); multi-column keys preserve catalog order.
+/// This model deliberately carries no parser types.
+/// </summary>
+/// <param name="ConstraintName">Catalog constraint name, if available.</param>
+/// <param name="ConstraintType">Raw catalog CONTYPE (<c>p</c> primary, <c>f</c> foreign, <c>u</c> unique).</param>
+/// <param name="Columns">Ordered local column list.</param>
+/// <param name="ReferencedDatabase">Declared referenced database for foreign keys.</param>
+/// <param name="ReferencedSchema">Declared referenced schema for foreign keys.</param>
+/// <param name="ReferencedTable">Declared referenced table for foreign keys.</param>
+/// <param name="ReferencedColumns">Ordered referenced column list for foreign keys.</param>
+public sealed record NetezzaReferenceKey(
+    string ConstraintName,
+    string ConstraintType,
+    IReadOnlyList<string> Columns,
+    string? ReferencedDatabase = null,
+    string? ReferencedSchema = null,
+    string? ReferencedTable = null,
+    IReadOnlyList<string>? ReferencedColumns = null)
+{
+    /// <summary><see langword="true"/> for primary-key constraints.</summary>
+    public bool IsPrimaryKey => string.Equals(ConstraintType, "p", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary><see langword="true"/> for foreign-key constraints.</summary>
+    public bool IsForeignKey => string.Equals(ConstraintType, "f", StringComparison.OrdinalIgnoreCase);
+}
 
 /// <summary>Metadata for a single column in a table or view.</summary>
 /// <param name="Name">Column name.</param>
@@ -76,6 +106,32 @@ public sealed record NetezzaSchemaColumn(
     bool Nullable = true,
     string? Description = null,
     string? DefaultValue = null);
+
+/// <summary>
+/// One raw key-constraint row from the catalog (one local column of one constraint).
+/// Rows are grouped into <see cref="NetezzaReferenceKey"/> by constraint.
+/// </summary>
+/// <param name="ObjectId">Catalog object id of the constrained table.</param>
+/// <param name="Schema">Schema of the constrained table.</param>
+/// <param name="Relation">Name of the constrained table.</param>
+/// <param name="ConstraintName">Catalog constraint name.</param>
+/// <param name="ConstraintType">Raw catalog CONTYPE (<c>p</c>, <c>f</c>, <c>u</c>).</param>
+/// <param name="Column">Local column participating in the key.</param>
+/// <param name="ReferencedDatabase">Declared referenced database for foreign keys.</param>
+/// <param name="ReferencedSchema">Declared referenced schema for foreign keys.</param>
+/// <param name="ReferencedTable">Declared referenced table for foreign keys.</param>
+/// <param name="ReferencedColumn">Referenced column for foreign keys.</param>
+public sealed record NetezzaSchemaKeyRow(
+    int ObjectId,
+    string? Schema,
+    string? Relation,
+    string ConstraintName,
+    string ConstraintType,
+    string Column,
+    string? ReferencedDatabase = null,
+    string? ReferencedSchema = null,
+    string? ReferencedTable = null,
+    string? ReferencedColumn = null);
 
 /// <summary>Host-neutral metadata required to render a Netezza NZPLSQL procedure.</summary>
 public sealed record NetezzaProcedureDefinition(

@@ -47,7 +47,8 @@ public record TableInfo(
     IReadOnlyList<ColumnInfo>? Columns = null,
     SourcePosition? Position = null,
     bool IsView = false,
-    bool IsExternal = false
+    bool IsExternal = false,
+    bool IsDerived = false
 );
 
 public record CteInfo(

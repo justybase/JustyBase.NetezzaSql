@@ -60,6 +60,29 @@ public sealed class CompletionOrchestratorTests
         Assert.Equal("JUST_DATA", provider.Request?.DatabaseName);
     }
 
+    [Fact]
+    public async Task Automatic_trigger_suppresses_from_continuation_keywords()
+    {
+        const string sql = "SELECT * FROM CUSTOMER C ";
+
+        var explicitResult = await CompletionOrchestrator.GetCompletions(sql, sql.Length, null);
+        var automaticResult = await CompletionOrchestrator.GetCompletions(
+            sql, sql.Length, null,
+            options: new CompletionOrchestrationOptions { TriggerKind = CompletionTriggerKind.Automatic });
+
+        Assert.Contains(explicitResult.EngineItems, item => item.Label == "JOIN");
+        Assert.DoesNotContain(automaticResult.EngineItems, item => item.Label == "JOIN");
+    }
+
+    [Fact]
+    public async Task Explicit_trigger_is_the_default_for_existing_callers()
+    {
+        const string sql = "SELECT * FROM CUSTOMER C ";
+        var defaultResult = await CompletionOrchestrator.GetCompletions(sql, sql.Length, null);
+
+        Assert.Contains(defaultResult.EngineItems, item => item.Label == "JOIN");
+    }
+
     private sealed class RecordingProvider : ISqlDbWordListProvider
     {
         private readonly IReadOnlyList<SqlWordListItem> _items;

@@ -17,6 +17,19 @@ public sealed class NetezzaSchemaLoaderTests
     private static object?[] Proc(string schema, string source, int objId, string returns, object execAsOwner, string? desc, string signature, string? arguments, string? language)
         => [schema, source, objId, returns, execAsOwner, desc, signature, arguments, language];
 
+    private static object?[] KeyRow(
+        int objId,
+        string schema,
+        string relation,
+        string constraintName,
+        string contType,
+        string column,
+        string? pkDatabase = null,
+        string? pkSchema = null,
+        string? pkRelation = null,
+        string? pkColumn = null)
+        => [objId, schema, relation, constraintName, contType, 1, column, pkDatabase, pkSchema, pkRelation, pkColumn, "N", "N"];
+
     [Fact]
     public async Task LoadDatabasesAsync_MapsRows()
     {
@@ -116,6 +129,59 @@ public sealed class NetezzaSchemaLoaderTests
 
         var orders = snapshot.Tables.First(t => t.Name == "ORDERS");
         Assert.Null(orders.Columns);
+    }
+
+    [Fact]
+    public async Task LoadCatalogAsync_AttachesDeclaredKeysFromBulkQuery()
+    {
+        using var connection = new FakeCatalogConnection(
+            objectRows:
+            [
+                Obj(10, "SHIPMENT", null, "SALES", "TABLE"),
+                Obj(11, "ORDER_LINE", null, "SALES", "TABLE"),
+            ],
+            keyRows:
+            [
+                KeyRow(10, "SALES", "SHIPMENT", "FK_SHIPMENT_LINE", "f", "ORDER_ID", "SALES", "SALES", "ORDER_LINE", "ORDER_ID"),
+                KeyRow(10, "SALES", "SHIPMENT", "FK_SHIPMENT_LINE", "f", "LINE_NO", "SALES", "SALES", "ORDER_LINE", "LINE_NO"),
+                KeyRow(11, "SALES", "ORDER_LINE", "PK_ORDER_LINE", "p", "ORDER_ID"),
+                KeyRow(11, "SALES", "ORDER_LINE", "PK_ORDER_LINE", "p", "LINE_NO"),
+            ]);
+
+        var snapshot = await NetezzaSchemaLoader.LoadCatalogAsync(connection, "SALES");
+
+        var foreignKey = Assert.Single(snapshot.Tables.Single(t => t.Name == "SHIPMENT").Keys!);
+        Assert.True(foreignKey.IsForeignKey);
+        Assert.Equal(["ORDER_ID", "LINE_NO"], foreignKey.Columns);
+        Assert.Equal(["ORDER_ID", "LINE_NO"], foreignKey.ReferencedColumns);
+        Assert.Equal("ORDER_LINE", foreignKey.ReferencedTable);
+        Assert.Equal("SALES", foreignKey.ReferencedSchema);
+
+        var primaryKey = Assert.Single(snapshot.Tables.Single(t => t.Name == "ORDER_LINE").Keys!);
+        Assert.True(primaryKey.IsPrimaryKey);
+        Assert.Equal(["ORDER_ID", "LINE_NO"], primaryKey.Columns);
+    }
+
+    [Fact]
+    public async Task LoadCatalogAsync_AttachesCrossSchemaKeyEndpoint()
+    {
+        using var connection = new FakeCatalogConnection(
+            objectRows:
+            [
+                Obj(20, "ORDERS_2023", null, "ARCHIVE", "TABLE"),
+                Obj(21, "CUSTOMER", null, "SALES", "TABLE"),
+            ],
+            keyRows:
+            [
+                KeyRow(20, "ARCHIVE", "ORDERS_2023", "FK_ARCH_CUSTOMER", "f", "CUSTOMER_ID", "JB_REL", "SALES", "CUSTOMER", "CUSTOMER_ID"),
+            ]);
+
+        var snapshot = await NetezzaSchemaLoader.LoadCatalogAsync(connection, "JB_REL");
+
+        var key = Assert.Single(snapshot.Tables.Single(t => t.Name == "ORDERS_2023").Keys!);
+        Assert.Equal("JB_REL", key.ReferencedDatabase);
+        Assert.Equal("SALES", key.ReferencedSchema);
+        Assert.Equal("CUSTOMER", key.ReferencedTable);
     }
 
     [Fact]

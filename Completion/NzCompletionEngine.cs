@@ -81,6 +81,13 @@ public class NzCompletionEngine
 
     public void SetDocumentUri(string? documentUri) => _documentUri = documentUri;
 
+    /// <summary>
+    /// Neutral trigger kind for this request. Automatic requests suppress
+    /// query-continuation keywords after a completed relation reference; explicit
+    /// requests (default) keep the current behavior.
+    /// </summary>
+    public CompletionTriggerKind TriggerKind { get; set; } = CompletionTriggerKind.Explicit;
+
     public IReadOnlyList<CompletionItem> GetCompletions(string sql, int cursorPosition)
     {
         if (cursorPosition > sql.Length) cursorPosition = sql.Length;
@@ -153,6 +160,8 @@ public class NzCompletionEngine
             }
 
             case CompletionContext.FromClauseTail:
+                if (TriggerKind == CompletionTriggerKind.Automatic)
+                    break; // passive whitespace after a relation reference: no continuation keywords
                 AddKeywords(suggestions, _dialect == SqlDialect.Netezza
                     ? SqlContext.FromContinuationKeywords.Where(keyword => keyword != "FETCH").Concat(new[] { "LEFT", "RIGHT", "FULL", "INNER", "GROUP", "ORDER" }).ToArray()
                     : SqlContext.FromContinuationKeywords);

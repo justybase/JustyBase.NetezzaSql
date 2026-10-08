@@ -41,6 +41,7 @@ public sealed class CatalogSqlSurfaceCoverageTests
             CatalogSql.GetOrganizeColumnsSql(database, "admin", "orders"),
             CatalogSql.GetTableKeysSql(database, "admin", "orders"),
             CatalogSql.GetLegacyKeysSql(database),
+            CatalogSql.GetBulkRelationKeysSql(database),
             CatalogSql.GetLegacyDistributionColumnsSql(database),
             CatalogSql.GetObjectCommentSql(database, "admin", "orders", "TABLE"),
             CatalogSql.GetObjectCommentSql(database, "admin", "orders"),
@@ -84,6 +85,7 @@ public sealed class CatalogSqlSurfaceCoverageTests
     {
         var dist = CatalogSql.GetLegacyDistributionColumnsSql("sample");
         var keys = CatalogSql.GetLegacyKeysSql("sample");
+        var bulkKeys = CatalogSql.GetBulkRelationKeysSql("sample");
 
         Assert.Contains("_V_TABLE_DIST_MAP", dist, StringComparison.Ordinal);
         Assert.Contains("_V_TABLE_ORGANIZE_COLUMN", dist, StringComparison.Ordinal);
@@ -94,6 +96,15 @@ public sealed class CatalogSqlSurfaceCoverageTests
         Assert.Contains("CONSEQ", keys, StringComparison.Ordinal);
         Assert.Contains("UPDT_TYPE", keys, StringComparison.Ordinal);
         Assert.Contains("DEL_TYPE", keys, StringComparison.Ordinal);
+
+        Assert.Contains("_V_RELATION_KEYDATA", bulkKeys, StringComparison.Ordinal);
+        Assert.Contains("PKDATABASE", bulkKeys, StringComparison.Ordinal);
+        Assert.Contains("PKSCHEMA", bulkKeys, StringComparison.Ordinal);
+        Assert.Contains("PKRELATION", bulkKeys, StringComparison.Ordinal);
+        Assert.Contains("PKATTNAME", bulkKeys, StringComparison.Ordinal);
+        Assert.Contains("X.SCHEMA", bulkKeys, StringComparison.Ordinal);
+        Assert.Contains("X.RELATION", bulkKeys, StringComparison.Ordinal);
+        Assert.Contains("CONSEQ", bulkKeys, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -20,6 +20,14 @@ public sealed record CompletionOrchestrationOptions
     /// Returning true causes the engine to run once more against the same slice.
     /// </summary>
     public Func<string, int, IReadOnlyList<CompletionItem>, bool>? HydrateColumns { get; init; }
+
+    /// <summary>
+    /// Neutral trigger kind. Automatic requests must not offer query-continuation
+    /// keywords after a completed relation reference; explicit requests may.
+    /// Defaults to <see cref="CompletionTriggerKind.Explicit"/> so existing callers
+    /// keep their current behavior.
+    /// </summary>
+    public CompletionTriggerKind TriggerKind { get; init; } = CompletionTriggerKind.Explicit;
 }
 
 /// <summary>Neutral completion result shared by UI hosts and headless consumers.</summary>
@@ -76,6 +84,7 @@ public static class CompletionOrchestrator
                 dialect: dialect,
                 activeDatabase: databaseName);
             engine.SetDocumentUri(documentUri);
+            engine.TriggerKind = options.TriggerKind;
             engineItems = engine.GetCompletions(engineSql, engineCursor);
 
             if (options.HydrateColumns is not null

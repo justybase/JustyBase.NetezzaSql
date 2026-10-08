@@ -117,7 +117,11 @@ public sealed class SharedSqlConformanceAuthoringTests
             cursor,
             schema,
             dialect,
-            options: new CompletionOrchestrationOptions { ForcedAutocomplete = true });
+            options: new CompletionOrchestrationOptions
+            {
+                ForcedAutocomplete = true,
+                TriggerKind = TriggerKindOf(root),
+            });
         var items = result.EngineItems
             .Select(item => new CompletionContractItem(
                 item.Label, NormalizeKind(item.Kind), item.Detail, item.Documentation, item.InsertText))
@@ -405,7 +409,17 @@ public sealed class SharedSqlConformanceAuthoringTests
 
         using var runtime = new ParsingRuntime(dialect);
         var parsed = runtime.Parse(sql);
-        Assert.True(parsed.Valid, $"[{id}] expected a valid semantic-model input: {string.Join(" | ", parsed.Errors.Select(error => error.Code + ": " + error.Message))}");
+        if (expected.TryGetProperty("scopeAtCursor", out _))
+        {
+            if (expected.TryGetProperty("valid", out var scopeExpectedValid))
+            {
+                Assert.Equal(scopeExpectedValid.GetBoolean(), parsed.Valid);
+            }
+        }
+        else
+        {
+            Assert.True(parsed.Valid, $"[{id}] expected a valid semantic-model input: {string.Join(" | ", parsed.Errors.Select(error => error.Code + ": " + error.Message))}");
+        }
         var statement = parsed.Statements.FirstOrDefault();
         Assert.NotNull(statement);
         if (expected.TryGetProperty("statementType", out var statementType))
@@ -444,7 +458,65 @@ public sealed class SharedSqlConformanceAuthoringTests
                     && (source.Table is null || SameIdentifier(source.Table.Name, relation)));
             }
         }
+
+        if (expected.TryGetProperty("scopeAtCursor", out var scopeAtCursor))
+        {
+            var actual = SqlScopeAtCursorResolver.Resolve(sql, cursor, schema, dialect);
+            Assert.NotNull(actual);
+            if (scopeAtCursor.TryGetProperty("visibleRelations", out var visibleRelations))
+            {
+                var expectedRelations = visibleRelations.EnumerateArray().ToArray();
+                foreach (var relation in expectedRelations)
+                {
+                    var name = GetString(relation, "name");
+                    var alias = GetString(relation, "alias", name);
+                    var kind = GetString(relation, "kind");
+                    Assert.Contains(actual!.VisibleRelations, item =>
+                        SameIdentifier(item.Name, name)
+                        && SameIdentifier(item.Alias, alias)
+                        && string.Equals(ScopeRelationKindName(item.Kind), kind, StringComparison.OrdinalIgnoreCase));
+                }
+                if (scopeAtCursor.TryGetProperty("exactRelations", out var exactRelations)
+                    && exactRelations.GetBoolean())
+                {
+                    Assert.Equal(expectedRelations.Length, actual!.VisibleRelations.Count);
+                }
+            }
+            if (scopeAtCursor.TryGetProperty("absentRelations", out var absentRelations))
+            {
+                foreach (var relation in absentRelations.EnumerateArray())
+                {
+                    var name = GetString(relation, "name");
+                    var kind = GetString(relation, "kind");
+                    Assert.DoesNotContain(actual!.VisibleRelations, item =>
+                        SameIdentifier(item.Name, name)
+                        && (kind.Length == 0
+                            || string.Equals(ScopeRelationKindName(item.Kind), kind, StringComparison.OrdinalIgnoreCase)));
+                }
+            }
+            if (scopeAtCursor.TryGetProperty("visibleCtes", out var visibleCtes))
+            {
+                Assert.Equal(
+                    visibleCtes.EnumerateArray().Select(value => value.GetString()!.ToUpperInvariant()).OrderBy(value => value),
+                    actual!.VisibleCtes.Select(value => value.ToUpperInvariant()).OrderBy(value => value));
+            }
+            if (scopeAtCursor.TryGetProperty("visibleAliases", out var visibleAliases))
+            {
+                Assert.Equal(
+                    visibleAliases.EnumerateArray().Select(value => value.GetString()!.ToUpperInvariant()).OrderBy(value => value),
+                    actual!.VisibleAliases.Select(value => value.ToUpperInvariant()).OrderBy(value => value));
+            }
+        }
     }
+
+    private static string ScopeRelationKindName(SqlScopeRelationKind kind) => kind switch
+    {
+        SqlScopeRelationKind.Table => "table",
+        SqlScopeRelationKind.Cte => "cte",
+        SqlScopeRelationKind.DerivedTable => "derived_table",
+        SqlScopeRelationKind.ScriptLocalTable => "script_local_table",
+        _ => throw new ArgumentOutOfRangeException(nameof(kind))
+    };
 
     private static void AssertNavigationRange(JsonElement expected, SymbolOccurrence actual, string sql)
     {
@@ -638,6 +710,12 @@ public sealed class SharedSqlConformanceAuthoringTests
             Assert.Equal(completionAvailable.GetBoolean(), available);
         }
     }
+
+    private static CompletionTriggerKind TriggerKindOf(JsonElement root)
+        => root.TryGetProperty("trigger", out var trigger)
+           && string.Equals(trigger.GetString(), "automatic", StringComparison.OrdinalIgnoreCase)
+            ? CompletionTriggerKind.Automatic
+            : CompletionTriggerKind.Explicit;
 
     private static ISchemaProvider? LoadSchema(JsonElement root)
     {
