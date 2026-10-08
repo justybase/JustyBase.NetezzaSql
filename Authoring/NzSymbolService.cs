@@ -7,7 +7,13 @@ namespace JustyBase.NetezzaSqlParser.Authoring;
 public static class NzSymbolService
 {
     /// <summary>Gets the symbol under <paramref name="offset"/>, its declaration and all occurrences.</summary>
-    public static SqlRenameInfo? GetSymbol(string text, int offset)
+    public static SqlRenameInfo? GetSymbol(string text, int offset, Dialects.SqlDialect dialect = Dialects.SqlDialect.Netezza)
+    {
+        try { return GetSymbol(text, offset, NzSymbolCollector.Collect(text, dialect)); }
+        catch { return null; }
+    }
+
+    internal static SqlRenameInfo? GetSymbol(string text, int offset, SymbolIndex index)
     {
         if (string.IsNullOrEmpty(text))
             return null;
@@ -16,7 +22,6 @@ public static class NzSymbolService
 
         try
         {
-            var index = NzSymbolCollector.Collect(text);
             var occurrence = index.FindOccurrenceAt(offset);
             // At a qualifier's trailing caret, the dot belongs to the qualified
             // reference. Resolve the identifier immediately to its left.
@@ -53,4 +58,8 @@ public static class NzSymbolService
     /// <summary>Gets the declaration and references for the CTE or alias under <paramref name="offset"/>.</summary>
     public static IReadOnlyList<SymbolOccurrence> GetReferences(string text, int offset)
         => GetSymbol(text, offset)?.Occurrences ?? Array.Empty<SymbolOccurrence>();
+
+    public static IReadOnlyList<SymbolOccurrence> GetReferences(string text, int offset, bool includeDeclaration)
+        => (GetSymbol(text, offset)?.Occurrences ?? Array.Empty<SymbolOccurrence>())
+            .Where(occurrence => includeDeclaration || !occurrence.IsDefinition).ToArray();
 }

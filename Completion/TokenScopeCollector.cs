@@ -43,7 +43,7 @@ public class TokenScopeCollector
     /// Walk tokens to build scopes and collect CTE/temp-table column info.
     /// Must be called before any query methods.
     /// </summary>
-    public void Collect(Token<NzToken>[] tokens, int sqlLength)
+    public void Collect(Token<NzToken>[] tokens, int sqlLength, int? cursorPosition = null)
     {
         _scopes.Clear();
         _globalEntries.Clear();
@@ -110,9 +110,9 @@ public class TokenScopeCollector
                     else j++;
                 }
 
-                _scopes.Add(new ScopeEntry(scopeStart, Math.Max(scopeEnd, _sqlLength), scopeBindings, true));
+                _scopes.Add(new ScopeEntry(scopeStart, scopeEnd, scopeBindings, false));
             }
-            else if (tokens[i].Kind == NzToken.Create)
+            else if (tokens[i].Kind == NzToken.Create && StatementEnd(tokens, i, sqlLength) <= (cursorPosition ?? sqlLength))
             {
                 int j = i + 1;
                 bool isTemp = false;
@@ -136,10 +136,10 @@ public class TokenScopeCollector
                             if (existing.Add(sc)) columns.Add(sc);
                     }
                 }
-                // Temp and CTAS tables are script-local (no scope filtering)
+                // Script effects become visible after their statement ends.
                 _globalEntries[tableName] = columns;
             }
-            else if (tokens[i].Kind == NzToken.Drop)
+            else if (tokens[i].Kind == NzToken.Drop && StatementEnd(tokens, i, sqlLength) <= (cursorPosition ?? sqlLength))
             {
                 int j = i + 1;
                 if (j >= tokens.Length || tokens[j].Kind != NzToken.Table) continue;
@@ -183,12 +183,8 @@ public class TokenScopeCollector
     /// </summary>
     public IReadOnlyList<string>? GetCteColumns(string name, int cursorPos)
     {
-        // Check global entries first (temp tables — always visible)
-        if (_globalEntries.TryGetValue(name, out var globalCols))
-            return globalCols;
-
         // Check scoped entries (CTEs — only if cursor is inside their scope)
-        foreach (var scope in _scopes)
+        foreach (var scope in _scopes.OrderByDescending(scope => scope.Start))
         {
             bool cursorInScope = scope.OpenEnded
                 ? cursorPos >= scope.Start
@@ -200,7 +196,7 @@ public class TokenScopeCollector
             }
         }
 
-        return null;
+        return _globalEntries.TryGetValue(name, out var globalCols) ? globalCols : null;
     }
 
     /// <summary>
@@ -263,6 +259,19 @@ public class TokenScopeCollector
     /// at depth 0) that is NOT part of the WITH's main query.
     /// Simple heuristic: find the matching end of the WITH's statement.
     /// </summary>
+    private static int StatementEnd(Token<NzToken>[] tokens, int start, int sqlLength)
+    {
+        int depth = 0;
+        for (int i = start; i < tokens.Length; i++)
+        {
+            if (tokens[i].Kind == NzToken.LParen) depth++;
+            else if (tokens[i].Kind == NzToken.RParen) depth--;
+            else if (depth == 0 && tokens[i].Kind == NzToken.Semicolon)
+                return tokens[i].Span.Position.Absolute + tokens[i].Span.Length;
+        }
+        return sqlLength;
+    }
+
     private static int FindWithScopeEnd(Token<NzToken>[] tokens, int withIndex)
     {
         // Find the SELECT that follows the WITH clause's CTE bodies
@@ -274,7 +283,7 @@ public class TokenScopeCollector
             var k = tokens[i].Kind;
             if (k == NzToken.LParen) depth++;
             if (k == NzToken.RParen) depth--;
-            if (depth < 0) depth = 0;
+            if (depth < 0) return tokens[i].Span.Position.Absolute;
 
             if (depth == 0 && k == NzToken.Semicolon)
                 return tokens[i].Span.Position.Absolute;

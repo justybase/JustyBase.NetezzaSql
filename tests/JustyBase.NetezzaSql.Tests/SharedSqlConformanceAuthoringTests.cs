@@ -400,11 +400,29 @@ public sealed class SharedSqlConformanceAuthoringTests
             var actualDefinition = Assert.Single(symbol.Occurrences, occurrence => occurrence.IsDefinition);
             AssertNavigationRange(navigation.GetProperty("definition"), actualDefinition, sql);
             var expectedReferences = navigation.GetProperty("references").EnumerateArray().ToArray();
-            var actualReferences = symbol.Occurrences.Where(occurrence => !occurrence.IsDefinition)
+            var includeDeclaration = navigation.TryGetProperty("includeDeclaration", out var include) && include.GetBoolean();
+            var actualReferences = NzSymbolService.GetReferences(sql, cursor, includeDeclaration)
                 .OrderBy(occurrence => occurrence.StartAbsolute).ToArray();
             Assert.Equal(expectedReferences.Length, actualReferences.Length);
             for (var index = 0; index < expectedReferences.Length; index++)
                 AssertNavigationRange(expectedReferences[index], actualReferences[index], sql);
+            if (navigation.TryGetProperty("targetKind", out var targetKind)) Assert.Equal("local_document_definition", targetKind.GetString());
+            if (navigation.TryGetProperty("rename", out var rename))
+            {
+                var edits = NzRenameService.GetRenameEdits(sql, cursor, GetString(rename, "newName"));
+                Assert.NotNull(edits);
+                var expectedEdits = rename.GetProperty("edits").EnumerateArray().ToArray();
+                Assert.Equal(expectedEdits.Length, edits.Count);
+                var resultSql = sql;
+                for (var index = 0; index < edits.Count; index++)
+                {
+                    Assert.Equal(expectedEdits[index].GetProperty("start").GetInt32(), edits[index].StartOffset);
+                    Assert.Equal(expectedEdits[index].GetProperty("end").GetInt32(), edits[index].EndOffset);
+                    Assert.Equal(GetString(expectedEdits[index], "text"), edits[index].NewText);
+                }
+                foreach (var edit in edits.Reverse()) resultSql = resultSql[..edit.StartOffset] + edit.NewText + resultSql[edit.EndOffset..];
+                Assert.Equal(GetString(rename, "resultSql"), resultSql);
+            }
         }
 
         using var runtime = new ParsingRuntime(dialect);

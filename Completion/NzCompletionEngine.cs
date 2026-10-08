@@ -104,7 +104,7 @@ public class NzCompletionEngine
         var astScope = new CompletionScopeProvider(_schema, _dialect).TryBuild(sql);
 
         _lastScopeCollector = new TokenScopeCollector(_schema, _dialect);
-        _lastScopeCollector.Collect(fullTokens, sql.Length);
+        _lastScopeCollector.Collect(fullTokens, sql.Length, cursorPosition);
 
         if (_wildcardResolver.TryResolveWildcardSnippet(sql, cursorPosition, _lastScopeCollector, astScope, fullTokens) is { } wildcard)
             return new[] { wildcard };

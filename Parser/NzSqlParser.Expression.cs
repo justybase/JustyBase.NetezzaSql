@@ -305,9 +305,10 @@ public partial class NzSqlParser
         if (t.Kind == NzToken.LParen)
         {
             Advance();
-            if (Peek().Kind == NzToken.Select)
+            if (Peek().Kind is NzToken.Select or NzToken.With)
             {
-                var subquery = ParseSelectStatement();
+                var subqueryWith = Peek().Kind == NzToken.With ? ParseWithClause() : null;
+                var subquery = ParseSelectStatement(subqueryWith);
                 Expect(NzToken.RParen);
                 return new SubqueryExpression(FromToken(t), subquery);
             }
@@ -328,7 +329,8 @@ public partial class NzSqlParser
         {
             var e = Advance();
             Expect(NzToken.LParen);
-            var subquery = ParseSelectStatement();
+            var subqueryWith = Peek().Kind == NzToken.With ? ParseWithClause() : null;
+            var subquery = ParseSelectStatement(subqueryWith);
             Expect(NzToken.RParen);
             return new ExistsExpression(FromToken(e), subquery);
         }

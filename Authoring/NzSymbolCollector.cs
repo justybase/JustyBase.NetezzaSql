@@ -10,6 +10,7 @@ internal sealed class NzSymbolCollector
     private readonly List<SymbolOccurrence> _occurrences = new();
     private readonly Dictionary<int, SymbolOccurrence> _definitionById = new();
     private int _nextId = 1;
+    private readonly Dictionary<int, int> _tokenLengths = new();
 
     private sealed class ScopeFrame
     {
@@ -45,6 +46,8 @@ internal sealed class NzSymbolCollector
 
         if (tokens.Length == 0)
             return;
+
+        foreach (var token in tokens) _tokenLengths[token.Span.Position.Absolute] = token.Span.Length;
 
         var globalScope = new ScopeFrame(null);
         var currentTokenIndex = 0;
@@ -90,9 +93,32 @@ internal sealed class NzSymbolCollector
             case MergeStatement merge:
                 CollectMerge(merge, tokens, startIndex, endIndex, scope);
                 break;
+            case DropStatement drop when string.Equals(drop.ObjectType, "TABLE", StringComparison.OrdinalIgnoreCase):
+            {
+                var global = scope;
+                while (global.Parent is not null) global = global.Parent;
+                foreach (var table in drop.Targets)
+                {
+                    if (!global.Tables.Remove(LocalTableKey(table), out var definition)) continue;
+                    var range = FindTableNameRange(tokens, startIndex, endIndex, table);
+                    if (range is not null)
+                    {
+                        var token = tokens[range.Value.EndIndex];
+                        AddReference(table.Name, definition.Kind, token.Span.Position.Absolute,
+                            token.Span.Position.Absolute + token.Span.Length, definition.Id);
+                    }
+                }
+                break;
+            }
             case CreateTableStatement create:
             {
-                var nameIndex = FindIdentifierIndex(tokens, startIndex, endIndex, create.Table.Name);
+                if (create.AsSelect is not null)
+                {
+                    var queryStart = FindTokenIndex(tokens, startIndex, endIndex,
+                        token => token.Span.Position.Absolute >= create.AsSelect.Position.Absolute);
+                    if (queryStart >= 0) CollectSelect(create.AsSelect, tokens, queryStart, endIndex, scope);
+                }
+                var nameIndex = FindTableNameRange(tokens, startIndex, endIndex, create.Table)?.EndIndex ?? -1;
                 if (nameIndex >= 0)
                 {
                     var token = tokens[nameIndex];
@@ -100,13 +126,7 @@ internal sealed class NzSymbolCollector
                         token.Span.Position.Absolute, token.Span.Position.Absolute + token.Span.Length);
                     var global = scope;
                     while (global.Parent is not null) global = global.Parent;
-                    global.Tables[create.Table.Name.ToUpperInvariant()] = definition;
-                }
-                if (create.AsSelect is not null)
-                {
-                    var queryStart = FindTokenIndex(tokens, startIndex, endIndex,
-                        token => token.Span.Position.Absolute >= create.AsSelect.Position.Absolute);
-                    if (queryStart >= 0) CollectSelect(create.AsSelect, tokens, queryStart, endIndex, scope);
+                    global.Tables[LocalTableKey(create.Table)] = definition;
                 }
                 break;
             }
@@ -127,6 +147,12 @@ internal sealed class NzSymbolCollector
             var cursor = fromIdx >= 0 ? fromIdx + 1 : startIndex;
             foreach (var tr in stmt.From)
                 cursor = CollectTableReference(tr, tokens, cursor, endIndex, selectScope);
+            // Bind every FROM alias before visiting ON expressions, so SELECT
+            // and JOIN consumers use the same lexical declarations.
+            foreach (var tr in stmt.From)
+                if (tr.Joins is not null)
+                    foreach (var join in tr.Joins)
+                        if (join.OnCondition is not null) CollectExpression(join.OnCondition, tokens, selectScope);
         }
 
         foreach (var item in stmt.SelectList)
@@ -256,13 +282,14 @@ internal sealed class NzSymbolCollector
         if (source.Table is null)
             return cursor;
 
-        if (TryResolveTableInScope(scope, source.Table.Name, out var cteDef) && cteDef is not null)
+        if (TryResolveTableInScope(scope, source.Table, out var cteDef) && cteDef is not null)
         {
+            if (source.Alias is null) scope.Aliases[source.Table.Name] = cteDef;
             var tableRange = FindTableNameRange(tokens, cursor, endIndex, source.Table);
             if (tableRange is not null)
             {
                 AddReference(source.Table.Name, cteDef.Kind,
-                    tokens[tableRange.Value.StartIndex].Span.Position.Absolute,
+                    tokens[tableRange.Value.EndIndex].Span.Position.Absolute,
                     tokens[tableRange.Value.EndIndex].Span.Position.Absolute + tokens[tableRange.Value.EndIndex].Span.Length,
                     cteDef.Id);
             }
@@ -404,9 +431,9 @@ internal sealed class NzSymbolCollector
                 var resolved = TryResolveAlias(scope, cr.Qualifier);
                 if (resolved is not null)
                 {
-                    AddReference(cr.Qualifier, SqlSymbolKind.Alias,
+                    AddReference(cr.Qualifier, resolved.Kind,
                         expr.Position.Absolute,
-                        expr.Position.Absolute + cr.Qualifier.Length,
+                        expr.Position.Absolute + _tokenLengths.GetValueOrDefault(expr.Position.Absolute, cr.Qualifier.Length),
                         resolved.Id);
                 }
                 break;
@@ -516,13 +543,15 @@ internal sealed class NzSymbolCollector
         _occurrences.Add(new SymbolOccurrence(_nextId++, name, kind, startAbsolute, endAbsolute, false, definitionId));
     }
 
-    private static bool TryResolveTableInScope(ScopeFrame scope, string name, out SymbolOccurrence? occurrence)
+    private static string LocalTableKey(TableName table) => $"{table.Database}\0{table.Schema}\0{table.Name}";
+
+    private static bool TryResolveTableInScope(ScopeFrame scope, TableName table, out SymbolOccurrence? occurrence)
     {
         var current = scope;
         while (current is not null)
         {
-            if (current.Ctes.TryGetValue(name.ToUpperInvariant(), out occurrence!)
-                || current.Tables.TryGetValue(name.ToUpperInvariant(), out occurrence!))
+            if ((table.Database is null && table.Schema is null && current.Ctes.TryGetValue(table.Name, out occurrence!))
+                || current.Tables.TryGetValue(LocalTableKey(table), out occurrence!))
                 return true;
             current = current.Parent;
         }
@@ -583,8 +612,6 @@ internal sealed class NzSymbolCollector
     {
         for (int i = Math.Max(0, startIndex); i < tokens.Length && i < endIndex; i++)
         {
-            if (!IsIdentifierToken(tokens[i]))
-                continue;
 
             if (tableName.Database is not null && tableName.Schema is not null)
             {
@@ -642,16 +669,14 @@ internal sealed class NzSymbolCollector
     private static int FindQualifiedEnd(Token<NzToken>[] tokens, int index, int endIndex, int identCount)
     {
         var current = index;
-        var foundIdents = 0;
-        while (current < tokens.Length && current < endIndex)
+        for (var part = 1; part < identCount; part++)
         {
-            if (IsIdentifierToken(tokens[current]))
-                foundIdents++;
-            if (foundIdents >= identCount)
-                return current;
-            current++;
+            if (current + 1 >= Math.Min(tokens.Length, endIndex) || tokens[current + 1].Kind != NzToken.Dot) return index;
+            current += 2;
+            if (current < Math.Min(tokens.Length, endIndex) && tokens[current].Kind == NzToken.Dot) current++;
+            if (current >= Math.Min(tokens.Length, endIndex)) return index;
         }
-        return index;
+        return current;
     }
 
     private static bool IsName(Token<NzToken> token, string name) =>
@@ -758,7 +783,7 @@ internal sealed class SymbolIndex
 
     public IReadOnlyList<SymbolOccurrence> FindReferences(int definitionId, bool includeDeclaration) =>
         _occurrences
-            .Where(o => o.DefinitionId == definitionId || (includeDeclaration && o.Id == definitionId))
+            .Where(o => o.DefinitionId == definitionId && (includeDeclaration || !o.IsDefinition))
             .OrderBy(o => o.StartAbsolute)
             .ToList();
 }

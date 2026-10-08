@@ -306,7 +306,7 @@ public static class NzLexer
         .Match(Span.Regex(@"^&[a-zA-Z_][a-zA-Z0-9_]*"), NzToken.AmpersandIdentifier)
 
         // Quoted identifier
-        .Match(Span.Regex(@"^""[^""]*"""), NzToken.QuotedIdentifier)
+        .Match(Span.Regex(@"^""(?:[^""]|"""")*"""), NzToken.QuotedIdentifier)
 
         // String literal (single-quoted, with '' escaping)
         .Match(Span.Regex(@"^'([^']|'')*'"), NzToken.StringLiteral)

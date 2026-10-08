@@ -585,7 +585,7 @@ public partial class NzSqlParser
     protected static string StripQuotes(string value)
     {
         if (value.Length >= 2 && value[0] == '"' && value[^1] == '"')
-            return value[1..^1];
+            return value[1..^1].Replace("\"\"", "\"", StringComparison.Ordinal);
         if (value.Length >= 2 && value[0] == '`' && value[^1] == '`')
             return value[1..^1].Replace("``", "`", StringComparison.Ordinal);
         if (value.Length >= 2 && value[0] == '[' && value[^1] == ']')

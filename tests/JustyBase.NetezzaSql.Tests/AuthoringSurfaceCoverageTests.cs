@@ -73,7 +73,9 @@ public sealed class AuthoringSurfaceCoverageTests
         var renamed = NzRenameService.ApplyRename(sql, symbol!, "order_alias");
         Assert.Contains("orders order_alias", renamed, StringComparison.Ordinal);
         Assert.Contains("order_alias.id", renamed, StringComparison.Ordinal);
-        Assert.Equal(sql, NzRenameService.ApplyRename(sql, symbol, "invalid alias!"));
+        // The explicit editor contract now safely quotes replacement names.
+        Assert.Equal("SELECT \"invalid alias!\".id FROM orders \"invalid alias!\" WHERE \"invalid alias!\".id > 0",
+            NzRenameService.ApplyRename(sql, symbol, "invalid alias!"));
     }
 
     [Fact]

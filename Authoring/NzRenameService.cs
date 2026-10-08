@@ -1,180 +1,87 @@
-using JustyBase.NetezzaSqlParser.Lexer;
 using JustyBase.NetezzaSqlParser.Dialects;
-using Superpower.Model;
+using JustyBase.NetezzaSqlParser.Lexer;
 
 namespace JustyBase.NetezzaSqlParser.Authoring;
 
 public static class NzRenameService
 {
     public static SqlRenameInfo? GetRenameInfo(string text, int offset, SqlDialect dialect = SqlDialect.Netezza)
+        => NzSymbolService.GetSymbol(text, offset, dialect);
+
+    public static IReadOnlyList<SqlTextEdit>? GetRenameEdits(string text, int offset, string newName, SqlDialect dialect = SqlDialect.Netezza)
     {
-        if (string.IsNullOrEmpty(text))
-            return null;
+        try { return GetRenameEditsCore(text, offset, newName, dialect); }
+        catch { return null; }
+    }
 
-        offset = Math.Clamp(offset, 0, Math.Max(0, text.Length - 1));
-
-        try
-        {
-            var tokens = DialectRuntime.Tokenize(text, dialect).ToArray();
-            if (tokens.Length == 0)
-                return null;
-
-            Token<NzToken>? cursorToken = null;
-            foreach (var token in tokens)
-            {
-                int tokenStart = token.Span.Position.Absolute;
-                int tokenEnd = tokenStart + token.Span.Length;
-                if (offset >= tokenStart && offset <= tokenEnd)
-                {
-                    cursorToken = token;
-                    break;
-                }
-            }
-
-            if (cursorToken is null)
-                return null;
-
-            if (!cursorToken.Value.Kind.IsIdentifierLike())
-                return null;
-
-            var symbolName = StripQuotes(cursorToken.Value.ToStringValue());
-            var index = NzSymbolCollector.Collect(text, dialect);
-            var occurrence = index.FindOccurrenceAt(offset);
-            if (occurrence is null)
-                return null;
-
-            var definitionId = occurrence.IsDefinition
-                ? occurrence.Id
-                : occurrence.DefinitionId;
-
-            if (definitionId is null)
-                return null;
-
-            var references = index.FindReferences(definitionId.Value, includeDeclaration: true);
-            if (references.Count == 0)
-                return null;
-
-            return new SqlRenameInfo(symbolName, occurrence.Kind, references);
-        }
-        catch
-        {
-            return null;
-        }
+    private static IReadOnlyList<SqlTextEdit>? GetRenameEditsCore(string text, int offset, string newName, SqlDialect dialect)
+    {
+        var index = NzSymbolCollector.Collect(text, dialect);
+        var symbol = NzSymbolService.GetSymbol(text, offset, index);
+        if (symbol is null || FormatReplacement("a", newName, dialect) is null) return null;
+        var own = symbol.Occurrences.Where(o => o.IsDefinition).Select(o => o.StartAbsolute).ToHashSet();
+        var name = DecodeName(newName.Trim());
+        // Conservative capture prevention, including unrelated query scopes.
+        if (index.Occurrences.Any(o => o.IsDefinition
+            && !own.Contains(o.StartAbsolute) && string.Equals(o.Name, name, StringComparison.OrdinalIgnoreCase))) return null;
+        return symbol.Occurrences.OrderBy(o => o.StartAbsolute).Select(o => new SqlTextEdit(
+            o.StartAbsolute, o.EndAbsolute, FormatReplacement(text[o.StartAbsolute..o.EndAbsolute], newName, dialect)!)).ToArray();
     }
 
     public static string ApplyRename(string text, SqlRenameInfo renameInfo, string newName)
     {
-        if (string.IsNullOrEmpty(text) || renameInfo.Occurrences.Count == 0)
-            return text;
-
-        // A rename must always remain a valid SQL identifier. Quoted names
-        // are accepted as document syntax; plain names use identifier rules.
-
-        // Determine if the original occurrences were quoted identifiers.
-        // If so, the new name can be auto-quoted by PreserveCasing.
-        bool originalIsQuoted = false;
-        if (renameInfo.Occurrences.Count > 0)
+        if (renameInfo.Occurrences.Count == 0 || FormatReplacement("a", newName) is null) return text;
+        var replacements = renameInfo.Occurrences.OrderBy(o => o.StartAbsolute).ToArray();
+        if (replacements.Any(o => o.StartAbsolute < 0 || o.EndAbsolute > text.Length || o.StartAbsolute >= o.EndAbsolute)
+            || replacements.Zip(replacements.Skip(1)).Any(pair => pair.First.EndAbsolute > pair.Second.StartAbsolute)) return text;
+        // Revalidate the supplied snapshot against production identity. Legacy
+        // callers can supply ranges, but stale or foreign ranges must not edit SQL.
+        var original = text[replacements[0].StartAbsolute..replacements[0].EndAbsolute];
+        var dialect = original.StartsWith('`') ? SqlDialect.MySql
+            : original.StartsWith('[') ? SqlDialect.Access : SqlDialect.Netezza;
+        var edits = GetRenameEdits(text, replacements[0].StartAbsolute, newName, dialect);
+        if (edits is null || !edits.Select(edit => (edit.StartOffset, edit.EndOffset))
+            .SequenceEqual(replacements.Select(occurrence => (occurrence.StartAbsolute, occurrence.EndAbsolute)))) return text;
+        foreach (var edit in edits.Reverse())
         {
-            var first = renameInfo.Occurrences[0];
-            if (first.StartAbsolute >= 0 && first.EndAbsolute <= text.Length)
-            {
-                var originalText = text[first.StartAbsolute..first.EndAbsolute];
-                originalIsQuoted = originalText.Length > 0 && (originalText[0] is '"' or '`' or '[');
-            }
+            text = text[..edit.StartOffset] + edit.NewText + text[edit.EndOffset..];
         }
+        return text;
+    }
 
-        if (originalIsQuoted)
+    public static string? FormatReplacement(string original, string newName, SqlDialect dialect = SqlDialect.Netezza)
+    {
+        var trimmed = newName.Trim();
+        var name = DecodeName(trimmed);
+        if (name is null) return null;
+        if (original.StartsWith('[')) return "[" + name.Replace("]", "]]", StringComparison.Ordinal) + "]";
+        if (original.StartsWith('`')) return "`" + name.Replace("`", "``", StringComparison.Ordinal) + "`";
+        bool plain = false;
+        try
         {
-            // Accept any non-empty name that can be auto-quoted (no internal ")
-            if (string.IsNullOrWhiteSpace(newName) || newName.Contains('"') || newName.Contains('`') || newName.Contains(']'))
-                return text;
+            var tokens = DialectRuntime.Tokenize(name, dialect).ToArray();
+            plain = tokens.Length == 1 && tokens[0].Kind == NzToken.Identifier && tokens[0].Span.Length == name.Length;
         }
-        else if (!IsValidIdentifier(newName))
+        catch { }
+        return original.StartsWith('"') || trimmed.StartsWith('"') || !plain
+            ? "\"" + name.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"" : name;
+    }
+
+    private static string? DecodeName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name) || name.Any(char.IsControl)) return null;
+        if (name.StartsWith('"'))
         {
-            return text;
+            if (name.Length < 2 || !name.EndsWith('"')) return null;
+            var body = name[1..^1];
+            if (body.Replace("\"\"", "", StringComparison.Ordinal).Contains('"')) return null;
+            name = body.Replace("\"\"", "\"", StringComparison.Ordinal);
         }
-
-        var replacements = renameInfo.Occurrences
-            .OrderByDescending(o => o.StartAbsolute)
-            .ToList();
-
-        var result = text;
-        foreach (var occ in replacements)
-        {
-            if (occ.StartAbsolute < 0 || occ.EndAbsolute > result.Length)
-                continue;
-
-            var originalText = result[occ.StartAbsolute..occ.EndAbsolute];
-            var replacement = PreserveCasing(originalText, newName);
-            result = result[..occ.StartAbsolute] + replacement + result[occ.EndAbsolute..];
-        }
-
-        return result;
+        return name.Length == 0 ? null : name;
     }
 
     public static bool IsValidIdentifier(string name)
-    {
-        if (string.IsNullOrWhiteSpace(name))
-            return false;
-
-        if (name[0] is '"' or '`' or '[')
-        {
-            var closingQuote = name[0] == '[' ? ']' : name[0];
-            if (name.Length < 2 || name[^1] != closingQuote)
-                return false;
-
-            for (int i = 1; i < name.Length - 1; i++)
-            {
-                if (name[i] == closingQuote)
-                    return false;
-            }
-
-            return true;
-        }
-
-        if (!char.IsLetter(name[0]) && name[0] != '_')
-            return false;
-
-        for (int i = 1; i < name.Length; i++)
-        {
-            if (!char.IsLetterOrDigit(name[i]) && name[i] != '_')
-                return false;
-        }
-
-        return true;
-    }
-
-    private static string PreserveCasing(string original, string newName)
-    {
-        if (original.Length > 0 && (original[0] is '"' or '`' or '['))
-        {
-            var quote = original[0];
-            if (quote == '[')
-                return $"[{newName.Replace("]", "]]", StringComparison.Ordinal)}]";
-
-            return newName.Contains(quote) ? newName : $"{quote}{newName}{quote}";
-        }
-
-        if (original == original.ToUpperInvariant())
-            return newName.ToUpperInvariant();
-
-        if (original == original.ToLowerInvariant())
-            return newName.ToLowerInvariant();
-
-        if (original.Length > 0 && char.IsUpper(original[0]))
-            return char.ToUpperInvariant(newName[0]) + newName[1..];
-
-        return newName;
-    }
-
-    private static string StripQuotes(string value)
-    {
-        if (value.Length >= 2 && value[0] == '"' && value[^1] == '"')
-            return value[1..^1];
-        if (value.Length >= 2 && value[0] == '`' && value[^1] == '`')
-            return value[1..^1].Replace("``", "`", StringComparison.Ordinal);
-        if (value.Length >= 2 && value[0] == '[' && value[^1] == ']')
-            return value[1..^1].Replace("]]", "]", StringComparison.Ordinal);
-        return value;
-    }
+        => !string.IsNullOrWhiteSpace(name) && (name.StartsWith('"')
+            ? DecodeName(name) is not null
+            : (char.IsLetter(name[0]) || name[0] == '_') && name.All(c => char.IsLetterOrDigit(c) || c == '_'));
 }

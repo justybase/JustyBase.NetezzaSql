@@ -34,6 +34,12 @@ public class CompletionScopeProvider
         var tokens = Tokenize(sql, _dialect);
         if (tokens is null) return null;
 
+        return TryBuild(tokens, cursor);
+    }
+
+    internal ScopeBuilder? TryBuild(Token<NzToken>[] tokens, int? cursor)
+    {
+
         var parser = DialectRuntime.CreateParser(tokens, _dialect);
         var stmt = parser.Parse();
         if (stmt is null) return null;
@@ -44,7 +50,7 @@ public class CompletionScopeProvider
         // when parsing could not produce a statement at all.
 
         var builder = new ScopeBuilder();
-        var walker = new ScopeWalker(builder, _schema, _dialect, cursor);
+        var walker = new ScopeWalker(builder, _schema, _dialect, cursor, tokens);
         walker.Build(stmt);
         return builder;
     }
@@ -68,13 +74,15 @@ internal class ScopeWalker
     private readonly ISchemaProvider? _schema;
     private readonly SqlDialect _dialect;
     private readonly int? _cursor;
+    private readonly Token<NzToken>[] _tokens;
 
-    public ScopeWalker(ScopeBuilder scope, ISchemaProvider? schema, SqlDialect dialect, int? cursor = null)
+    public ScopeWalker(ScopeBuilder scope, ISchemaProvider? schema, SqlDialect dialect, int? cursor = null, Token<NzToken>[]? tokens = null)
     {
         _scope = scope;
         _schema = schema;
         _dialect = dialect;
         _cursor = cursor;
+        _tokens = tokens ?? Array.Empty<Token<NzToken>>();
     }
 
     public void Build(Statement stmt)
@@ -138,6 +146,27 @@ internal class ScopeWalker
         {
             WalkSelect(query);
             return;
+        }
+        // AST start positions alone cannot distinguish a completed sibling or
+        // derived query from a query enclosing the caret.
+        var openings = new Stack<int>();
+        for (var i = 0; i < _tokens.Length && _tokens[i].Span.Position.Absolute < query.Position.Absolute; i++)
+        {
+            if (_tokens[i].Kind == NzToken.LParen) openings.Push(i);
+            else if (_tokens[i].Kind == NzToken.RParen && openings.Count > 0) openings.Pop();
+        }
+        if (openings.Count > 0)
+        {
+            var depth = 0;
+            for (var i = openings.Peek(); i < _tokens.Length; i++)
+            {
+                if (_tokens[i].Kind == NzToken.LParen) depth++;
+                else if (_tokens[i].Kind == NzToken.RParen && --depth == 0)
+                {
+                    if (_cursor < _tokens[openings.Peek()].Span.Position.Absolute || _cursor > _tokens[i].Span.Position.Absolute) return;
+                    break;
+                }
+            }
         }
         while (_scope.CurrentScope.Level > level)
             _scope.ExitScope();
@@ -338,13 +367,13 @@ internal class ScopeWalker
 
         if (source.Subquery is not null)
         {
-            WalkCursorSubquery(source.Subquery, level);
             if (source.Alias is not null)
             {
                 var subCols = InferSubqueryColumns(source.Subquery);
                 _scope.AddTable(new TableInfo(source.Alias, IsCte: false, IsTempTable: false,
                     Columns: subCols.Count > 0 ? subCols : null, IsDerived: true));
             }
+            WalkCursorSubquery(source.Subquery, level);
         }
 
         if (source.FunctionSource && source.Alias is not null)
@@ -529,23 +558,31 @@ public static class SqlScopeAtCursorResolver
         if (tokens is not null)
         {
             collector = new TokenScopeCollector(schema, dialect);
-            collector.Collect(tokens, sql.Length);
+            collector.Collect(tokens, sql.Length, cursorPosition);
             foreach (var temp in collector.GetTempTableNames())
                 Add(temp, temp, SqlScopeRelationKind.ScriptLocalTable);
         }
 
-        // The AST walker builds scope for a single statement; multi-statement
-        // scripts rely on the token collector for script-local relations.
-        if (!sql.Contains(';'))
+        // Parse the current statement with original absolute token positions.
+        // Semicolons inside strings/comments are not statement boundaries.
+        if (tokens is not null)
         {
-            var builder = new CompletionScopeProvider(schema, dialect).TryBuild(sql, cursorPosition);
+            var start = 0;
+            var end = tokens.Length;
+            for (var i = 0; i < tokens.Length; i++)
+            {
+                if (tokens[i].Kind != NzToken.Semicolon) continue;
+                if (tokens[i].Span.Position.Absolute < cursorPosition) start = i + 1;
+                else { end = i; break; }
+            }
+            var builder = new CompletionScopeProvider(schema, dialect).TryBuild(tokens[start..end], cursorPosition);
             if (builder is not null)
             {
                 foreach (var table in builder.GetAllVisibleTables())
                 {
                     var kind = table.IsCte
                         ? SqlScopeRelationKind.Cte
-                        : table.IsTempTable
+                        : table.IsTempTable || collector?.GetTempTableNames().Contains(table.Name, StringComparer.OrdinalIgnoreCase) == true
                             ? SqlScopeRelationKind.ScriptLocalTable
                             : table.IsDerived
                                 ? SqlScopeRelationKind.DerivedTable

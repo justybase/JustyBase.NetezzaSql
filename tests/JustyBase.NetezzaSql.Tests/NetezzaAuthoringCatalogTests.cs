@@ -49,15 +49,13 @@ public sealed class NetezzaAuthoringCatalogTests
     public void Rename_PreservesQuotedIdentifier()
     {
         const string sql = "SELECT \"x\".id FROM orders \"x\" WHERE \"x\".id = 1";
-        var occurrences = new[]
-        {
-            new SymbolOccurrence(1, "x", SqlSymbolKind.Alias, 7, 10, true, null),
-            new SymbolOccurrence(2, "x", SqlSymbolKind.Alias, 26, 29, false, 1),
-            new SymbolOccurrence(3, "x", SqlSymbolKind.Alias, 35, 38, false, 1)
-        };
-        var renamed = NzRenameService.ApplyRename(sql, new SqlRenameInfo("x", SqlSymbolKind.Alias, occurrences), "new alias");
+        // The old hand-authored third range (35..38) included a space and
+        // omitted the closing quote. Exercise production identity instead.
+        var symbol = NzRenameService.GetRenameInfo(sql, 7);
+        Assert.NotNull(symbol);
+        var renamed = NzRenameService.ApplyRename(sql, symbol, "new alias");
 
-        Assert.Contains("\"new alias\".id", renamed, StringComparison.Ordinal);
+        Assert.Equal("SELECT \"new alias\".id FROM orders \"new alias\" WHERE \"new alias\".id = 1", renamed);
     }
 
     [Theory]
