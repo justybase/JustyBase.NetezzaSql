@@ -315,16 +315,23 @@ internal class ScopeWalker
         var cols = new List<string>();
         foreach (var item in cte.Query.SelectList)
         {
+            // `*` and `T.*` parse as a StarExpression or as a ColumnReference named `*`.
+            var star = item.Alias is not null ? (false, (string?)null) : item.Expression switch
+            {
+                StarExpression s => (true, s.Qualifier),
+                ColumnReference { Name: "*" } c => (true, c.Qualifier),
+                _ => (false, null),
+            };
+            if (star.Item1)
+            {
+                cols.AddRange(ExpandStarColumns(cte.Query.From, star.Item2));
+                continue;
+            }
             var name = item.Alias;
             if (name is null && item.Expression is ColumnReference cr)
                 name = cr.Name;
             if (name is not null)
                 cols.Add(name);
-            else if (item.Expression is StarExpression star)
-            {
-                var expanded = ExpandStarColumns(cte.Query.From, star.Qualifier);
-                cols.AddRange(expanded);
-            }
         }
         return cols;
     }
@@ -491,20 +498,28 @@ internal class ScopeWalker
         var cols = new List<ColumnInfo>();
         foreach (var item in stmt.SelectList)
         {
+            // `*` and `T.*` parse as a StarExpression or as a ColumnReference named `*`.
+            var star = item.Alias is not null ? (false, (string?)null) : item.Expression switch
+            {
+                StarExpression s => (true, s.Qualifier),
+                ColumnReference { Name: "*" } c => (true, c.Qualifier),
+                _ => (false, null),
+            };
+            if (star.Item1)
+            {
+                foreach (var reference in stmt.From ?? Array.Empty<TableReference>())
+                {
+                    AddExpandedSourceColumns(reference.Source, star.Item2, cols);
+                    foreach (var join in reference.Joins ?? Array.Empty<JoinClause>())
+                        AddExpandedSourceColumns(join.Source, star.Item2, cols);
+                }
+                continue;
+            }
             var name = item.Alias;
             if (name is null && item.Expression is ColumnReference cr)
                 name = cr.Name;
             if (name is not null)
                 cols.Add(new ColumnInfo(name));
-            else if (item.Expression is StarExpression star)
-            {
-                foreach (var reference in stmt.From ?? Array.Empty<TableReference>())
-                {
-                    AddExpandedSourceColumns(reference.Source, star.Qualifier, cols);
-                    foreach (var join in reference.Joins ?? Array.Empty<JoinClause>())
-                        AddExpandedSourceColumns(join.Source, star.Qualifier, cols);
-                }
-            }
         }
         return cols;
     }

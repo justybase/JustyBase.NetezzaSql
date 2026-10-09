@@ -547,16 +547,28 @@ private List<string> ResolveStarFromBody(Token<NzToken>[] tokens, int cteNameInd
     j++;
     if (j < tokens.Length && tokens[j].Kind == NzToken.All) j++;
 
-    while (j < tokens.Length && tokens[j].Kind != NzToken.LParen) j++;
-    if (j >= tokens.Length) return new List<string>();
-
-    int bodyEnd = j, depth = 1;
-    bodyEnd++;
-    while (bodyEnd < tokens.Length && depth > 0)
+    int bodyEnd;
+    if (j < tokens.Length && tokens[j].Kind is NzToken.Select or NzToken.With)
     {
-        if (tokens[bodyEnd].Kind == NzToken.LParen) depth++;
-        else if (tokens[bodyEnd].Kind == NzToken.RParen) depth--;
-        bodyEnd++;
+        // CREATE TABLE ... AS SELECT: the unparenthesized body runs to the
+        // end of the statement. The scan below starts after index j.
+        bodyEnd = j;
+        while (bodyEnd < tokens.Length && tokens[bodyEnd].Kind != NzToken.Semicolon) bodyEnd++;
+        j--;
+    }
+    else
+    {
+        while (j < tokens.Length && tokens[j].Kind != NzToken.LParen) j++;
+        if (j >= tokens.Length) return new List<string>();
+
+        bodyEnd = j + 1;
+        var depth = 1;
+        while (bodyEnd < tokens.Length && depth > 0)
+        {
+            if (tokens[bodyEnd].Kind == NzToken.LParen) depth++;
+            else if (tokens[bodyEnd].Kind == NzToken.RParen) depth--;
+            bodyEnd++;
+        }
     }
 
     // First, scan the body for any nested CTEs (WITH ... AS (...)) and resolve them
