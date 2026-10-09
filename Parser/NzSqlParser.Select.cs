@@ -559,6 +559,13 @@ public partial class NzSqlParser
         if (Peek().Kind == NzToken.As)
         {
             Advance();
+            if (IsReservedAliasWord(Peek()))
+            {
+                _errors.Add(new ValidationError(
+                    $"Expected identifier after AS, found reserved keyword {Peek().ToStringValue().ToUpperInvariant()}", "error",
+                    SourcePosition.FromToken(Peek()), "PARSE001"));
+                return null;
+            }
             if (IsContextualIdentifier(Peek().Kind))
             {
                 var token = Advance();
@@ -573,7 +580,7 @@ public partial class NzSqlParser
             && Peek(1).Kind is NzToken.NumberLiteral or NzToken.LParen
             && _typoChecker.CheckTypo(Peek().ToStringValue()) == "WHERE")
             return null;
-        if (IsContextualIdentifier(Peek().Kind))
+        if (IsContextualIdentifier(Peek().Kind) && !IsReservedAliasWord(Peek()))
         {
             var token = Advance();
             quote = IdentifierQuote(token.Kind);
@@ -581,6 +588,15 @@ public partial class NzSqlParser
         }
         return null;
     }
+
+    /// <summary>
+    /// ORDER, GROUP and PARTITION tokenize as identifiers on their own (the lexer
+    /// only knows them inside <c>... BY</c>), but live Netezza rejects them as
+    /// unquoted aliases ("expecting an identifier found a keyword").
+    /// </summary>
+    private static bool IsReservedAliasWord(Token<NzToken> token)
+        => token.Kind == NzToken.Identifier
+           && token.ToStringValue().ToUpperInvariant() is "ORDER" or "GROUP" or "PARTITION";
 
     protected static string StripQuotes(string value)
     {
