@@ -130,4 +130,49 @@ public sealed class ColumnIdentityServiceTests
         var exception = Record.Exception(() => NzColumnIdentityService.Resolve(sql, cursor, Schema()));
         Assert.Null(exception);
     }
+
+    [Fact]
+    public void Resolve_OnlyAsksForReferencedRelations_AndNeverEnumeratesTheCatalog()
+    {
+        var counting = new CountingSchemaProvider(Schema());
+        var sql = "SELECT C.CUSTOMER_ID FROM SHOP.SALES.CUSTOMERS C WHERE "
+            + string.Join(" OR ", Enumerable.Repeat("C.CUSTOMER_ID = 1", 500));
+        var identity = NzColumnIdentityService.Resolve(sql, sql.IndexOf("CUSTOMER_ID", StringComparison.Ordinal), counting);
+
+        Assert.Equal(501, identity!.Occurrences.Count);
+        // One FROM source: one lookup, independent of the 501 references.
+        Assert.Equal(["CUSTOMERS"], counting.TablesRequested);
+        Assert.Equal(0, counting.CatalogEnumerations);
+    }
+
+    private sealed class CountingSchemaProvider(ISchemaProvider inner) : ISchemaProvider
+    {
+        public List<string> TablesRequested { get; } = new();
+        public int CatalogEnumerations { get; private set; }
+        public bool TableExists(string? database, string? schema, string tableName) => inner.TableExists(database, schema, tableName);
+        public bool HasTables() => inner.HasTables();
+        public TableInfo? GetTable(string? database, string? schema, string tableName)
+        {
+            TablesRequested.Add(tableName);
+            return inner.GetTable(database, schema, tableName);
+        }
+        public IReadOnlyList<(string Name, TableKind Kind)>? GetTableNames(string? database, string? schema)
+        {
+            CatalogEnumerations++;
+            return inner.GetTableNames(database, schema);
+        }
+        public IReadOnlyList<string>? GetDatabases()
+        {
+            CatalogEnumerations++;
+            return inner.GetDatabases();
+        }
+        public IReadOnlyList<string>? GetSchemas(string? database)
+        {
+            CatalogEnumerations++;
+            return inner.GetSchemas(database);
+        }
+        public bool CanValidateUnqualifiedTableReferences() => inner.CanValidateUnqualifiedTableReferences();
+        public void BumpMetadataEpoch() => inner.BumpMetadataEpoch();
+        public int MetadataEpoch => inner.MetadataEpoch;
+    }
 }
