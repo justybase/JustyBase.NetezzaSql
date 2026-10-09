@@ -291,13 +291,14 @@ internal sealed class NzColumnIdentityCollector
 
         if (source.Table is null)
         {
-            // Table functions and other opaque sources: columns are unknown.
+            // Table functions and other opaque sources: columns are unknown and
+            // there is no catalog relation (the alias is not a table name).
             frame.Sources.Add(new Relation
             {
                 Name = source.Alias ?? string.Empty,
                 NameQuoted = source.AliasQuote is not null,
                 Kind = SqlColumnRelationKind.Table,
-                Physical = (null, null, source.Alias ?? string.Empty),
+                Physical = (null, null, string.Empty),
             });
             return;
         }
@@ -495,6 +496,8 @@ internal sealed class NzColumnIdentityCollector
     {
         if (relation.Physical is { } physical)
         {
+            // An opaque or unfinished source has no catalog column to point at.
+            if (physical.Table.Length == 0) return null;
             var columnName = name;
             string? type = null;
             if (relation.PhysicalColumns is not null)
