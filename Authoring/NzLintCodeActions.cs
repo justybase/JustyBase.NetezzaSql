@@ -21,25 +21,37 @@ public static class NzLintCodeActions
         var resultEnd = result.Length;
         while (end > start && resultEnd > start && sql[end - 1] == result[resultEnd - 1])
         { end--; resultEnd--; }
-        var safety = issue.RuleId.ToUpperInvariant() switch
-        {
-            "PAR004" or "PAR002" or "SQL012" or "SQL046" or "NZ012" or "NZL006"
-                or "SQL007" or "NZP012" or "SQL048" => SqlQuickFixSafety.Safe,
-            _ => SqlQuickFixSafety.ReviewRequired
-        };
-        return new SqlQuickFixInfo(action.Value.Description, safety,
+        return new SqlQuickFixInfo(action.Value.Description, GetSafety(issue.RuleId),
             result == sql ? [] : [new SqlTextEdit(start, end, result[start..resultEnd])]);
     }
 
+    // Single source of truth for quick-fix safety. A fix is Safe when it is
+    // deterministic and cannot change query meaning.
+    private static readonly HashSet<string> SafeQuickFixCodes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "PAR004", "PAR002", "SQL012", "SQL046", "NZ012", "NZL006", "SQL007", "NZP012", "SQL048",
+        "NZ007", "NZ021", "PARSE001", "NZ024", "PAR101"
+    };
+
+    // Fix-all applies a subset of the Safe fixes. Safe fixes that apply a
+    // suggestion choice (PAR004 typo, SQL048 qualification, NZL006) stay explicit-only.
     private static readonly HashSet<string> SafeFixAllCodes = new(StringComparer.OrdinalIgnoreCase)
     {
         "SQL007", "SQL012", "NZ007", "NZ012", "SQL046", "NZP012",
         "NZ021", "PAR002", "PARSE001", "NZ024", "PAR101"
     };
 
-    /// <summary>Returns whether the rule is eligible for automatic Fix-all (safe, deterministic).</summary>
+    /// <summary>Returns the safety classification of the quick fix for a rule.</summary>
+    public static SqlQuickFixSafety GetSafety(string ruleId)
+        => !string.IsNullOrWhiteSpace(ruleId) && SafeQuickFixCodes.Contains(ruleId)
+            ? SqlQuickFixSafety.Safe
+            : SqlQuickFixSafety.ReviewRequired;
+
+    /// <summary>Returns whether the rule is eligible for automatic Fix-all (Safe and deterministic).</summary>
     public static bool IsSafeForFixAll(string ruleId)
-        => !string.IsNullOrWhiteSpace(ruleId) && SafeFixAllCodes.Contains(ruleId);
+        => !string.IsNullOrWhiteSpace(ruleId)
+            && SafeFixAllCodes.Contains(ruleId)
+            && GetSafety(ruleId) == SqlQuickFixSafety.Safe;
 
     /// <summary>
     /// Returns a quick-fix for the given lint issue, or <c>null</c> when none is available.
@@ -112,12 +124,23 @@ public static class NzLintCodeActions
             .ThenByDescending(i => i.EndOffset)
             .ToList();
 
+        // Issues are applied from the end of the document, so earlier offsets stay
+        // valid. An issue that overlaps one already applied, or a second insertion
+        // at the same offset, is skipped so the result does not depend on order.
         var current = sql;
+        var appliedStart = int.MaxValue;
+        var appliedInsertion = false;
         foreach (var issue in ordered)
         {
+            var isInsertion = issue.StartOffset == issue.EndOffset;
+            if (issue.EndOffset > appliedStart
+                || (isInsertion && appliedInsertion && issue.StartOffset == appliedStart))
+                continue;
             var fix = GetQuickFix(issue, current, schema);
             if (fix is null) continue;
             current = fix.Value.Apply(current);
+            appliedStart = issue.StartOffset;
+            appliedInsertion = isInsertion;
         }
 
         return current;

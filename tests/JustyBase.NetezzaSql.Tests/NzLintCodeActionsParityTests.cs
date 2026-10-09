@@ -178,4 +178,90 @@ public sealed class NzLintCodeActionsParityTests
 
         Assert.Equal("AS SELECT 1;", fixedSql);
     }
+
+    [Theory]
+    [InlineData("SQL007")]
+    [InlineData("SQL012")]
+    [InlineData("NZ007")]
+    [InlineData("NZ012")]
+    [InlineData("SQL046")]
+    [InlineData("NZP012")]
+    [InlineData("NZ021")]
+    [InlineData("PAR002")]
+    [InlineData("PARSE001")]
+    [InlineData("NZ024")]
+    [InlineData("PAR101")]
+    public void FixAllCodes_AreClassifiedSafe(string ruleId)
+    {
+        Assert.True(NzLintCodeActions.IsSafeForFixAll(ruleId));
+        Assert.Equal(SqlQuickFixSafety.Safe, NzLintCodeActions.GetSafety(ruleId));
+    }
+
+    [Theory]
+    [InlineData("PAR004")]
+    [InlineData("SQL048")]
+    [InlineData("NZL006")]
+    public void SuggestionFixes_AreSafeButNotFixAll(string ruleId)
+    {
+        Assert.Equal(SqlQuickFixSafety.Safe, NzLintCodeActions.GetSafety(ruleId));
+        Assert.False(NzLintCodeActions.IsSafeForFixAll(ruleId));
+    }
+
+    [Fact]
+    public void GetQuickFixInfo_ReportsSafeForFixAllCode()
+    {
+        const string sql = "select 1;";
+        var issue = new LintIssue("NZ007", "UPPERCASE", LintSeverity.Information, 0, 6);
+        var info = NzLintCodeActions.GetQuickFixInfo(issue, sql);
+        Assert.NotNull(info);
+        Assert.Equal(SqlQuickFixSafety.Safe, info!.Safety);
+    }
+
+    [Fact]
+    public void ApplyAllSafeFixes_SkipsReviewRequiredIssues()
+    {
+        const string sql = "DELETE FROM t";
+        var issue = new LintIssue("SQL043", "missing WHERE", LintSeverity.Warning, 13, 13);
+        Assert.Equal(sql, NzLintCodeActions.ApplyAllSafeFixes(sql, new[] { issue }));
+    }
+
+    [Fact]
+    public void ApplyAllSafeFixes_SkipsDuplicateInsertionAtSameOffset()
+    {
+        const string sql = "SELECT 1;";
+        var issues = new[]
+        {
+            new LintIssue("PAR101", "missing AS", LintSeverity.Warning, 0, 0),
+            new LintIssue("PAR101", "missing AS", LintSeverity.Warning, 0, 0),
+        };
+        Assert.Equal("AS SELECT 1;", NzLintCodeActions.ApplyAllSafeFixes(sql, issues));
+    }
+
+    [Fact]
+    public void ApplyAllSafeFixes_SkipsOverlappingIssue()
+    {
+        const string sql = "select from dual;";
+        var issues = new[]
+        {
+            new LintIssue("NZ007", "UPPERCASE", LintSeverity.Information, 0, 6),
+            new LintIssue("NZ007", "UPPERCASE", LintSeverity.Information, 3, 11),
+        };
+        // The later issue (3..11) is applied first; 0..6 overlaps it and is skipped.
+        Assert.Equal("selECT FROM dual;", NzLintCodeActions.ApplyAllSafeFixes(sql, issues));
+    }
+
+    [Fact]
+    public void ApplyAllSafeFixes_IsIdempotentForKeywordCasing()
+    {
+        const string sql = "select 1 from dual;";
+        var issues = new[]
+        {
+            new LintIssue("NZ007", "UPPERCASE", LintSeverity.Information, 0, 6),
+            new LintIssue("NZ007", "UPPERCASE", LintSeverity.Information, 9, 13),
+        };
+        var once = NzLintCodeActions.ApplyAllSafeFixes(sql, issues);
+        var twice = NzLintCodeActions.ApplyAllSafeFixes(once, issues);
+        Assert.Equal("SELECT 1 FROM dual;", once);
+        Assert.Equal(once, twice);
+    }
 }
