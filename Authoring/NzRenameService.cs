@@ -5,6 +5,16 @@ namespace JustyBase.NetezzaSqlParser.Authoring;
 
 public static class NzRenameService
 {
+    /// <summary>
+    /// Reserved words the lexer only recognizes as the first word of a combined
+    /// keyword token (<c>GROUP BY</c>, <c>ORDER BY</c>, <c>PARTITION BY</c> in
+    /// NzLexer): alone they tokenize as identifiers but are still reserved.
+    /// </summary>
+    private static readonly HashSet<string> CombinedKeywordLeadWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "GROUP", "ORDER", "PARTITION",
+    };
+
     public static SqlRenameInfo? GetRenameInfo(string text, int offset, SqlDialect dialect = SqlDialect.Netezza)
         => NzSymbolService.GetSymbol(text, offset, dialect);
 
@@ -63,7 +73,8 @@ public static class NzRenameService
         try
         {
             var tokens = DialectRuntime.Tokenize(name, dialect).ToArray();
-            plain = tokens.Length == 1 && tokens[0].Kind == NzToken.Identifier && tokens[0].Span.Length == name.Length;
+            plain = tokens.Length == 1 && tokens[0].Kind == NzToken.Identifier && tokens[0].Span.Length == name.Length
+                    && !CombinedKeywordLeadWords.Contains(name);
         }
         catch { }
         return original.StartsWith('"') || trimmed.StartsWith('"') || !plain
