@@ -125,7 +125,7 @@ public class TokenScopeCollector
                 var tableName = tokens[j].ToIdentifierText();
                 if (!isTemp && !IsCreateTableAsSelect(tokens, j))
                     continue;
-                var columns = ExtractCteColumnsForEntry(tokens, j);
+                var columns = ExtractCreateTableColumns(tokens, j);
                 if (_schema is not null)
                 {
                     var starCols = ResolveStarFromBody(tokens, j);
@@ -326,6 +326,69 @@ public class TokenScopeCollector
         return false;
     }
 
+    /// <summary>
+    /// Columns of <c>CREATE [TEMP] TABLE name ...</c>, bounded to that statement:
+    /// column definitions, an explicit CTAS column list, <c>AS (SELECT ...)</c>
+    /// or <c>AS SELECT ...</c>. Never reads tokens of a later statement.
+    /// </summary>
+    private static List<string> ExtractCreateTableColumns(Token<NzToken>[] tokens, int nameIndex)
+    {
+        var end = nameIndex + 1;
+        var depth = 0;
+        for (; end < tokens.Length; end++)
+        {
+            if (tokens[end].Kind == NzToken.LParen) depth++;
+            else if (tokens[end].Kind == NzToken.RParen) depth--;
+            else if (depth == 0 && tokens[end].Kind == NzToken.Semicolon) break;
+        }
+
+        var j = nameIndex + 1;
+        // Skip the rest of a qualified name (db.schema.name).
+        while (j + 1 < end && tokens[j].Kind == NzToken.Dot && tokens[j + 1].Kind.IsIdentifierLike()) j += 2;
+
+        var listed = new List<string>();
+        if (j < end && tokens[j].Kind == NzToken.LParen)
+        {
+            // Column definitions or an explicit CTAS column list: the first
+            // identifier of each top-level comma-separated item.
+            var itemStart = true;
+            depth = 0;
+            for (j++; j < end; j++)
+            {
+                var kind = tokens[j].Kind;
+                if (kind == NzToken.LParen) { depth++; continue; }
+                if (kind == NzToken.RParen)
+                {
+                    if (depth == 0) { j++; break; }
+                    depth--;
+                    continue;
+                }
+                if (depth > 0) continue;
+                if (kind == NzToken.Comma) { itemStart = true; continue; }
+                if (itemStart && kind.IsIdentifierLike()) listed.Add(tokens[j].ToIdentifierText());
+                itemStart = false;
+            }
+        }
+
+        while (j < end && tokens[j].Kind != NzToken.As) j++;
+        if (j >= end) return listed;
+        j++;
+        if (listed.Count > 0) return listed;
+        if (j < end && tokens[j].Kind == NzToken.LParen)
+            return ExtractCteColumnsForEntry(tokens[..end], nameIndex);
+
+        // AS SELECT ... : the projection of the top-level SELECT.
+        depth = 0;
+        for (; j < end; j++)
+        {
+            if (tokens[j].Kind == NzToken.LParen) depth++;
+            else if (tokens[j].Kind == NzToken.RParen) depth--;
+            else if (depth == 0 && tokens[j].Kind == NzToken.Select)
+                return ExtractSelectColumnNames(tokens, j + 1, end);
+        }
+        return new List<string>();
+    }
+
     private static List<string> ExtractCteColumnsForEntry(Token<NzToken>[] tokens, int cteNameIndex)
     {
         int j = cteNameIndex + 1;
@@ -412,6 +475,7 @@ public class TokenScopeCollector
     {
         var columns = new List<string>();
         int lastItemStart = start;
+        var listEnded = false;
 
         for (int i = start; i < end; i++)
         {
@@ -424,11 +488,17 @@ public class TokenScopeCollector
                 var colName = ExtractColumnAlias(tokens, lastItemStart, i);
                 if (colName is not null) columns.Add(colName);
                 lastItemStart = i + 1;
-                if (k != NzToken.Comma) break;
+                if (k != NzToken.Comma)
+                {
+                    // The select list ended at a clause keyword; what follows
+                    // (FROM sources, predicates) is not a projected column.
+                    listEnded = true;
+                    break;
+                }
             }
         }
 
-        if (lastItemStart < end)
+        if (!listEnded && lastItemStart < end)
         {
             var colName = ExtractColumnAlias(tokens, lastItemStart, end);
             if (colName is not null) columns.Add(colName);

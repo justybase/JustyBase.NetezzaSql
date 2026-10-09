@@ -72,10 +72,55 @@ public sealed class MultiStatementCompletionScopeTests
         Assert.DoesNotContain("CUSTOMER_NAME", labels, StringComparer.OrdinalIgnoreCase);
     }
 
-    [Fact(Skip = "Known gap (pre-existing, also fails before the statement-scope fix): CTAS TEMP table columns are not offered after a qualifier in a later statement.")]
+    [Fact]
     public void TempTableFromEarlierStatement_RemainsVisible()
     {
         var labels = Labels("CREATE TEMP TABLE TT AS SELECT ORDER_ID FROM ORDERS;\nSELECT TT.| FROM TT");
         Assert.Contains("ORDER_ID", labels, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TempTableDroppedBeforeCaret_IsNoLongerVisible()
+    {
+        var labels = Labels("CREATE TEMP TABLE TT AS SELECT ORDER_ID FROM ORDERS;\nDROP TABLE TT;\nSELECT TT.| FROM TT");
+        Assert.DoesNotContain("ORDER_ID", labels, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TempTableDroppedAfterCaret_StaysVisibleAtCaret()
+    {
+        var labels = Labels("CREATE TEMP TABLE TT AS SELECT ORDER_ID FROM ORDERS;\nSELECT TT.| FROM TT;\nDROP TABLE TT;");
+        Assert.Contains("ORDER_ID", labels, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RecreatedTempTable_UsesTheLatestDefinitionBeforeCaret()
+    {
+        var labels = Labels("CREATE TEMP TABLE TT AS SELECT ORDER_ID FROM ORDERS;\nDROP TABLE TT;\n"
+            + "CREATE TEMP TABLE TT AS SELECT CUSTOMER_NAME FROM CUSTOMERS;\nSELECT TT.| FROM TT");
+        Assert.Contains("CUSTOMER_NAME", labels, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain("ORDER_ID", labels, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TempTableWithColumnDefinitions_OffersItsColumns()
+    {
+        var labels = Labels("CREATE TEMP TABLE TT (TT_ID INTEGER, TT_NAME VARCHAR(20));\nSELECT TT.| FROM TT");
+        Assert.Contains("TT_ID", labels, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("TT_NAME", labels, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TempTableCreatedAfterCaret_IsNotVisibleYet()
+    {
+        var labels = Labels("SELECT TT.| FROM TT;\nCREATE TEMP TABLE TT AS SELECT ORDER_ID FROM ORDERS;");
+        Assert.DoesNotContain("ORDER_ID", labels, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TempTableVisible_ButEarlierAliasStillDoesNotLeak()
+    {
+        var labels = Labels("SELECT * FROM CUSTOMERS C;\nCREATE TEMP TABLE TT AS SELECT ORDER_ID FROM ORDERS;\nSELECT C.| FROM TT");
+        Assert.DoesNotContain("CUSTOMER_NAME", labels, StringComparer.OrdinalIgnoreCase);
     }
 }
