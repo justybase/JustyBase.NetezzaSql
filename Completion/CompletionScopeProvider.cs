@@ -55,6 +55,30 @@ public class CompletionScopeProvider
         return builder;
     }
 
+    /// <summary>
+    /// Builds scope from the statement that contains <paramref name="cursorPosition"/>.
+    /// Tokens keep their absolute positions; semicolons inside strings or comments
+    /// are not tokens, so they are not statement boundaries.
+    /// </summary>
+    internal ScopeBuilder? TryBuildForStatementAtCursor(Token<NzToken>[] tokens, int cursorPosition)
+    {
+        var (start, end) = StatementTokenRangeAtCursor(tokens, cursorPosition);
+        return TryBuild(tokens[start..end], cursor: null);
+    }
+
+    internal static (int Start, int End) StatementTokenRangeAtCursor(Token<NzToken>[] tokens, int cursorPosition)
+    {
+        var start = 0;
+        var end = tokens.Length;
+        for (var i = 0; i < tokens.Length; i++)
+        {
+            if (tokens[i].Kind != NzToken.Semicolon) continue;
+            if (tokens[i].Span.Position.Absolute < cursorPosition) start = i + 1;
+            else { end = i; break; }
+        }
+        return (start, end);
+    }
+
     internal static Token<NzToken>[]? Tokenize(string sql, SqlDialect dialect)
     {
         try { return DialectRuntime.Tokenize(sql, dialect).ToArray(); }
@@ -567,14 +591,7 @@ public static class SqlScopeAtCursorResolver
         // Semicolons inside strings/comments are not statement boundaries.
         if (tokens is not null)
         {
-            var start = 0;
-            var end = tokens.Length;
-            for (var i = 0; i < tokens.Length; i++)
-            {
-                if (tokens[i].Kind != NzToken.Semicolon) continue;
-                if (tokens[i].Span.Position.Absolute < cursorPosition) start = i + 1;
-                else { end = i; break; }
-            }
+            var (start, end) = CompletionScopeProvider.StatementTokenRangeAtCursor(tokens, cursorPosition);
             var builder = new CompletionScopeProvider(schema, dialect).TryBuild(tokens[start..end], cursorPosition);
             if (builder is not null)
             {

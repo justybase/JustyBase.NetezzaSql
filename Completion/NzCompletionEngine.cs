@@ -101,7 +101,10 @@ public class NzCompletionEngine
 
         var fullTokens = TokenizePrefix(sql) ?? Array.Empty<Token<NzToken>>();
         _lastFullTokens = fullTokens;
-        var astScope = new CompletionScopeProvider(_schema, _dialect).TryBuild(sql);
+        // Scope comes from the statement containing the caret, not the first statement.
+        var astScope = fullTokens.Length > 0
+            ? new CompletionScopeProvider(_schema, _dialect).TryBuildForStatementAtCursor(fullTokens, cursorPosition)
+            : null;
 
         _lastScopeCollector = new TokenScopeCollector(_schema, _dialect);
         _lastScopeCollector.Collect(fullTokens, sql.Length, cursorPosition);
@@ -307,7 +310,12 @@ public class NzCompletionEngine
                     && TryAddQualifiedPathCompletions(suggestions, statementPrefix, partialWord))
                     break;
                 if (!AddObjectsForQualifier(suggestions, qualifier))
-                    AddColumnsForAlias(suggestions, fullTokens, qualifier, astScope);
+                {
+                    // Token fallbacks must only see aliases of the caret statement.
+                    var (statementStart, statementEnd) =
+                        CompletionScopeProvider.StatementTokenRangeAtCursor(fullTokens, cursorPosition);
+                    AddColumnsForAlias(suggestions, fullTokens[statementStart..statementEnd], qualifier, astScope);
+                }
                 break;
 
             case CompletionContext.AfterCreate:
