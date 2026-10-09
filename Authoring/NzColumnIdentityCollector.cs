@@ -19,7 +19,9 @@ namespace JustyBase.NetezzaSqlParser.Authoring;
 /// <item>An unqualified reference is resolved only when exactly one visible source
 /// provides the column; two or more is ambiguous, and unknown metadata leaves it
 /// unresolved instead of guessing.</item>
-/// <item>ORDER BY binds an unqualified name to an explicit output alias first.</item>
+/// <item>ORDER BY binds an unqualified name to an explicit output alias first; an
+/// aliased select item has one identity, which is the column of the CTE, derived
+/// table or CTAS its select defines.</item>
 /// <item>A projection carries the physical origin of a plain column reference.</item>
 /// </list>
 /// </remarks>
@@ -560,14 +562,14 @@ internal sealed class NzColumnIdentityCollector
             var projected = new ProjectedColumn(item.Alias, norm, LocalKey(start, norm), start, start + token.Span.Length, origin);
             frame.OutputAliases[norm] = projected;
             var aliasKey = OutputAliasKey(projected);
-            _identities[aliasKey] = new IdentityInfo
-            {
-                Name = item.Alias,
-                RelationKind = SqlColumnRelationKind.OutputAlias,
-                Definition = (projected.DefStart, projected.DefEnd),
-                Origin = origin,
-            };
-            _occurrences.Add(new Occurrence(projected.DefStart, projected.DefEnd, aliasKey, IsDefinition: true));
+            if (_identities.TryAdd(aliasKey, new IdentityInfo
+                {
+                    Name = item.Alias,
+                    RelationKind = SqlColumnRelationKind.OutputAlias,
+                    Definition = (projected.DefStart, projected.DefEnd),
+                    Origin = origin,
+                }))
+                _occurrences.Add(new Occurrence(projected.DefStart, projected.DefEnd, aliasKey, IsDefinition: true));
             yield return projected;
             yield break;
         }
@@ -634,7 +636,23 @@ internal sealed class NzColumnIdentityCollector
         if (relation.Columns is null) return;
         foreach (var column in relation.Columns)
         {
-            if (column is null || _identities.ContainsKey(column.Key)) continue;
+            if (column is null) continue;
+            if (_identities.TryGetValue(column.Key, out var existing))
+            {
+                // An aliased select item has one identity: when its select
+                // defines a relation, the alias (and the select's own ORDER BY
+                // references to it) is that relation's column.
+                if (existing.RelationKind == SqlColumnRelationKind.OutputAlias)
+                    _identities[column.Key] = new IdentityInfo
+                    {
+                        Name = existing.Name,
+                        RelationKind = relation.Kind,
+                        Relation = relation.Name,
+                        Definition = existing.Definition,
+                        Origin = existing.Origin,
+                    };
+                continue;
+            }
             _identities[column.Key] = new IdentityInfo
             {
                 Name = column.Name,
@@ -673,7 +691,8 @@ internal sealed class NzColumnIdentityCollector
 
     private static string LocalKey(int definitionStart, string norm) => $"L|{definitionStart}|{norm}";
 
-    private static string OutputAliasKey(ProjectedColumn alias) => $"O|{alias.DefStart}|{alias.Norm}";
+    /// <summary>An output alias shares the identity of the projected column it names.</summary>
+    private static string OutputAliasKey(ProjectedColumn alias) => alias.Key;
 
     private static string PhysicalKey(SqlCatalogColumn column) =>
         $"P|{column.Database?.ToUpperInvariant()}|{column.Schema?.ToUpperInvariant()}|{column.Relation.ToUpperInvariant()}|{column.Column.ToUpperInvariant()}";

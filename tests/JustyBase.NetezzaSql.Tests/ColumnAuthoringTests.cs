@@ -131,6 +131,22 @@ public sealed class ColumnAuthoringTests
     }
 
     [Fact]
+    public void AliasedSelectItem_IsOneCteColumnForOuterReferenceAndOwnOrderBy()
+    {
+        const string sql = "WITH X AS (SELECT CUSTOMER_NAME AS NM FROM SHOP.SALES.CUSTOMERS ORDER BY NM) SELECT X.NM FROM X";
+        var outer = NzColumnIdentityService.Resolve(sql, sql.LastIndexOf("NM", StringComparison.Ordinal), Schema())!;
+        var inner = NzColumnIdentityService.Resolve(sql, sql.IndexOf("BY NM", StringComparison.Ordinal) + 3, Schema())!;
+        Assert.Equal(SqlColumnRelationKind.Cte, outer.RelationKind);
+        Assert.Equal(3, outer.Occurrences.Count);
+        Assert.Equal(outer.Occurrences, inner.Occurrences);
+        Assert.Equal("WITH X AS (SELECT CUSTOMER_NAME AS LABEL FROM SHOP.SALES.CUSTOMERS ORDER BY LABEL) SELECT X.LABEL FROM X",
+            Rename("WITH X AS (SELECT CUSTOMER_NAME AS NM FROM SHOP.SALES.CUSTOMERS ORDER BY NM) SELECT X.|NM FROM X", "LABEL"));
+        const string top = "SELECT CUSTOMER_NAME AS NM FROM SHOP.SALES.CUSTOMERS ORDER BY NM";
+        Assert.Equal(SqlColumnRelationKind.OutputAlias,
+            NzColumnIdentityService.Resolve(top, top.LastIndexOf("NM", StringComparison.Ordinal), Schema())!.RelationKind);
+    }
+
+    [Fact]
     public void Analysis_AnswersEveryOffsetLikeFreshResolution()
     {
         const string sql = "WITH X AS (SELECT CUSTOMER_ID AS CID FROM SHOP.SALES.CUSTOMERS) SELECT X.CID, X.CID + 1 FROM X WHERE X.CID > 0";

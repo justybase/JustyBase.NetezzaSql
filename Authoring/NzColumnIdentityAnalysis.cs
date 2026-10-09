@@ -158,13 +158,11 @@ public sealed class NzColumnIdentityAnalysis
     private string? KeyAt(int offset)
     {
         // A projection like `SELECT CUSTOMER_ID FROM T` is both a reference and a
-        // definition; the reference wins. Among definitions, a relation column
-        // wins over the output-alias view of the same alias.
+        // definition; the reference wins.
         var occurrences = _collector.Occurrences;
         var occurrence = occurrences
             .Where(candidate => candidate.Start <= offset && offset < candidate.End)
             .OrderBy(candidate => candidate.IsDefinition ? 1 : 0)
-            .ThenBy(candidate => candidate.Key.StartsWith("O|", StringComparison.Ordinal) ? 1 : 0)
             .FirstOrDefault()
             ?? occurrences
                 .Where(candidate => candidate.End == offset)
@@ -190,14 +188,9 @@ public sealed class NzColumnIdentityAnalysis
         };
     }
 
-    /// <summary>
-    /// True when another identity also occurs at exactly [start, end): as a
-    /// reference, or as a definition other than the output-alias view of the
-    /// same alias token.
-    /// </summary>
+    /// <summary>True when another identity also occurs at exactly [start, end).</summary>
     private bool HasOtherOccurrenceAt(string key, int start, int end)
-        => _collector.Occurrences.Any(occurrence => occurrence.Key != key && occurrence.Start == start && occurrence.End == end
-            && (!occurrence.IsDefinition || !occurrence.Key.StartsWith("O|", StringComparison.Ordinal)));
+        => _collector.Occurrences.Any(occurrence => occurrence.Key != key && occurrence.Start == start && occurrence.End == end);
 
     /// <summary>One signature per identity: its status and occurrence ranges after <paramref name="mapRange"/>.</summary>
     private IReadOnlyList<string> Partition(Func<int, int, (int Start, int End)> mapRange)
