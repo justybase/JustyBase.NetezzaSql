@@ -589,10 +589,18 @@ public sealed class SharedSqlConformanceAuthoringTests
     private static void AssertQuickFix(JsonElement root, string sql, ISchemaProvider? schema, string id)
     {
         var expected = root.GetProperty("expect");
+        if (expected.TryGetProperty("fixAll", out var fixAll))
+        {
+            AssertFixAll(fixAll, sql, schema, id);
+            if (!expected.TryGetProperty("code", out _)) return;
+        }
         var code = GetString(expected, "code");
         var issue = CollectLintIssues(sql, schema, "full").FirstOrDefault(candidate =>
             candidate.RuleId.Equals(code, StringComparison.OrdinalIgnoreCase));
         Assert.NotNull(issue);
+        if (expected.TryGetProperty("fixAllEligible", out var eligible))
+            Assert.True(eligible.GetBoolean() == NzLintCodeActions.IsSafeForFixAll(code!),
+                $"[{id}] production Fix All eligibility for {code} differs.");
         var fix = NzLintCodeActions.GetQuickFix(issue!, sql, schema);
         Assert.True(fix.HasValue, $"[{id}] production diagnostic {code} did not produce a quick fix.");
         if (expected.TryGetProperty("titleContains", out var title)
@@ -641,6 +649,25 @@ public sealed class SharedSqlConformanceAuthoringTests
             Assert.Contains(find.GetString() ?? string.Empty, sql[issue.StartOffset..issue.EndOffset], StringComparison.OrdinalIgnoreCase);
         }
     }
+    private static void AssertFixAll(JsonElement fixAll, string sql, ISchemaProvider? schema, string id)
+    {
+        var issues = CollectLintIssues(sql, schema, "full");
+        var result = NzLintCodeActions.ApplyAllSafeFixes(sql, issues, schema);
+        Assert.True(fixAll.GetProperty("resultSql").GetString() == result,
+            $"[{id}] production Fix All result differs: {result}");
+        if (fixAll.TryGetProperty("notApplied", out var notApplied))
+        {
+            foreach (var code in notApplied.EnumerateArray().Select(item => item.GetString()!))
+                Assert.True(issues.Any(issue => issue.RuleId.Equals(code, StringComparison.OrdinalIgnoreCase)),
+                    $"[{id}] production diagnostics did not report {code}.");
+        }
+        if (fixAll.TryGetProperty("idempotent", out var idempotent) && idempotent.GetBoolean())
+        {
+            var again = NzLintCodeActions.ApplyAllSafeFixes(result, CollectLintIssues(result, schema, "full"), schema);
+            Assert.True(result == again, $"[{id}] production Fix All is not idempotent: {again}");
+        }
+    }
+
     private static IReadOnlyList<LintIssue> CollectLintIssues(
         string sql, ISchemaProvider? schema, string pipeline)
     {
