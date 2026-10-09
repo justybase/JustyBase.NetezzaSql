@@ -375,6 +375,12 @@ public sealed class SharedSqlConformanceAuthoringTests
             return;
         }
 
+        if (expected.TryGetProperty("columnIdentity", out var columnIdentity))
+        {
+            AssertColumnIdentity(columnIdentity, sql, cursor, schema, dialect, id);
+            return;
+        }
+
         if (expected.TryGetProperty("definition", out var definition))
         {
             var actual = NzSymbolService.GetDefinition(sql, cursor);
@@ -535,6 +541,87 @@ public sealed class SharedSqlConformanceAuthoringTests
         SqlScopeRelationKind.ScriptLocalTable => "script_local_table",
         _ => throw new ArgumentOutOfRangeException(nameof(kind))
     };
+
+    private static void AssertColumnIdentity(JsonElement expected, string sql, int cursor, ISchemaProvider? schema, SqlDialect dialect, string id)
+    {
+        var identity = NzColumnIdentityService.Resolve(sql, cursor, schema, dialect);
+        Assert.True(identity is not null, $"[{id}] production column identity was not resolved");
+        Assert.True(string.Equals(GetString(expected, "name"), identity!.Name, StringComparison.OrdinalIgnoreCase),
+            $"[{id}] column name differs: {identity.Name}");
+        var status = identity.Status switch
+        {
+            SqlColumnResolutionStatus.Resolved => "resolved",
+            SqlColumnResolutionStatus.Ambiguous => "ambiguous",
+            _ => "unresolved",
+        };
+        Assert.True(GetString(expected, "status") == status, $"[{id}] column status differs: {status}");
+        if (expected.TryGetProperty("targetKind", out var targetKind))
+            Assert.True(targetKind.GetString() == (identity.IsLocalDefinition ? "local_document_definition" : "catalog_object_target"),
+                $"[{id}] column target kind differs");
+        if (expected.TryGetProperty("relationKind", out var relationKind))
+        {
+            var actualKind = identity.RelationKind switch
+            {
+                SqlColumnRelationKind.Table => "table",
+                SqlColumnRelationKind.Cte => "cte",
+                SqlColumnRelationKind.DerivedTable => "derived_table",
+                SqlColumnRelationKind.ScriptLocalTable => "script_local_table",
+                SqlColumnRelationKind.OutputAlias => "output_alias",
+                _ => null,
+            };
+            Assert.True(relationKind.GetString() == actualKind, $"[{id}] relation kind differs: {actualKind}");
+        }
+        if (expected.TryGetProperty("relation", out var relation))
+            Assert.True(string.Equals(relation.GetString(), identity.Relation, StringComparison.OrdinalIgnoreCase),
+                $"[{id}] relation differs: {identity.Relation}");
+        if (expected.TryGetProperty("definition", out var definition))
+        {
+            var actual = NzColumnIdentityService.GetDefinition(sql, cursor, schema, dialect);
+            Assert.True(actual is not null, $"[{id}] production column definition was not resolved");
+            AssertColumnRange(definition, actual!, sql, id);
+        }
+        else
+        {
+            Assert.True(identity.Definition is null, $"[{id}] unexpected local column definition");
+        }
+        if (expected.TryGetProperty("catalog", out var catalog)) AssertCatalogColumn(catalog, identity.Catalog, id, "catalog");
+        if (expected.TryGetProperty("origin", out var origin)) AssertCatalogColumn(origin, identity.Origin, id, "origin");
+        if (expected.TryGetProperty("candidates", out var candidates))
+        {
+            var wanted = candidates.EnumerateArray().Select(item => item.GetString()!.ToUpperInvariant()).OrderBy(x => x).ToArray();
+            var actual = identity.Candidates.Select(item => item.ToUpperInvariant()).OrderBy(x => x).ToArray();
+            Assert.True(wanted.SequenceEqual(actual), $"[{id}] ambiguity candidates differ: {string.Join(",", actual)}");
+        }
+        if (expected.TryGetProperty("references", out var references))
+        {
+            var includeDeclaration = expected.TryGetProperty("includeDeclaration", out var include) && include.GetBoolean();
+            var actual = NzColumnIdentityService.GetReferences(sql, cursor, includeDeclaration, schema, dialect);
+            var wanted = references.EnumerateArray().ToArray();
+            Assert.True(wanted.Length == actual.Count,
+                $"[{id}] column references differ: {string.Join(",", actual.Select(item => $"{item.StartOffset}-{item.EndOffset}"))}");
+            for (var index = 0; index < wanted.Length; index++) AssertColumnRange(wanted[index], actual[index], sql, id);
+        }
+    }
+
+    private static void AssertColumnRange(JsonElement expected, SqlColumnOccurrence actual, string sql, string id)
+    {
+        Assert.True(expected.GetProperty("start").GetInt32() == actual.StartOffset
+                    && expected.GetProperty("end").GetInt32() == actual.EndOffset
+                    && GetString(expected, "text") == sql[actual.StartOffset..actual.EndOffset],
+            $"[{id}] column range differs: {actual.StartOffset}-{actual.EndOffset}");
+    }
+
+    private static void AssertCatalogColumn(JsonElement expected, SqlCatalogColumn? actual, string id, string label)
+    {
+        Assert.True(actual is not null, $"[{id}] production {label} column is missing");
+        static bool Same(JsonElement element, string property, string? value) =>
+            !element.TryGetProperty(property, out var wanted) || wanted.ValueKind == JsonValueKind.Null
+                ? value is null || !element.TryGetProperty(property, out _)
+                : string.Equals(wanted.GetString(), value, StringComparison.OrdinalIgnoreCase);
+        Assert.True(Same(expected, "database", actual!.Database) && Same(expected, "schema", actual.Schema)
+                    && Same(expected, "relation", actual.Relation) && Same(expected, "column", actual.Column),
+            $"[{id}] production {label} differs: {actual}");
+    }
 
     private static void AssertNavigationRange(JsonElement expected, SymbolOccurrence actual, string sql)
     {
