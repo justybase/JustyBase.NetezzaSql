@@ -44,4 +44,36 @@ public sealed record SqlColumnIdentity(
 {
     /// <summary>True when the identity navigates to a definition inside the document.</summary>
     public bool IsLocalDefinition => Definition is not null;
+
+    /// <summary>Metadata data type of <see cref="Catalog"/> or <see cref="Origin"/>; null when unknown.</summary>
+    public string? DataType { get; init; }
 }
+
+/// <summary>How a catalog target was reached.</summary>
+public enum SqlColumnTargetVia
+{
+    /// <summary>The column itself is physical.</summary>
+    Catalog,
+    /// <summary>The proven physical origin of a local projection.</summary>
+    Origin
+}
+
+/// <summary>
+/// A catalog column a host can reveal in its schema browser. Physical columns
+/// never get a document range; this is their navigation target.
+/// </summary>
+public sealed record SqlColumnCatalogTarget(string? Database, string? Schema, string Relation, string Column, SqlColumnTargetVia Via);
+
+/// <summary>
+/// What column hover shows, from the identity that drives Definition and
+/// References. <see cref="Origin"/> and <see cref="DataType"/> are null when
+/// they cannot be proven.
+/// </summary>
+public sealed record SqlColumnHoverInfo(
+    string Name,
+    SqlColumnResolutionStatus Status,
+    SqlColumnRelationKind? RelationKind,
+    string? Relation,
+    SqlCatalogColumn? Origin,
+    string? DataType,
+    IReadOnlyList<string> Candidates);

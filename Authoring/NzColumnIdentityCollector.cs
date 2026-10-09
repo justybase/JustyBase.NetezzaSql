@@ -53,6 +53,8 @@ internal sealed class NzColumnIdentityCollector
         /// <summary>Physical catalog path and its column names; names are null when metadata is unknown.</summary>
         public (string? Database, string? Schema, string Table)? Physical { get; init; }
         public IReadOnlyList<string>? PhysicalColumns { get; init; }
+        /// <summary>Metadata data types aligned with <see cref="PhysicalColumns"/>.</summary>
+        public IReadOnlyList<string?>? PhysicalTypes { get; init; }
 
         public string ExposedNorm => Alias is not null ? Normalize(Alias, AliasQuoted) : Normalize(Name, NameQuoted);
 
@@ -77,6 +79,7 @@ internal sealed class NzColumnIdentityCollector
     private readonly List<Occurrence> _occurrences = new();
     private readonly Dictionary<string, IdentityInfo> _identities = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Relation> _scriptTables = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _physicalTypes = new(StringComparer.Ordinal);
     private Token<NzToken>[] _tokens = Array.Empty<Token<NzToken>>();
     private int[] _tokenStarts = Array.Empty<int>();
 
@@ -85,6 +88,10 @@ internal sealed class NzColumnIdentityCollector
     public IReadOnlyList<Occurrence> Occurrences => _occurrences;
 
     public IReadOnlyDictionary<string, IdentityInfo> Identities => _identities;
+
+    /// <summary>Metadata data type of a physical column; null when metadata does not know it.</summary>
+    public string? TypeOf(SqlCatalogColumn? column)
+        => column is not null && _physicalTypes.TryGetValue(PhysicalKey(column), out var type) ? type : null;
 
     public static NzColumnIdentityCollector Collect(string text, ISchemaProvider? schema, SqlDialect dialect)
     {
@@ -341,6 +348,7 @@ internal sealed class NzColumnIdentityCollector
             Kind = SqlColumnRelationKind.Table,
             Physical = (info?.Database ?? table.Database, info?.Schema ?? table.Schema, info?.Name ?? table.Name),
             PhysicalColumns = info?.Columns is { Count: > 0 } known ? known.Select(column => column.Name).ToArray() : null,
+            PhysicalTypes = info?.Columns is { Count: > 0 } typed ? typed.Select(column => column.DataType).ToArray() : null,
         });
     }
 
@@ -488,14 +496,19 @@ internal sealed class NzColumnIdentityCollector
         if (relation.Physical is { } physical)
         {
             var columnName = name;
+            string? type = null;
             if (relation.PhysicalColumns is not null)
             {
-                var match = relation.PhysicalColumns.FirstOrDefault(column => string.Equals(Normalize(column, false), norm, StringComparison.Ordinal));
-                if (match is null) return null;
-                columnName = match;
+                var index = -1;
+                for (var i = 0; i < relation.PhysicalColumns.Count && index < 0; i++)
+                    if (string.Equals(Normalize(relation.PhysicalColumns[i], false), norm, StringComparison.Ordinal)) index = i;
+                if (index < 0) return null;
+                columnName = relation.PhysicalColumns[index];
+                type = relation.PhysicalTypes is { } types && index < types.Count ? types[index] : null;
             }
             var catalog = new SqlCatalogColumn(physical.Database, physical.Schema, physical.Table, columnName);
             var key = PhysicalKey(catalog);
+            if (!string.IsNullOrEmpty(type)) _physicalTypes[key] = type;
             if (!_identities.ContainsKey(key))
             {
                 _identities[key] = new IdentityInfo
@@ -592,11 +605,14 @@ internal sealed class NzColumnIdentityCollector
             if (relation.Physical is { } physical)
             {
                 if (relation.PhysicalColumns is null) continue;
-                foreach (var column in relation.PhysicalColumns)
+                for (var i = 0; i < relation.PhysicalColumns.Count; i++)
                 {
+                    var column = relation.PhysicalColumns[i];
                     var norm = Normalize(column, false);
-                    yield return new ProjectedColumn(column, norm, $"L|{start}|{relation.ExposedNorm}|{norm}", start, end,
-                        new SqlCatalogColumn(physical.Database, physical.Schema, physical.Table, column));
+                    var origin = new SqlCatalogColumn(physical.Database, physical.Schema, physical.Table, column);
+                    if (relation.PhysicalTypes is { } types && i < types.Count && !string.IsNullOrEmpty(types[i]))
+                        _physicalTypes[PhysicalKey(origin)] = types[i]!;
+                    yield return new ProjectedColumn(column, norm, $"L|{start}|{relation.ExposedNorm}|{norm}", start, end, origin);
                 }
                 continue;
             }

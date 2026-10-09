@@ -116,6 +116,16 @@ public static class NzHoverService
 
         try
         {
+            // Columns: the identity that drives Definition and References. Its
+            // occurrences also cover a caret right after a qualifier dot. It is
+            // resolved before the token-based hover below, which unresolved
+            // references keep, so a column hover tokenizes the text only once.
+            if (NzColumnIdentityAnalysis.Analyze(text, schema, dialect)?.GetHoverInfo(offset) is { } column
+                && column.Status != SqlColumnResolutionStatus.Unresolved)
+            {
+                return new SqlHoverInfo(FormatColumnHover(column), wordStart, Math.Max(wordStart, wordEnd), "Column", column);
+            }
+
             var tokens = DialectRuntime.Tokenize(text, dialect).ToArray();
             if (tokens.Length == 0)
                 return null;
@@ -282,6 +292,34 @@ public static class NzHoverService
         return keywordFallback is null
             ? null
             : $"**{name.ToUpperInvariant()}**  \n{keywordFallback}";
+    }
+
+    private static string FormatColumnHover(SqlColumnHoverInfo column)
+    {
+        var lines = new List<string> { $"**column** `{column.Name}`" };
+        if (column.Status == SqlColumnResolutionStatus.Ambiguous)
+        {
+            lines.Add("ambiguous: " + string.Join(", ", column.Candidates.Select(candidate => $"`{candidate}`")));
+            return string.Join("\n", lines);
+        }
+        var label = column.RelationKind switch
+        {
+            SqlColumnRelationKind.Table => "table",
+            SqlColumnRelationKind.Cte => "CTE",
+            SqlColumnRelationKind.DerivedTable => "derived table",
+            SqlColumnRelationKind.ScriptLocalTable => "script table",
+            SqlColumnRelationKind.OutputAlias => "output alias",
+            _ => null,
+        };
+        if (label is not null) lines.Add(column.Relation is null ? label : $"{label}: `{column.Relation}`");
+        if (column.Origin is { } origin)
+        {
+            var path = string.Join('.', new[] { origin.Database, origin.Schema, origin.Relation, origin.Column }
+                .Where(part => !string.IsNullOrEmpty(part)));
+            lines.Add($"origin: `{path}`");
+        }
+        if (column.DataType is not null) lines.Add($"type: `{column.DataType}`");
+        return string.Join("\n", lines);
     }
 
     private static string FormatFunctionDetail(string functionName, SqlSignatureInfo signature)

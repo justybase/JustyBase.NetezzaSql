@@ -606,6 +606,41 @@ public sealed class SharedSqlConformanceAuthoringTests
                 $"[{id}] column references differ: {string.Join(",", actual.Select(item => $"{item.StartOffset}-{item.EndOffset}"))}");
             for (var index = 0; index < wanted.Length; index++) AssertColumnRange(wanted[index], actual[index], sql, id);
         }
+        if (expected.TryGetProperty("catalogTarget", out var catalogTarget))
+        {
+            var target = NzColumnIdentityService.GetCatalogTarget(sql, cursor, schema, dialect);
+            if (catalogTarget.ValueKind == JsonValueKind.Null)
+            {
+                Assert.True(target is null, $"[{id}] unexpected catalog target: {target}");
+            }
+            else
+            {
+                Assert.True(target is not null, $"[{id}] production catalog target is missing");
+                var via = target!.Via == SqlColumnTargetVia.Catalog ? "catalog" : "origin";
+                Assert.True(GetString(catalogTarget, "via") == via, $"[{id}] catalog target via differs: {via}");
+                AssertCatalogColumn(catalogTarget, new SqlCatalogColumn(target.Database, target.Schema, target.Relation, target.Column), id, "catalog target");
+            }
+        }
+        if (expected.TryGetProperty("rename", out var rename))
+        {
+            var edits = NzColumnIdentityService.GetRenameEdits(sql, cursor, GetString(rename, "newName"), schema, dialect);
+            if (rename.TryGetProperty("rejected", out var rejected) && rejected.GetBoolean())
+            {
+                Assert.True(edits is null, $"[{id}] production column rename was not rejected: {string.Join(",", edits ?? [])}");
+                return;
+            }
+            Assert.True(edits is not null, $"[{id}] production column rename was rejected");
+            var expectedEdits = rename.GetProperty("edits").EnumerateArray().ToArray();
+            Assert.True(expectedEdits.Length == edits!.Count, $"[{id}] column rename edit count differs: {edits.Count}");
+            for (var index = 0; index < edits.Count; index++)
+                Assert.True(expectedEdits[index].GetProperty("start").GetInt32() == edits[index].StartOffset
+                            && expectedEdits[index].GetProperty("end").GetInt32() == edits[index].EndOffset
+                            && GetString(expectedEdits[index], "text") == edits[index].NewText,
+                    $"[{id}] column rename edit differs: {edits[index]}");
+            var resultSql = sql;
+            foreach (var edit in edits.Reverse()) resultSql = resultSql[..edit.StartOffset] + edit.NewText + resultSql[edit.EndOffset..];
+            Assert.True(GetString(rename, "resultSql") == resultSql, $"[{id}] column rename SQL differs: {resultSql}");
+        }
     }
 
     private static void AssertColumnRange(JsonElement expected, SqlColumnOccurrence actual, string sql, string id)
@@ -808,6 +843,50 @@ public sealed class SharedSqlConformanceAuthoringTests
             Assert.Contains(contains.GetString() ?? string.Empty, hover!.Content, StringComparison.OrdinalIgnoreCase);
         if (expected.TryGetProperty("targetKind", out var targetKind))
             Assert.Equal(targetKind.GetString(), hover!.TargetKind, ignoreCase: true);
+        if (expected.TryGetProperty("column", out var column)) AssertColumnHover(column, hover!.Column, id);
+    }
+
+    private static void AssertColumnHover(JsonElement expected, SqlColumnHoverInfo? actual, string id)
+    {
+        Assert.True(actual is not null, $"[{id}] production hover has no column identity");
+        static bool Same(JsonElement element, string property, string? value) =>
+            !element.TryGetProperty(property, out var wanted) || wanted.ValueKind != JsonValueKind.String
+            || string.Equals(wanted.GetString(), value, StringComparison.OrdinalIgnoreCase);
+        var status = actual!.Status switch
+        {
+            SqlColumnResolutionStatus.Resolved => "resolved",
+            SqlColumnResolutionStatus.Ambiguous => "ambiguous",
+            _ => "unresolved",
+        };
+        var relationKind = actual.RelationKind switch
+        {
+            SqlColumnRelationKind.Table => "table",
+            SqlColumnRelationKind.Cte => "cte",
+            SqlColumnRelationKind.DerivedTable => "derived_table",
+            SqlColumnRelationKind.ScriptLocalTable => "script_local_table",
+            SqlColumnRelationKind.OutputAlias => "output_alias",
+            _ => null,
+        };
+        Assert.True(Same(expected, "name", actual.Name), $"[{id}] hover column name differs: {actual.Name}");
+        Assert.True(Same(expected, "relation", actual.Relation), $"[{id}] hover relation differs: {actual.Relation}");
+        Assert.True(!expected.TryGetProperty("status", out var wantedStatus) || wantedStatus.GetString() == status,
+            $"[{id}] hover status differs: {status}");
+        Assert.True(!expected.TryGetProperty("relationKind", out var wantedKind) || wantedKind.GetString() == relationKind,
+            $"[{id}] hover relation kind differs: {relationKind}");
+        if (expected.TryGetProperty("type", out var type))
+            Assert.True(type.ValueKind == JsonValueKind.Null ? actual.DataType is null : type.GetString() == actual.DataType,
+                $"[{id}] hover type differs: {actual.DataType}");
+        if (expected.TryGetProperty("origin", out var origin))
+        {
+            if (origin.ValueKind == JsonValueKind.Null) Assert.True(actual.Origin is null, $"[{id}] unexpected hover origin: {actual.Origin}");
+            else AssertCatalogColumn(origin, actual.Origin, id, "hover origin");
+        }
+        if (expected.TryGetProperty("candidates", out var candidates))
+        {
+            var wanted = candidates.EnumerateArray().Select(item => item.GetString()!.ToUpperInvariant()).OrderBy(x => x).ToArray();
+            var got = actual.Candidates.Select(item => item.ToUpperInvariant()).OrderBy(x => x).ToArray();
+            Assert.True(wanted.SequenceEqual(got), $"[{id}] hover candidates differ: {string.Join(",", got)}");
+        }
     }
 
     private static async Task AssertRecovery(
