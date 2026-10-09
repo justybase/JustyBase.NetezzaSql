@@ -416,6 +416,11 @@ public sealed class SharedSqlConformanceAuthoringTests
             if (navigation.TryGetProperty("rename", out var rename))
             {
                 var edits = NzRenameService.GetRenameEdits(sql, cursor, GetString(rename, "newName"));
+                if (rename.TryGetProperty("rejected", out var rejected) && rejected.GetBoolean())
+                {
+                    Assert.True(edits is null, $"[{id}] production rename was not rejected");
+                    return;
+                }
                 Assert.NotNull(edits);
                 var expectedEdits = rename.GetProperty("edits").EnumerateArray().ToArray();
                 Assert.Equal(expectedEdits.Length, edits.Count);

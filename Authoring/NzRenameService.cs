@@ -24,6 +24,9 @@ public static class NzRenameService
         // Conservative capture prevention, including unrelated query scopes.
         if (index.Occurrences.Any(o => o.IsDefinition
             && !own.Contains(o.StartAbsolute) && string.Equals(o.Name, name, StringComparison.OrdinalIgnoreCase))) return null;
+        // An unaliased physical relation exposes its table name as a qualifier;
+        // renaming an alias or CTE to that name would capture its references.
+        if (name is not null && index.ExposedRelationNames.Contains(name)) return null;
         return symbol.Occurrences.OrderBy(o => o.StartAbsolute).Select(o => new SqlTextEdit(
             o.StartAbsolute, o.EndAbsolute, FormatReplacement(text[o.StartAbsolute..o.EndAbsolute], newName, dialect)!)).ToArray();
     }

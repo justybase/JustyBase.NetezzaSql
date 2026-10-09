@@ -11,6 +11,9 @@ internal sealed class NzSymbolCollector
     private readonly Dictionary<int, SymbolOccurrence> _definitionById = new();
     private int _nextId = 1;
     private readonly Dictionary<int, int> _tokenLengths = new();
+    // Exposed names of unaliased physical relations; they bind qualifiers too,
+    // so a rename must not take one of these names.
+    private readonly HashSet<string> _exposedRelationNames = new(StringComparer.OrdinalIgnoreCase);
 
     private sealed class ScopeFrame
     {
@@ -26,7 +29,7 @@ internal sealed class NzSymbolCollector
     {
         var collector = new NzSymbolCollector();
         collector.Analyze(text, dialect);
-        return new SymbolIndex(collector._occurrences, collector._definitionById);
+        return new SymbolIndex(collector._occurrences, collector._definitionById, collector._exposedRelationNames);
     }
 
     private void Analyze(string text, SqlDialect dialect)
@@ -293,6 +296,10 @@ internal sealed class NzSymbolCollector
                     tokens[tableRange.Value.EndIndex].Span.Position.Absolute + tokens[tableRange.Value.EndIndex].Span.Length,
                     cteDef.Id);
             }
+        }
+        else if (string.IsNullOrWhiteSpace(source.Alias))
+        {
+            _exposedRelationNames.Add(source.Table.Name);
         }
 
         cursor = SkipTableName(tokens, cursor, endIndex, source.Table);
@@ -751,11 +758,16 @@ internal sealed class SymbolIndex
     private readonly IReadOnlyList<SymbolOccurrence> _occurrences;
     private readonly Dictionary<int, SymbolOccurrence> _definitionById;
 
-    public SymbolIndex(IReadOnlyList<SymbolOccurrence> occurrences, Dictionary<int, SymbolOccurrence> definitionById)
+    public SymbolIndex(IReadOnlyList<SymbolOccurrence> occurrences, Dictionary<int, SymbolOccurrence> definitionById,
+        IReadOnlySet<string>? exposedRelationNames = null)
     {
         _occurrences = occurrences;
         _definitionById = definitionById;
+        ExposedRelationNames = exposedRelationNames ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     }
+
+    /// <summary>Exposed names of unaliased physical relations referenced by the document.</summary>
+    public IReadOnlySet<string> ExposedRelationNames { get; }
 
     public IReadOnlyList<SymbolOccurrence> Occurrences => _occurrences;
 

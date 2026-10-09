@@ -33,4 +33,23 @@ public sealed class SymbolSafetyRegressionTests
         if (edits is null) return;
         Assert.All(edits, edit => Assert.Contains(sql[edit.StartOffset..edit.EndOffset], new[] { "a", "q", "d" }));
     }
+
+    [Theory]
+    [InlineData("SELECT a.ID FROM T a JOIN ORDERS ON ORDERS.ID = a.ID", "SELECT a.", "ORDERS")]
+    [InlineData("SELECT a.ID FROM T a JOIN SALES.ORDERS ON ORDERS.ID = a.ID", "SELECT a.", "orders")]
+    [InlineData("WITH A AS (SELECT 1 AS ID) SELECT * FROM A JOIN ORDERS ON ORDERS.ID = A.ID", "WITH A", "ORDERS")]
+    public void Rename_RejectsCaptureOfUnaliasedPhysicalRelation(string sql, string anchor, string newName)
+    {
+        var offset = sql.IndexOf(anchor, StringComparison.Ordinal) + anchor.Length - 1;
+        Assert.Null(NzRenameService.GetRenameEdits(sql, offset, newName));
+    }
+
+    [Fact]
+    public void Rename_StillAllowsANameNoVisibleRelationExposes()
+    {
+        const string sql = "SELECT a.ID FROM T a JOIN ORDERS ON ORDERS.ID = a.ID";
+        var edits = NzRenameService.GetRenameEdits(sql, sql.IndexOf("a.", StringComparison.Ordinal), "ACCT");
+        Assert.NotNull(edits);
+        Assert.Equal(3, edits!.Count);
+    }
 }
