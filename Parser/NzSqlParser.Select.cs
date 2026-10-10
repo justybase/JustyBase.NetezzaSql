@@ -922,7 +922,56 @@ public partial class NzSqlParser
             _ => new TableName(parts[^1]!)
         };
 
-        return (table with { IsScriptVariable = dynamicParts.Any(static part => part) }, first);
+        var (nameEndLine, nameEndColumn) = EndOfToken(_tokens[Math.Max(_pos - 1, 0)]);
+        return (table with
+        {
+            IsScriptVariable = dynamicParts.Any(static part => part),
+            Position = SourcePosition.FromToken(first),
+            EndLine = nameEndLine,
+            EndColumn = nameEndColumn
+        }, first);
+    }
+
+    /// <summary>
+    /// Parses the dotted target of <c>COMMENT ON COLUMN</c>: the last segment is the column and the
+    /// preceding one to three segments name its relation (<c>[db.][schema.]table.column</c>).
+    /// </summary>
+    protected (TableName Relation, string Column, SourcePosition ColumnPosition) ParseColumnTarget()
+    {
+        var parts = new List<(string? Value, char? Quote, Token<NzToken> First)>();
+        var first = Peek();
+        while (true)
+        {
+            var part = ParseNamePart();
+            parts.Add((part.Value, part.Quote, part.FirstToken));
+            if (Peek().Kind != NzToken.Dot) break;
+            Advance();
+            if (Peek().Kind == NzToken.Dot)
+            {
+                // database..table: empty schema segment.
+                parts.Add((null, null, Peek()));
+                Advance();
+            }
+        }
+
+        var last = parts[^1];
+        var owner = parts.Take(parts.Count - 1).ToList();
+        if (owner.Count == 0)
+            return (new TableName(last.Value!, NameQuote: last.Quote), last.Value!, SourcePosition.FromToken(last.First));
+
+        var table = owner switch
+        {
+            [var a] => new TableName(a.Value!, NameQuote: a.Quote),
+            [var a, var b] => new TableName(b.Value!, Schema: a.Value, NameQuote: b.Quote, SchemaQuote: a.Quote),
+            [var a, { Value: null }, var c] => new TableName(c.Value!, Database: a.Value,
+                NameQuote: c.Quote, DatabaseQuote: a.Quote),
+            [var a, var b, var c] => new TableName(c.Value!, Schema: b.Value, Database: a.Value,
+                NameQuote: c.Quote, SchemaQuote: b.Quote, DatabaseQuote: a.Quote),
+            _ => new TableName(owner[^1].Value!, NameQuote: owner[^1].Quote)
+        };
+        var (endLine, endColumn) = EndOfToken(owner[^1].First);
+        table = table with { Position = SourcePosition.FromToken(first), EndLine = endLine, EndColumn = endColumn };
+        return (table, last.Value!, SourcePosition.FromToken(last.First));
     }
 
     private (string Value, char? Quote, bool IsScriptVariable, Token<NzToken> FirstToken) ParseNamePart()

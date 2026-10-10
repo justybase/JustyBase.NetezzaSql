@@ -791,7 +791,8 @@ public partial class NzSqlParser
         var second = tokens.Count > 1 ? tokens[1].Kind : NzToken.Unknown;
         var position = FromToken(tokens[0]);
         if (first == NzToken.Add && second == NzToken.Column) return new AddColumnAlterAction(position, raw);
-        if (first == NzToken.Add && second == NzToken.Constraint) return new AddConstraintAlterAction(position, raw);
+        if (first == NzToken.Add && second == NzToken.Constraint)
+            return new AddConstraintAlterAction(position, raw, CollectConstraintKeyColumns(tokens));
         if (first == NzToken.Alter && second == NzToken.Column) return new AlterColumnAlterAction(position, raw);
         if (first == NzToken.Drop
             && second is NzToken.Column or NzToken.Constraint)
@@ -821,6 +822,31 @@ public partial class NzSqlParser
         if (first == NzToken.Organize) return new OrganizeOnAlterAction(position, raw);
         if (first is NzToken.Cascade or NzToken.Restrict) return new CascadeAlterAction(position, raw);
         return new UnknownAlterAction(position, raw);
+    }
+
+    private static IReadOnlyList<ConstraintKeyColumn>? CollectConstraintKeyColumns(IReadOnlyList<Token<NzToken>> tokens)
+    {
+        for (var i = 0; i < tokens.Count; i++)
+        {
+            var text = tokens[i].ToStringValue() ?? string.Empty;
+            var isKey = text.Equals("UNIQUE", StringComparison.OrdinalIgnoreCase)
+                || ((text.Equals("PRIMARY", StringComparison.OrdinalIgnoreCase)
+                    || text.Equals("FOREIGN", StringComparison.OrdinalIgnoreCase))
+                    && i + 1 < tokens.Count
+                    && (tokens[i + 1].ToStringValue() ?? string.Empty).Equals("KEY", StringComparison.OrdinalIgnoreCase));
+            if (!isKey) continue;
+            var open = i + (text.Equals("UNIQUE", StringComparison.OrdinalIgnoreCase) ? 1 : 2);
+            if (open >= tokens.Count || tokens[open].Kind != NzToken.LParen) return null;
+            var keys = new List<ConstraintKeyColumn>();
+            for (var j = open + 1; j < tokens.Count && tokens[j].Kind != NzToken.RParen; j++)
+            {
+                if (tokens[j].Kind == NzToken.Comma) continue;
+                var value = tokens[j].ToStringValue() ?? string.Empty;
+                keys.Add(new ConstraintKeyColumn(value.Trim('"'), SourcePosition.FromToken(tokens[j]), tokens[j].Span.Length));
+            }
+            return keys;
+        }
+        return null;
     }
 
     // ====== TRUNCATE ======
@@ -893,7 +919,20 @@ public partial class NzSqlParser
                 objectType = "TABLE";
         }
 
-        var (obj, _) = ParseTableName();
+        TableName obj;
+        string? columnName = null;
+        SourcePosition? columnPosition = null;
+        if (isColumn)
+        {
+            var target = ParseColumnTarget();
+            obj = target.Relation;
+            columnName = target.Column;
+            columnPosition = target.ColumnPosition;
+        }
+        else
+        {
+            (obj, _) = ParseTableName();
+        }
 
         if (objectType == "PROCEDURE" && Peek().Kind == NzToken.LParen)
         {
@@ -907,17 +946,10 @@ public partial class NzSqlParser
             }
         }
 
-        string? columnName = null;
-        if (isColumn && Peek().Kind == NzToken.Dot)
-        {
-            Advance();
-            columnName = ExpectNameToken().ToStringValue();
-        }
-
         Expect(NzToken.Is);
         var comment = Expect(NzToken.StringLiteral).ToStringValue();
 
-        return new CommentStatement(FromToken(commentTok), objectType, obj, columnName, comment);
+        return new CommentStatement(FromToken(commentTok), objectType, obj, columnName, comment, columnPosition);
     }
 
     // ====== GRANT / REVOKE ======
@@ -933,6 +965,7 @@ public partial class NzSqlParser
         }
         else
         {
+            RejectNameAfterObjectClass("TO");
             ParseCommandTail();
         }
         return new GrantStatement(FromToken(tok));
@@ -949,9 +982,31 @@ public partial class NzSqlParser
         }
         else
         {
+            RejectNameAfterObjectClass("FROM");
             ParseCommandTail();
         }
         return new RevokeStatement(FromToken(tok));
+    }
+
+    /// <summary>
+    /// <c>GRANT SELECT ON TABLE TO u</c> grants on the object class; live Netezza rejects a relation
+    /// name after the class keyword (<c>ON TABLE t TO u</c>).
+    /// </summary>
+    private void RejectNameAfterObjectClass(string roleClause)
+    {
+        for (var ahead = 0; Peek(ahead).Kind is not (NzToken.Semicolon or NzToken.Unknown); ahead++)
+        {
+            if (Peek(ahead).Kind != NzToken.On) continue;
+            var cls = Peek(ahead + 1);
+            var next = Peek(ahead + 2);
+            if (cls.Kind is NzToken.Table
+                && !next.ToStringValue().Equals(roleClause, StringComparison.OrdinalIgnoreCase)
+                && next.Kind is not (NzToken.Semicolon or NzToken.Unknown))
+            {
+                AddParserError($"Expected {roleClause} after the object class '{cls.ToStringValue()}'", next, "PAR003");
+            }
+            return;
+        }
     }
 
     // ====== CALL / EXECUTE ======

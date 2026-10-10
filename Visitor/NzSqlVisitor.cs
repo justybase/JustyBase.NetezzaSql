@@ -68,8 +68,19 @@ public partial class NzSqlVisitor
     private TableInfo? GetSchemaTable(TableName table) =>
         _schema?.GetTable(EffectiveDatabase(table), table.Schema, table.Name);
 
-    private bool SchemaTableExists(TableName table) =>
-        _schema?.TableExists(EffectiveDatabase(table), table.Schema, table.Name) == true;
+    private bool SchemaTableExists(TableName table)
+    {
+        if (_schema?.TableExists(EffectiveDatabase(table), table.Schema, table.Name) != true)
+            return false;
+        // Quoted identifiers are case-sensitive in Netezza ("dimdate" does not match DIMDATE).
+        if (table.NameQuote == '"')
+        {
+            var actual = GetSchemaTable(table);
+            if (actual is not null && !string.Equals(actual.Name, table.Name, StringComparison.Ordinal))
+                return false;
+        }
+        return true;
+    }
 
     public void Reset()
     {

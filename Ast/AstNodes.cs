@@ -253,7 +253,12 @@ public record AlterTableStatement(
 
 public abstract record AlterTableAction(SourcePosition Position, string RawSql) : AstNode(Position);
 public record AddColumnAlterAction(SourcePosition Position, string RawSql) : AlterTableAction(Position, RawSql);
-public record AddConstraintAlterAction(SourcePosition Position, string RawSql) : AlterTableAction(Position, RawSql);
+public record AddConstraintAlterAction(
+    SourcePosition Position, string RawSql, IReadOnlyList<ConstraintKeyColumn>? KeyColumns = null)
+    : AlterTableAction(Position, RawSql);
+
+/// <summary>A column named in the key list of PRIMARY KEY / UNIQUE / FOREIGN KEY (before REFERENCES).</summary>
+public record ConstraintKeyColumn(string Name, SourcePosition Position, int Length);
 public record AlterColumnAlterAction(SourcePosition Position, string RawSql) : AlterTableAction(Position, RawSql);
 public record DropColumnAlterAction(SourcePosition Position, string RawSql) : AlterTableAction(Position, RawSql);
 public record DropConstraintAlterAction(SourcePosition Position, string RawSql) : AlterTableAction(Position, RawSql);
@@ -295,7 +300,8 @@ public record CommentStatement(
     string ObjectType,
     TableName Object,
     string? Column,
-    string Comment
+    string Comment,
+    SourcePosition? ColumnPosition = null
 ) : Statement(Position);
 
 public record GrantStatement(
@@ -391,7 +397,10 @@ public record TableName(
     char? NameQuote = null,
     char? SchemaQuote = null,
     char? DatabaseQuote = null,
-    bool IsScriptVariable = false
+    bool IsScriptVariable = false,
+    SourcePosition? Position = null,
+    int? EndLine = null,
+    int? EndColumn = null
 );
 
 public record JoinClause(

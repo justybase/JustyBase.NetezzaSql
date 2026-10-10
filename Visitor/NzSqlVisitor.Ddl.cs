@@ -160,6 +160,28 @@ public partial class NzSqlVisitor
     public void Visit(AlterTableStatement stmt)
     {
         LookupTableOnly(stmt.Table, stmt.Position);
+        if (stmt.Actions is null || GetSchemaTable(stmt.Table)?.Columns is not { Count: > 0 } columns)
+            return;
+        foreach (var action in stmt.Actions)
+            ValidateConstraintKeyColumns(action, stmt.Table.Name, columns);
+    }
+
+    /// <summary>
+    /// <c>ADD CONSTRAINT n PRIMARY KEY|UNIQUE|FOREIGN KEY (cols)</c>: key columns must exist on the
+    /// altered table. Columns after <c>REFERENCES</c> belong to another table and are not checked.
+    /// </summary>
+    private void ValidateConstraintKeyColumns(
+        AlterTableAction action, string tableName, IReadOnlyList<ColumnInfo> columns)
+    {
+        if (action is not AddConstraintAlterAction { KeyColumns: { } keys })
+            return;
+        foreach (var key in keys)
+        {
+            if (columns.Any(column => column.Name.Equals(key.Name, StringComparison.OrdinalIgnoreCase)))
+                continue;
+            AddError($"Column '{key.Name}' does not exist on relation '{tableName}'", "error", "SQL004",
+                key.Position, key.Position.Line, key.Position.Column + key.Length);
+        }
     }
 
     public void Visit(TruncateStatement stmt)
@@ -175,9 +197,13 @@ public partial class NzSqlVisitor
     public void Visit(CommentStatement stmt)
     {
         LookupTableOnly(stmt.Object, stmt.Position);
-        if (stmt.Column is not null && GetSchemaTable(stmt.Object)?.Columns is { } columns
+        if (stmt.Column is not null && GetSchemaTable(stmt.Object)?.Columns is { Count: > 0 } columns
             && !columns.Any(column => column.Name.Equals(stmt.Column, StringComparison.OrdinalIgnoreCase)))
-            AddError($"Column '{stmt.Column}' does not exist on relation '{stmt.Object.Name}'", "error", "SQL030", stmt.Position);
+        {
+            var at = stmt.ColumnPosition ?? stmt.Position;
+            AddError($"Column '{stmt.Column}' does not exist on relation '{stmt.Object.Name}'",
+                "error", "SQL004", at, at.Line, at.Column + stmt.Column.Length);
+        }
     }
 
     public void Visit(GroomStatement stmt)

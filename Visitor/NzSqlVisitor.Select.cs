@@ -149,10 +149,15 @@ public partial class NzSqlVisitor
         _scope.ExitScope();
     }
 
-    private void LookupTableOnly(TableName tableName, SourcePosition pos)
+    private void LookupTableOnly(TableName tableName, SourcePosition statementPosition)
     {
         if (tableName.IsScriptVariable)
             return;
+
+        // Diagnostics cover the object name as written, not the whole statement.
+        var pos = tableName.Position ?? statementPosition;
+        var endLine = tableName.EndLine;
+        var endColumn = tableName.EndColumn;
 
         var nameKey = tableName.Name.ToUpperInvariant();
         // Check if table exists in multi-statement scope or schema
@@ -174,13 +179,13 @@ public partial class NzSqlVisitor
                 {
                     AddError($"Invalid form '{fullName}' — use database..table syntax",
                         "error", "SQL007", pos,
-                        pos.Line, pos.Column + fullName.Length);
+                        endLine ?? pos.Line, endColumn ?? pos.Column + fullName.Length);
                 }
                 else
                 {
                     AddError($"Relation '{fullName}' does not exist",
                         "error", "SQL006", pos,
-                        pos.Line, pos.Column + fullName.Length);
+                        endLine ?? pos.Line, endColumn ?? pos.Column + fullName.Length);
                 }
             }
         }
@@ -243,7 +248,7 @@ public partial class NzSqlVisitor
                     || _schema.CanValidateUnqualifiedTableReferences()
                     || _schema.HasTables();
                 if (!existsInMsScope && canValidate
-                    && !SchemaTableExists(new TableName(table.Name, table.Schema, table.Database))
+                    && !SchemaTableExists(new TableName(table.Name, table.Schema, table.Database, NameQuote: source.Table.NameQuote))
                     && _schema.HasTables())
                 {
                     var fullName = FormatName(table.Database, table.Schema, table.Name);
