@@ -341,8 +341,13 @@ internal class ScopeWalker
         var result = new List<string>();
         if (from is null) return result;
         foreach (var tr in from)
+        {
             ExpandSource(tr.Source, result, qualifier);
-        return result;
+            if (tr.Joins is not null)
+                foreach (var join in tr.Joins)
+                    ExpandSource(join.Source, result, qualifier);
+        }
+        return result.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     private void ExpandSource(TableSource source, List<string> result, string? qualifier)
@@ -358,6 +363,14 @@ internal class ScopeWalker
             if (!matchAlias && !matchName) return;
         }
 
+        // A CTE shadows any physical table with the same name.
+        var scopeTable = _scope.FindTable(source.Table.Name);
+        if (scopeTable is { IsCte: true, Columns.Count: > 0 })
+        {
+            result.AddRange(scopeTable.Columns.Select(c => c.Name));
+            return;
+        }
+
         // Schema columns
         if (_schema is not null)
         {
@@ -370,8 +383,6 @@ internal class ScopeWalker
             }
         }
 
-        // CTE columns
-        var scopeTable = _scope.FindTable(source.Table.Name);
         if (scopeTable?.Columns is { Count: > 0 })
             result.AddRange(scopeTable.Columns.Select(c => c.Name));
     }
@@ -391,8 +402,15 @@ internal class ScopeWalker
         if (source.Table is not null)
         {
             var table = BuildTableInfo(source.Table, source.Alias);
-            if (_scope.FindTable(source.Table.Name) is { IsCte: true })
-                table = table with { IsCte = true };
+            var scoped = _scope.FindTable(source.Table.Name);
+            if (scoped is { IsCte: true })
+            {
+                // The CTE shadows any physical table with the same name, and an
+                // alias must carry the CTE's projected columns so that
+                // `FROM cte AS alias` stays resolvable by alias.
+                var columns = scoped.Columns is { Count: > 0 } ? scoped.Columns : table.Columns;
+                table = table with { IsCte = true, Columns = columns };
+            }
             _scope.AddTable(table);
         }
 

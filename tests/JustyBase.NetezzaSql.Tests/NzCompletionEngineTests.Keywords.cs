@@ -195,6 +195,54 @@ public sealed partial class NzCompletionEngineTests
 
 
     [Fact]
+    public void ResolveTablePath_resolves_derived_table_alias_to_underlying_source()
+    {
+        var sql = "WITH XXX AS (SELECT 2 AS COL1, * FROM JUST_DATA..DIMDATE) "
+                  + "SELECT * FROM XXX Y JOIN (SELECT *, 2 AS TWO FROM FACTFINANCE) Z ON Y.CALENDARQUARTER = Z.";
+        var tokens = NzLexer.Tokenize(sql).ToArray();
+
+        var resolved = CompletionAliasResolver.ResolveTablePath(tokens, "Z");
+
+        Assert.NotNull(resolved);
+        Assert.Equal("FACTFINANCE", resolved!.Value.Name);
+        Assert.Null(resolved.Value.Schema);
+        Assert.Null(resolved.Value.Database);
+    }
+
+
+    [Fact]
+    public void ResolveTablePath_resolves_nested_derived_table_alias()
+    {
+        var sql = "SELECT * FROM (SELECT * FROM (SELECT ACCOUNTKEY FROM JUST_DATA..DIMACCOUNT) D) E WHERE E.";
+        var tokens = NzLexer.Tokenize(sql).ToArray();
+
+        var resolved = CompletionAliasResolver.ResolveTablePath(tokens, "E");
+
+        Assert.NotNull(resolved);
+        Assert.Equal("DIMACCOUNT", resolved!.Value.Name);
+        Assert.Equal("JUST_DATA", resolved.Value.Database);
+    }
+
+
+    [Fact]
+    public void ResolveTablePath_keeps_plain_and_aliased_table_resolution()
+    {
+        var sql = "SELECT * FROM JUST_DATA..DIMDATE D WHERE D.";
+        var tokens = NzLexer.Tokenize(sql).ToArray();
+
+        var aliased = CompletionAliasResolver.ResolveTablePath(tokens, "D");
+        Assert.NotNull(aliased);
+        Assert.Equal("DIMDATE", aliased!.Value.Name);
+        Assert.Equal("JUST_DATA", aliased.Value.Database);
+
+        var unqualified = NzLexer.Tokenize("SELECT * FROM DIMDATE WHERE DIMDATE.").ToArray();
+        var byName = CompletionAliasResolver.ResolveTablePath(unqualified, "DIMDATE");
+        Assert.NotNull(byName);
+        Assert.Equal("DIMDATE", byName!.Value.Name);
+    }
+
+
+    [Fact]
     public void Three_part_table_alias_where_dot_suggests_columns()
     {
         var schema = new InMemorySchemaProvider();

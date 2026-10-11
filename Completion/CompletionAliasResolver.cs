@@ -96,6 +96,26 @@ public static class CompletionAliasResolver
             if (!IsFrom(tokens[i].Kind) && !IsJoin(tokens[i].Kind) && tokens[i].Kind != NzToken.Update)
                 continue;
 
+            // Derived-table source: `JOIN (SELECT ... FROM X ...) Z` binds alias Z
+            // to the subquery's underlying table, which is what a host needs to
+            // hydrate columns lazily.
+            if (i + 1 < tokens.Length && tokens[i + 1].Kind == NzToken.LParen)
+            {
+                var (source, derivedAlias, derivedConsumed) = ParseDerivedSourceAt(tokens, i + 1);
+                if (derivedConsumed > 0)
+                {
+                    if (source is not null
+                        && (string.Equals(derivedAlias, aliasOrName, StringComparison.OrdinalIgnoreCase)
+                            || string.Equals(derivedAlias, lookup, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        return source;
+                    }
+
+                    i += derivedConsumed;
+                    continue;
+                }
+            }
+
             var (path, alias, consumed) = ParseTablePathAt(tokens, i + 1);
             if (consumed == 0) continue;
 
@@ -107,6 +127,86 @@ public static class CompletionAliasResolver
             }
 
             i += consumed - 1;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Parses a derived-table source starting at its opening parenthesis and
+    /// returns the underlying table of its first FROM/JOIN source together with
+    /// the derived alias.
+    /// </summary>
+    private static (TablePath? Source, string? Alias, int Consumed) ParseDerivedSourceAt(
+        Token<NzToken>[] tokens, int start)
+    {
+        if (start >= tokens.Length || tokens[start].Kind != NzToken.LParen)
+            return (null, null, 0);
+
+        int depth = 0;
+        int i = start;
+        while (i < tokens.Length)
+        {
+            if (tokens[i].Kind == NzToken.LParen)
+                depth++;
+            else if (tokens[i].Kind == NzToken.RParen)
+            {
+                depth--;
+                if (depth == 0)
+                {
+                    i++;
+                    break;
+                }
+            }
+            i++;
+        }
+
+        if (depth != 0)
+            return (null, null, 0);
+
+        int bodyStart = start + 1;
+        int bodyEnd = i - 1;
+
+        string? alias = null;
+        int j = i;
+        if (j < tokens.Length && tokens[j].Kind == NzToken.As)
+            j++;
+        if (j < tokens.Length && tokens[j].Kind.IsIdentifierLike())
+        {
+            var candidate = tokens[j].ToIdentifierText();
+            if (!IsClauseKeyword(candidate))
+            {
+                alias = candidate;
+                j++;
+            }
+        }
+
+        var source = FindFirstSourcePath(tokens, bodyStart, bodyEnd);
+        return (source, alias, j - start);
+    }
+
+    private static TablePath? FindFirstSourcePath(Token<NzToken>[] tokens, int start, int end)
+    {
+        for (int i = start; i < end; i++)
+        {
+            if (!IsFrom(tokens[i].Kind) && !IsJoin(tokens[i].Kind))
+                continue;
+
+            if (i + 1 < end && tokens[i + 1].Kind == NzToken.LParen)
+            {
+                var (nested, _, nestedConsumed) = ParseDerivedSourceAt(tokens, i + 1);
+                if (nestedConsumed > 0)
+                {
+                    if (nested is not null)
+                        return nested;
+                    i += nestedConsumed;
+                    continue;
+                }
+            }
+
+            var (path, _, consumed) = ParseTablePathAt(tokens, i + 1);
+            if (consumed > 0)
+                return path;
         }
 
         return null;

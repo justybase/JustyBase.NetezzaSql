@@ -43,6 +43,11 @@ public sealed partial class CopilotClient : IAsyncDisposable, IDisposable
 
     private const string SignedOutMessage = "Copilot is signed out in JustyBase.";
 
+    private const string MissingCliMessage =
+        "GitHub Copilot CLI was not found. JustyBase uses the Copilot CLI installed on your system. " +
+        "Install it (Windows: \"winget install GitHub.Copilot\"; all platforms: \"npm install -g @github/copilot\") " +
+        "or set JUSTYBASE_COPILOT_COMMAND to the full path of the copilot executable.";
+
     public CopilotClient(IChatEnvironment environment, ISimpleLogger logger)
     {
         _environment = environment;
@@ -116,6 +121,15 @@ public sealed partial class CopilotClient : IAsyncDisposable, IDisposable
             LastError = null;
 
             var command = ResolveCopilotCommand();
+            if (command is null && FindBundledCopilotExecutable() is null)
+            {
+                // The app ships without the bundled Copilot CLI runtime
+                // (CopilotSkipCliDownload=true) and no system CLI is available.
+                // Fail fast with an actionable message instead of a raw SDK error.
+                LastError = MissingCliMessage;
+                return false;
+            }
+
             var options = new CopilotClientOptions
             {
                 // Empty mode is required here because this is a SQL-only integration. It

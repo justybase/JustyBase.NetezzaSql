@@ -77,15 +77,12 @@ public class TokenScopeCollector
 
                         // Extract columns for this CTE
                         var columns = ExtractCteColumnsForEntry(tokens, cteNamePos);
-                        if (_schema is not null)
+                        var starCols = ResolveStarFromBody(tokens, cteNamePos, scopeBindings);
+                        if (starCols.Count > 0)
                         {
-                            var starCols = ResolveStarFromBody(tokens, cteNamePos);
-                            if (starCols.Count > 0)
-                            {
-                                var existing = new HashSet<string>(columns, StringComparer.OrdinalIgnoreCase);
-                                foreach (var sc in starCols)
-                                    if (existing.Add(sc)) columns.Add(sc);
-                            }
+                            var existing = new HashSet<string>(columns, StringComparer.OrdinalIgnoreCase);
+                            foreach (var sc in starCols)
+                                if (existing.Add(sc)) columns.Add(sc);
                         }
 
                         // Store in the WITH scope bindings (not the CTE's own scope)
@@ -126,15 +123,12 @@ public class TokenScopeCollector
                 if (!isTemp && !IsCreateTableAsSelect(tokens, j))
                     continue;
                 var columns = ExtractCreateTableColumns(tokens, j);
-                if (_schema is not null)
+                var starCols = ResolveStarFromBody(tokens, j);
+                if (starCols.Count > 0)
                 {
-                    var starCols = ResolveStarFromBody(tokens, j);
-                    if (starCols.Count > 0)
-                    {
-                        var existing = new HashSet<string>(columns, StringComparer.OrdinalIgnoreCase);
-                        foreach (var sc in starCols)
-                            if (existing.Add(sc)) columns.Add(sc);
-                    }
+                    var existing = new HashSet<string>(columns, StringComparer.OrdinalIgnoreCase);
+                    foreach (var sc in starCols)
+                        if (existing.Add(sc)) columns.Add(sc);
                 }
                 // Script effects become visible after their statement ends.
                 _globalEntries[tableName] = columns;
@@ -154,26 +148,9 @@ public class TokenScopeCollector
             }
         }
 
-        // Third-pass: re-resolve cross-CTE dependencies
-        bool changed = true;
-        while (changed)
-        {
-            changed = false;
-            foreach (var scope in _scopes)
-            {
-                var keys = new List<string>(scope.Bindings.Keys);
-                foreach (var name in keys)
-                {
-                    var existing = scope.Bindings[name];
-                    var newCols = new List<string>(existing);
-
-                    // Try to resolve SELECT * against other CTEs in this scope
-                    // Re-extract star columns — may reference other CTEs now resolved
-                    // This is a simplified version; a full fixed-point resolver would
-                    // iterate until stable.
-                }
-            }
-        }
+        // Cross-CTE dependencies within one WITH list are resolved during the
+        // entry walk above: earlier CTE names are already present in the
+        // in-progress bindings when a later CTE's `*` is expanded.
     }
 
     /// <summary>
@@ -539,7 +516,10 @@ public class TokenScopeCollector
         return null;
     }
 
-private List<string> ResolveStarFromBody(Token<NzToken>[] tokens, int cteNameIndex)
+private List<string> ResolveStarFromBody(
+    Token<NzToken>[] tokens,
+    int cteNameIndex,
+    IReadOnlyDictionary<string, IReadOnlyList<string>>? siblingBindings = null)
 {
     int j = cteNameIndex + 1;
     while (j < tokens.Length && tokens[j].Kind != NzToken.As) j++;
@@ -548,13 +528,14 @@ private List<string> ResolveStarFromBody(Token<NzToken>[] tokens, int cteNameInd
     if (j < tokens.Length && tokens[j].Kind == NzToken.All) j++;
 
     int bodyEnd;
+    int scanStart;
     if (j < tokens.Length && tokens[j].Kind is NzToken.Select or NzToken.With)
     {
         // CREATE TABLE ... AS SELECT: the unparenthesized body runs to the
-        // end of the statement. The scan below starts after index j.
+        // end of the statement. The scan starts at the body's first token.
         bodyEnd = j;
         while (bodyEnd < tokens.Length && tokens[bodyEnd].Kind != NzToken.Semicolon) bodyEnd++;
-        j--;
+        scanStart = j;
     }
     else
     {
@@ -569,14 +550,28 @@ private List<string> ResolveStarFromBody(Token<NzToken>[] tokens, int cteNameInd
             else if (tokens[bodyEnd].Kind == NzToken.RParen) depth--;
             bodyEnd++;
         }
+        scanStart = j + 1;
     }
 
-    // First, scan the body for any nested CTEs (WITH ... AS (...)) and resolve them
-    // so that * in the outer SELECT can reference them.
+    // Nested CTEs inside the body resolve before the outer SELECT's star.
     var nestedCtes = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
-    BuildNestedCtes(tokens, bodyStart: j + 1, bodyEnd, nestedCtes);
+    BuildNestedCtes(tokens, bodyStart: scanStart, bodyEnd, nestedCtes);
 
-    for (int k = j + 1; k < bodyEnd && k < tokens.Length; k++)
+    return ResolveStarColumnsInBody(tokens, scanStart, bodyEnd, nestedCtes, siblingBindings);
+}
+
+/// <summary>
+/// Finds the top-level SELECT of a body and expands its <c>*</c> /
+/// <c>T.*</c> projection over every FROM/JOIN source of that query.
+/// </summary>
+private List<string> ResolveStarColumnsInBody(
+    Token<NzToken>[] tokens,
+    int scanStart,
+    int bodyEnd,
+    IReadOnlyDictionary<string, IReadOnlyList<string>> nestedCtes,
+    IReadOnlyDictionary<string, IReadOnlyList<string>>? siblingBindings)
+{
+    for (int k = scanStart; k < bodyEnd && k < tokens.Length; k++)
     {
         if (tokens[k].Kind == NzToken.With)
         {
@@ -640,41 +635,155 @@ private List<string> ResolveStarFromBody(Token<NzToken>[] tokens, int cteNameInd
 
         if (!hasStar) continue;
 
-        int fromPos = -1;
-        for (int f = afterSelect; f < bodyEnd; f++)
-        {
-            if (tokens[f].Kind == NzToken.From) { fromPos = f + 1; break; }
-        }
-        if (fromPos < 0) return new List<string>();
-
-        string? tableName = ExtractTableName(tokens, fromPos, bodyEnd);
-        if (tableName is null) return new List<string>();
-
-        // Check nested CTEs defined in this body first
-        if (nestedCtes.TryGetValue(tableName, out var nestedCols) && nestedCols.Count > 0)
-            return new List<string>(nestedCols);
-
-        // Check previously registered scopes
-        foreach (var scope in _scopes)
-        {
-            if (scope.Bindings.TryGetValue(tableName, out var cteCols) && cteCols.Count > 0)
-                return new List<string>(cteCols);
-        }
-        if (_globalEntries.TryGetValue(tableName, out var globalCols) && globalCols.Count > 0)
-            return new List<string>(globalCols);
-
-        // Schema lookup
-        if (_schema is not null)
-        {
-            var info = CompletionSchemaLookup.GetTable(_schema, _dialect, null, null, tableName);
-            if (info?.Columns is { Count: > 0 })
-                return info.Columns.Select(c => c.Name).ToList();
-        }
-
-        return new List<string>();
+        return CollectStarSourceColumns(tokens, afterSelect, bodyEnd, starQualifier,
+            nestedCtes, siblingBindings);
     }
 
     return new List<string>();
+}
+
+/// <summary>
+/// Columns of every top-level FROM/JOIN source visible to a star projection.
+/// <c>T.*</c> restricts the expansion to the matching source, and
+/// <c>database..table</c> paths keep their database for metadata lookup.
+/// </summary>
+private List<string> CollectStarSourceColumns(
+    Token<NzToken>[] tokens,
+    int selectListStart,
+    int end,
+    string? qualifier,
+    IReadOnlyDictionary<string, IReadOnlyList<string>> nestedCtes,
+    IReadOnlyDictionary<string, IReadOnlyList<string>>? siblingBindings)
+{
+    var columns = new List<string>();
+    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    void AddRange(IEnumerable<string> names)
+    {
+        foreach (var name in names)
+            if (seen.Add(name))
+                columns.Add(name);
+    }
+
+    void AddSourceColumns(CompletionAliasResolver.TablePath path, string? alias)
+    {
+        if (qualifier is not null
+            && !string.Equals(alias, qualifier, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(path.Name, qualifier, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        if (nestedCtes.TryGetValue(path.Name, out var nestedCols) && nestedCols.Count > 0)
+        {
+            AddRange(nestedCols);
+            return;
+        }
+        if (siblingBindings is not null
+            && siblingBindings.TryGetValue(path.Name, out var siblingCols) && siblingCols.Count > 0)
+        {
+            AddRange(siblingCols);
+            return;
+        }
+        foreach (var scope in _scopes)
+        {
+            if (scope.Bindings.TryGetValue(path.Name, out var cteCols) && cteCols.Count > 0)
+            {
+                AddRange(cteCols);
+                return;
+            }
+        }
+        if (_globalEntries.TryGetValue(path.Name, out var globalCols) && globalCols.Count > 0)
+        {
+            AddRange(globalCols);
+            return;
+        }
+
+        if (_schema is null) return;
+        var info = CompletionSchemaLookup.GetTable(_schema, _dialect, path.Database, path.Schema, path.Name);
+        if (info?.Columns is { Count: > 0 })
+            AddRange(info.Columns.Select(c => c.Name));
+    }
+
+    // Locate the top-level FROM of this query.
+    int parenDepth = 0;
+    int fromPos = -1;
+    for (int i = selectListStart; i < end && i < tokens.Length; i++)
+    {
+        var kind = tokens[i].Kind;
+        if (kind == NzToken.LParen) { parenDepth++; continue; }
+        if (kind == NzToken.RParen) { if (parenDepth == 0) break; parenDepth--; continue; }
+        if (parenDepth > 0) continue;
+        if (kind == NzToken.From) { fromPos = i; break; }
+        if (kind is NzToken.Into or NzToken.Where or NzToken.GroupBy or NzToken.Having
+            or NzToken.OrderBy or NzToken.Limit or NzToken.Union or NzToken.Intersect
+            or NzToken.Except or NzToken.Semicolon)
+            break;
+    }
+    if (fromPos < 0) return columns;
+
+    // Walk FROM/JOIN sources at this query's depth.
+    bool expectSource = true;
+    bool inCondition = false;
+    parenDepth = 0;
+    for (int i = fromPos + 1; i < end && i < tokens.Length; i++)
+    {
+        var kind = tokens[i].Kind;
+        if (kind == NzToken.LParen)
+        {
+            if (parenDepth == 0 && expectSource && !inCondition)
+            {
+                // Derived table source; its alias is not a relation name.
+                SkipBalancedParens(tokens, ref i);
+                i--;
+                if (i + 1 < end && tokens[i + 1].Kind == NzToken.As) i++;
+                if (i + 1 < end && tokens[i + 1].Kind.IsIdentifierLike()) i++;
+                expectSource = false;
+                continue;
+            }
+            parenDepth++;
+            continue;
+        }
+        if (kind == NzToken.RParen)
+        {
+            if (parenDepth == 0) break;
+            parenDepth--;
+            continue;
+        }
+        if (parenDepth > 0) continue;
+
+        if (kind is NzToken.Where or NzToken.GroupBy or NzToken.Having or NzToken.OrderBy
+            or NzToken.Limit or NzToken.Union or NzToken.Intersect or NzToken.Except
+            or NzToken.Semicolon)
+            break;
+        if (kind is NzToken.From or NzToken.Join)
+        {
+            expectSource = true;
+            inCondition = false;
+            continue;
+        }
+        if (kind == NzToken.Comma)
+        {
+            expectSource = true;
+            inCondition = false;
+            continue;
+        }
+        if (kind is NzToken.On or NzToken.Using)
+        {
+            inCondition = true;
+            expectSource = false;
+            continue;
+        }
+
+        if (expectSource && !inCondition && kind.IsIdentifierLike())
+        {
+            var (path, alias, consumed) = CompletionAliasResolver.ParseTablePathAt(tokens, i);
+            if (consumed > 0 && path.Name.Length > 0)
+                AddSourceColumns(path, alias);
+            i += Math.Max(consumed, 1) - 1;
+            expectSource = false;
+        }
+    }
+
+    return columns;
 }
 
 /// <summary>
@@ -751,7 +860,8 @@ private void BuildNestedCtes(Token<NzToken>[] tokens, int bodyStart, int bodyEnd
 }
 
 /// <summary>
-/// Resolves <c>*</c> in a nested CTE's SELECT list, using nested CTEs and schema.
+/// Resolves <c>*</c> in a nested CTE's SELECT list, using sibling nested
+/// CTEs and schema.
 /// </summary>
 private List<string> ResolveStarInNestedBody(Token<NzToken>[] tokens, int cteNamePos,
     Dictionary<string, IReadOnlyList<string>> nestedCtes)
@@ -773,88 +883,8 @@ private List<string> ResolveStarInNestedBody(Token<NzToken>[] tokens, int cteNam
         bodyEnd++;
     }
 
-    for (int k = j + 1; k < bodyEnd && k < tokens.Length; k++)
-    {
-        if (tokens[k].Kind == NzToken.With)
-        {
-            int wk = k + 1;
-            if (wk < bodyEnd && tokens[wk].Kind == NzToken.Recursive) wk++;
-            while (wk < bodyEnd && wk < tokens.Length)
-            {
-                if (tokens[wk].Kind.IsIdentifierLike()) { wk++; /* skip */ }
-                else wk++;
-            }
-            k = wk - 1;
-            continue;
-        }
-        if (tokens[k].Kind != NzToken.Select) continue;
-
-        int afterSelect = k + 1;
-        bool hasStar = false;
-        if (afterSelect < bodyEnd && tokens[afterSelect].Kind is NzToken.Distinct or NzToken.All)
-            afterSelect++;
-        int pp = 0;
-        for (int s = afterSelect; s < bodyEnd; s++)
-        {
-            var sk = tokens[s].Kind;
-            if (sk == NzToken.LParen) { pp++; continue; }
-            if (sk == NzToken.RParen) { pp--; continue; }
-            if (pp > 0) continue;
-            if (sk is NzToken.From or NzToken.Into or NzToken.Where
-                or NzToken.GroupBy or NzToken.Having or NzToken.OrderBy
-                or NzToken.Limit or NzToken.Union or NzToken.Intersect or NzToken.Except)
-                break;
-            if (sk == NzToken.Multiply) { hasStar = true; break; }
-        }
-        if (!hasStar) continue;
-
-        int fromPos = -1;
-        for (int f = afterSelect; f < bodyEnd; f++)
-        {
-            if (tokens[f].Kind == NzToken.From) { fromPos = f + 1; break; }
-        }
-        if (fromPos < 0) return new List<string>();
-
-        string? tableName = ExtractTableName(tokens, fromPos, bodyEnd);
-        if (tableName is null) return new List<string>();
-
-        // Check nested CTEs first
-        if (nestedCtes.TryGetValue(tableName, out var cCols) && cCols.Count > 0)
-            return new List<string>(cCols);
-        // Check schema
-        if (_schema is not null)
-        {
-            var info = CompletionSchemaLookup.GetTable(_schema, _dialect, null, null, tableName);
-            if (info?.Columns is { Count: > 0 })
-                return info.Columns.Select(c => c.Name).ToList();
-        }
-        return new List<string>();
-    }
-    return new List<string>();
+    return ResolveStarColumnsInBody(tokens, j + 1, bodyEnd, nestedCtes, siblingBindings: null);
 }
-
-    private static string? ExtractTableName(Token<NzToken>[] tokens, int fromPos, int end)
-    {
-        int tp = fromPos;
-        if (tp >= end || tp >= tokens.Length || !tokens[tp].Kind.IsIdentifierLike())
-            return null;
-
-        var first = tokens[tp].ToIdentifierText();
-        if (tp + 1 < end && tokens[tp + 1].Kind == NzToken.Dot)
-        {
-            if (tp + 2 < end && tokens[tp + 2].Kind == NzToken.Dot)
-                return tp + 3 < end ? tokens[tp + 3].ToIdentifierText() : null;
-            if (tp + 2 < end && tokens[tp + 2].Kind.IsIdentifierLike())
-            {
-                var last = tokens[tp + 2].ToIdentifierText();
-                if (tp + 3 < end && tokens[tp + 3].Kind == NzToken.Dot
-                    && tp + 4 < end && tokens[tp + 4].Kind.IsIdentifierLike())
-                    return tokens[tp + 4].ToIdentifierText();
-                return last;
-            }
-        }
-        return first;
-    }
 
     private static bool IsColumnListStart(Token<NzToken>[] tokens, int pos)
     {

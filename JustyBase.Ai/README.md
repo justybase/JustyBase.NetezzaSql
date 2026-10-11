@@ -27,6 +27,18 @@ The package has no UI dependency.
 | `Microsoft.Extensions.AI` | Chat client abstractions |
 | `Microsoft.Extensions.DependencyInjection.Abstractions` | DI abstractions for service registration |
 
+## GitHub Copilot CLI runtime
+
+The Copilot chat backend drives a GitHub Copilot CLI process. By default this project
+sets `CopilotSkipCliDownload=true`, so `GitHub.Copilot.SDK` does **not** download and
+bundle its ~200 MB native CLI runtime. The host application must therefore provide a
+`copilot` executable on `PATH` (or via the `JUSTYBASE_COPILOT_COMMAND` environment
+variable); if none is found, the backend reports a friendly "GitHub Copilot CLI was not
+found" error instead of starting.
+
+To bundle the runtime again (self-contained installs without a system CLI), build with
+`-p:CopilotSkipCliDownload=false`.
+
 ## Target framework
 
 - .NET 10

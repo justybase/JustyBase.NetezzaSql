@@ -6,7 +6,7 @@
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
     <PackageVersion Include="coverlet.collector" Version="10.1.0" />
     <PackageVersion Include="DiffPlex" Version="1.9.0" />
-    <PackageVersion Include="GitHub.Copilot.SDK" Version="1.0.16" />
+    <PackageVersion Include="GitHub.Copilot.SDK" Version="1.0.19" />
     <PackageVersion Include="JustyBase.NetezzaDriver" Version="1.9.5" />
     <PackageVersion Include="Microsoft.Data.SqlClient" Version="7.1.1" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.12" />
@@ -22,7 +22,7 @@
     <PackageVersion Include="Superpower" Version="3.2.1" />
     <PackageVersion Include="Sylvan.Data.Csv" Version="1.4.4" />
     <PackageVersion Include="xunit" Version="2.9.3" />
-    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
     <PackageVersion Include="ZstdSharp.Port" Version="0.8.8" />
   </ItemGroup>
 </Project>

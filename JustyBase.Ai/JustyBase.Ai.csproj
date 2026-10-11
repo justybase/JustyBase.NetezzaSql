@@ -8,6 +8,11 @@
          source-generated JSON) and Microsoft.Extensions.AI 10.x are AOT/trim
          compatible. Verified with analyzers (0 warnings) and a NativeAOT publish probe. -->
     <IsAotCompatible>true</IsAotCompatible>
+    <!-- The consuming application ships without the ~200 MB native Copilot CLI
+         runtime: it resolves a separately installed `copilot` CLI from PATH (or
+         JUSTYBASE_COPILOT_COMMAND). Override with
+         -p:CopilotSkipCliDownload=false to bundle the runtime again. -->
+    <CopilotSkipCliDownload Condition="'$(CopilotSkipCliDownload)' == ''">true</CopilotSkipCliDownload>
     <PackageId>JustyBase.Ai</PackageId>
     <RootNamespace>JustyBase.Ai</RootNamespace>
     <AssemblyName>JustyBase.Ai</AssemblyName>

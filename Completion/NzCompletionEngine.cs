@@ -211,6 +211,10 @@ public class NzCompletionEngine
 
             case CompletionContext.AfterJoin:
             {
+                // Live Netezza accepts JOIN ... USING (col); only columns
+                // present on both sides of the current join are valid there.
+                if (TryAddUsingCommonColumns(suggestions, fullTokens, astScope))
+                    break;
                 if (TryAddQualifiedPathCompletions(suggestions, statementPrefix, partialWord))
                     break;
                 AddKeywords(suggestions, SqlContext.JoinKeywords);
@@ -251,6 +255,9 @@ public class NzCompletionEngine
                 else
                 {
                     AddColumnsFromScope(suggestions, fullTokens, astScope);
+                    // Live Netezza resolves SELECT output aliases in HAVING;
+                    // the table scope above does not include them.
+                    AddSelectOutputAliases(suggestions, fullTokens);
                     AddFunctions(suggestions);
                     AddKeywords(suggestions, new[] { "AND", "OR", "NOT", "IN", "BETWEEN", "LIKE", "ILIKE", "IS", "NULL" });
                 }
@@ -1519,6 +1526,15 @@ public class NzCompletionEngine
         {
             // AST-based alias resolution via ScopeBuilder
             var table = astScope.FindTable(qualifier);
+            if (table is not null && table.Columns is not { Count: > 0 }
+                && !string.Equals(table.Name, qualifier, StringComparison.OrdinalIgnoreCase))
+            {
+                // An alias entry can register without projected columns while
+                // its underlying relation name still resolves (e.g. CTE names).
+                var underlying = astScope.FindTable(table.Name);
+                if (underlying?.Columns is { Count: > 0 })
+                    table = underlying;
+            }
             if (table?.Columns is { Count: > 0 })
             {
                 foreach (var col in table.Columns)
@@ -1811,6 +1827,171 @@ public class NzCompletionEngine
         }
 
         return (tableName, schema, database, alias, i - start);
+    }
+
+    /// <summary>
+    /// Inside the parentheses of the last <c>JOIN ... USING (...)</c>, offers
+    /// only the columns present on both sides of that join. Live Netezza
+    /// accepts USING; returns false when the cursor is not in that position.
+    /// </summary>
+    private bool TryAddUsingCommonColumns(List<CompletionItem> list, Token<NzToken>[] tokens, ScopeBuilder? astScope)
+    {
+        int usingIndex = -1;
+        int end = tokens.Length;
+        for (int i = 0; i < tokens.Length; i++)
+        {
+            // Only tokens before the cursor participate: the closing paren of
+            // USING (...) sits after the caret while typing.
+            if (tokens[i].Span.Position.Absolute >= _cursorPosition)
+            {
+                end = i;
+                break;
+            }
+            if (tokens[i].Kind == NzToken.Using)
+                usingIndex = i;
+        }
+        if (usingIndex < 0) return false;
+
+        // The cursor is inside the USING group only while that group is still
+        // open: a later, unrelated `(` must not be mistaken for it.
+        int depth = 0;
+        bool opened = false;
+        for (int i = usingIndex + 1; i < end; i++)
+        {
+            var kind = tokens[i].Kind;
+            if (kind == NzToken.LParen)
+            {
+                depth++;
+                opened = true;
+            }
+            else if (kind == NzToken.RParen)
+            {
+                depth--;
+                if (opened && depth == 0) return false;
+            }
+            // The first significant token after USING must be `(`.
+            else if (!opened) return false;
+        }
+        if (!opened || depth <= 0) return false;
+
+        var refs = ExtractTableReferences(tokens[..usingIndex]);
+        if (refs.Count < 2) return false;
+        var pair = refs.TakeLast(2).ToArray();
+
+        var columnsBySide = new List<List<string>>();
+        foreach (var (tableName, schema, database, _) in pair)
+        {
+            var columns = LookupTable(database, schema, tableName)?.Columns
+                ?.Select(c => c.Name).ToList()
+                ?? astScope?.FindTable(tableName)?.Columns?.Select(c => c.Name).ToList()
+                ?? _lastScopeCollector?.GetCteColumns(tableName, _cursorPosition)?.ToList()
+                ?? new List<string>();
+            columnsBySide.Add(columns);
+        }
+
+        var second = new HashSet<string>(columnsBySide[1], StringComparer.OrdinalIgnoreCase);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var column in columnsBySide[0])
+        {
+            if (!seen.Add(column) || !second.Contains(column)) continue;
+            list.Add(new CompletionItem(column, CompletionKind.Column,
+                Detail: "JOIN USING common column", Priority: 1));
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Output aliases of the top-level SELECT list of the statement holding
+    /// the cursor. Live Netezza resolves SELECT aliases in HAVING.
+    /// </summary>
+    private static void AddSelectOutputAliases(List<CompletionItem> list, Token<NzToken>[] tokens)
+    {
+        // Top-level SELECT at depth 0 (first one = outermost query).
+        int selectIndex = -1;
+        int depth = 0;
+        for (int i = 0; i < tokens.Length; i++)
+        {
+            var kind = tokens[i].Kind;
+            if (kind == NzToken.LParen) { depth++; continue; }
+            if (kind == NzToken.RParen) { depth = Math.Max(0, depth - 1); continue; }
+            if (depth == 0 && kind == NzToken.Select) { selectIndex = i; break; }
+        }
+        if (selectIndex < 0) return;
+
+        int fromIndex = -1;
+        depth = 0;
+        for (int i = selectIndex + 1; i < tokens.Length; i++)
+        {
+            var kind = tokens[i].Kind;
+            if (kind == NzToken.LParen) { depth++; continue; }
+            if (kind == NzToken.RParen) { depth = Math.Max(0, depth - 1); continue; }
+            if (depth > 0) continue;
+            if (kind == NzToken.From) { fromIndex = i; break; }
+        }
+        int end = fromIndex >= 0 ? fromIndex : tokens.Length;
+
+        int itemStart = selectIndex + 1;
+        if (itemStart < end && tokens[itemStart].Kind is NzToken.Distinct or NzToken.All)
+            itemStart++;
+
+        var seen = new HashSet<string>(list.Select(item => item.Label), StringComparer.OrdinalIgnoreCase);
+        depth = 0;
+        int splitStart = itemStart;
+        void EmitItem(int itemEnd)
+        {
+            var alias = ExtractSelectItemAlias(tokens, splitStart, itemEnd);
+            if (alias is not null && seen.Add(alias))
+                list.Add(new CompletionItem(alias, CompletionKind.Column,
+                    Detail: "SELECT output alias", Priority: 1));
+        }
+
+        for (int i = itemStart; i < end; i++)
+        {
+            var kind = tokens[i].Kind;
+            if (kind == NzToken.LParen) { depth++; continue; }
+            if (kind == NzToken.RParen) { depth = Math.Max(0, depth - 1); continue; }
+            if (depth == 0 && kind == NzToken.Comma)
+            {
+                EmitItem(i);
+                splitStart = i + 1;
+            }
+        }
+        if (splitStart < end)
+            EmitItem(end);
+    }
+
+    private static string? ExtractSelectItemAlias(Token<NzToken>[] tokens, int start, int end)
+    {
+        // Depth-0 token kinds of this select item.
+        var top = new List<int>();
+        bool hadParens = false;
+        int itemDepth = 0;
+        for (int i = start; i < end; i++)
+        {
+            var kind = tokens[i].Kind;
+            if (kind == NzToken.LParen) { itemDepth++; hadParens = true; continue; }
+            if (kind == NzToken.RParen) { itemDepth = Math.Max(0, itemDepth - 1); continue; }
+            if (itemDepth == 0)
+                top.Add(i);
+        }
+        if (top.Count == 0) return null;
+        // `*` and `T.*` contribute no alias.
+        if (top.Count == 1 && tokens[top[0]].Kind == NzToken.Multiply) return null;
+        if (top.Count == 3
+            && tokens[top[1]].Kind == NzToken.Dot
+            && tokens[top[2]].Kind == NzToken.Multiply)
+            return null;
+
+        int last = top[^1];
+        if (!tokens[last].Kind.IsIdentifierLike()) return null;
+        if (top.Count >= 2)
+        {
+            var prev = tokens[top[^2]].Kind;
+            if (prev == NzToken.As || prev.IsIdentifierLike() || hadParens)
+                return tokens[last].ToIdentifierText();
+            return null;
+        }
+        return null;
     }
 
     private void AddColumnsForInsertTarget(List<CompletionItem> list, Token<NzToken>[] tokens)
