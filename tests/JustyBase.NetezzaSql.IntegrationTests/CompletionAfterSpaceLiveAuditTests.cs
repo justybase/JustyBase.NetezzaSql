@@ -9,7 +9,9 @@ namespace JustyBase.NetezzaSql.IntegrationTests;
 /// Read-only live audit (NZ_DEV_* gated): prints what the completion engine would
 /// offer at each "after space / after letter" position on the real catalog.
 /// Soft-skips when NZ_DEV_* is not set. No schema is modified.
+/// Requires a real external Netezza connection, so it is excluded from standard gates.
 /// </summary>
+[Trait("Category", "LiveDatabase")]
 public sealed class CompletionAfterSpaceLiveAuditTests
 {
     [Fact]

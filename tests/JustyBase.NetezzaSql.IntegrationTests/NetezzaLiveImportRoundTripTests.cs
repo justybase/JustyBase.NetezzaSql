@@ -5,7 +5,9 @@ namespace JustyBase.NetezzaSql.IntegrationTests;
 /// <summary>
 /// Live proof: CSV → DatabaseTypeChooser.Infer → CREATE → pipe INSERT → SELECT equality.
 /// Soft-skips without NZ_DEV_*; pipe topology soft-skips unless NZ_REQUIRE_PIPE=1.
+/// Requires a real external Netezza connection, so it is excluded from standard gates.
 /// </summary>
+[Trait("Category", "LiveDatabase")]
 public sealed class NetezzaLiveImportRoundTripTests
 {
     public static TheoryData<LiveImportCase> Cases()

@@ -8,7 +8,9 @@ namespace JustyBase.NetezzaSql.IntegrationTests;
 /// Explicit live oracle checks for shared Netezza P0 contracts whose source
 /// fixtures disagree or were previously blocked by a client-side $1 binder.
 /// Run with: dotnet test ... --filter Category=LiveConformance
+/// Requires a real external Netezza connection (Category=LiveDatabase on top of LiveConformance).
 /// </summary>
+[Trait("Category", "LiveDatabase")]
 public sealed class SharedSqlConformanceLiveNetezzaTests
 {
     [OptInLiveConformanceFact]

@@ -4,7 +4,9 @@ namespace JustyBase.NetezzaSql.IntegrationTests;
 
 /// <summary>
 /// Read-only probes for syntax whose support is release-dependent in Netezza.
+/// Requires a real external Netezza connection, so it is excluded from standard gates.
 /// </summary>
+[Trait("Category", "LiveDatabase")]
 public sealed class NetezzaLiveAnsiProbeTests
 {
     [Fact]

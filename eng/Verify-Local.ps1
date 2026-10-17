@@ -18,7 +18,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'dotnet build failed.' }
 
     Write-Host '==> dotnet test' -ForegroundColor Cyan
-    dotnet test .\JustyBase.NetezzaSql.sln -c $Configuration --no-build --filter "Category!=Performance&Category!=SqlConformance&Category!=LiveConformance"
+    dotnet test .\JustyBase.NetezzaSql.sln -c $Configuration --no-build --filter "Category!=Performance&Category!=SqlConformance&Category!=LiveConformance&Category!=LiveDatabase"
     if ($LASTEXITCODE -ne 0) { throw 'dotnet test failed.' }
 
     Write-Host '==> per-library coverage' -ForegroundColor Cyan

@@ -8,6 +8,9 @@ namespace JustyBase.NetezzaSql.IntegrationTests;
 /// <summary>
 /// Live catalog loader tests gated by NZ_DEV_* environment variables (soft-skip when absent),
 /// following the <see cref="NetezzaLiveTestHost"/> convention.
+/// Live tests require a real external Netezza connection and carry
+/// Category=LiveDatabase, so they are excluded from standard gates.
+/// The in-memory schema-cache test below stays uncategorized on purpose.
 /// </summary>
 public sealed class NetezzaSchemaLoaderLiveTests
 {
@@ -34,6 +37,7 @@ public sealed class NetezzaSchemaLoaderLiveTests
     }
 
     [Fact]
+    [Trait("Category", "LiveDatabase")]
     public async Task LoadCatalog_LiveDatabase_ReturnsCreatedTableWithColumns()
     {
         if (!NetezzaLiveTestHost.TryCreateConnection(out var connection))
@@ -78,6 +82,7 @@ public sealed class NetezzaSchemaLoaderLiveTests
     }
 
     [Fact]
+    [Trait("Category", "LiveDatabase")]
     public async Task LoadCatalog_LiveLazyMode_ThenHydrateColumns()
     {
         if (!NetezzaLiveTestHost.TryCreateConnection(out var connection))
@@ -115,6 +120,7 @@ public sealed class NetezzaSchemaLoaderLiveTests
     }
 
     [Fact]
+    [Trait("Category", "LiveDatabase")]
     public async Task LoadDatabases_LiveConnection_ReturnsDatabaseList()
     {
         if (!NetezzaLiveTestHost.TryCreateConnection(out var connection))
@@ -138,6 +144,7 @@ public sealed class NetezzaSchemaLoaderLiveTests
     }
 
     [Fact]
+    [Trait("Category", "LiveDatabase")]
     public async Task LoadCatalog_Live_CompletionProviderSeesTable()
     {
         if (!NetezzaLiveTestHost.TryCreateConnection(out var connection))

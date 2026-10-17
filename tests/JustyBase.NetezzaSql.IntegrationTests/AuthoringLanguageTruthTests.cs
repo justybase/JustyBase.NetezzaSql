@@ -4,6 +4,12 @@ using Xunit;
 
 namespace JustyBase.NetezzaSql.IntegrationTests;
 
+/// <summary>
+/// Read-only truth probes against a real Netezza server. Opt-in via
+/// <c>JUSTYBASE_RUN_LIVE_CONFORMANCE=1</c> plus <c>NZ_DEV_*</c> credentials.
+/// Requires a real external Netezza connection, so it is excluded from standard gates.
+/// </summary>
+[Trait("Category", "LiveDatabase")]
 public sealed class AuthoringLanguageTruthTests
 {
     [OptInLiveConformanceFact]
