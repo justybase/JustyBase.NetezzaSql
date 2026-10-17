@@ -1148,10 +1148,25 @@ public partial class NzSqlParser
         }
         else if (Peek().Kind == NzToken.For)
         {
+            // Live Netezza (Release 11.2.2.1) rejects the FOR TABLE form with
+            // "found FOR ... expecting ON"; only the optional ON <table>
+            // target is part of the grammar. The statement is still parsed so
+            // editor services keep the referenced table.
+            AddParserError(
+                "Netezza does not accept GENERATE STATISTICS FOR TABLE; use ON <table>",
+                Peek(), "PAR001");
             Advance();
-            Expect(NzToken.Table);
+            if (Peek().Kind == NzToken.Table)
+                Advance();
             var (t, _) = ParseTableName();
             table = t;
+        }
+        else if (express)
+        {
+            // The deprecated EXPRESS form always requires a target.
+            AddParserError(
+                "Netezza requires ON and a table name for GENERATE EXPRESS STATISTICS",
+                Peek(), "PAR001");
         }
 
         return new GenerateStatisticsStatement(FromToken(genTok),

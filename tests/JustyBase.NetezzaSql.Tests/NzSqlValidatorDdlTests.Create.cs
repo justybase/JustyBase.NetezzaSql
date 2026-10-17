@@ -393,9 +393,19 @@ public sealed partial class NzSqlValidatorDdlTests
 
 
     [Fact]
-    public void GenerateExpressStatistics_ForTable()
+    public void GenerateExpressStatistics_ForTableIsRejected()
     {
-        ExpectValid("GENERATE EXPRESS STATISTICS FOR TABLE TESTDB..EMPLOYEES;", _schema);
+        // Live Netezza Release 11.2.2.1 rejects the FOR TABLE form with
+        // "found FOR ... expecting ON"; only the optional ON <table> target is
+        // part of the grammar.
+        SqlTestHelpers.ExpectSyntaxError("GENERATE EXPRESS STATISTICS FOR TABLE TESTDB..EMPLOYEES;", _schema);
+    }
+
+
+    [Fact]
+    public void GenerateExpressStatistics_WithoutTargetIsRejected()
+    {
+        SqlTestHelpers.ExpectSyntaxError("GENERATE EXPRESS STATISTICS;", _schema);
     }
 
 
