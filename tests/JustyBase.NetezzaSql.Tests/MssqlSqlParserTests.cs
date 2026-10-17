@@ -64,6 +64,12 @@ public sealed class MssqlSqlParserTests
     [InlineData("SELECT 1 GO SELECT 2")]
     [InlineData("DECLARE @x INT")]
     [InlineData("SET @x = 1")]
+    [InlineData("CREATE TABLE ##global (ID INT)")]
+    [InlineData("SELECT ID FROM ##global")]
+    [InlineData("DROP TABLE IF EXISTS ##global")]
+    [InlineData("SELECT ID INTO #selected FROM dbo.Source")]
+    [InlineData("SELECT #local.* FROM #local")]
+    [InlineData("BEGIN SELECT * FROM t WHERE a IS NULL AND b = 1; END")]
     public void ParseMssql_ValidStatements_NoErrors(string sql)
     {
         var (statements, errors) = Parse(sql);

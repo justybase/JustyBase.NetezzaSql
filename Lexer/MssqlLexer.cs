@@ -11,12 +11,14 @@ namespace JustyBase.NetezzaSqlParser.Lexer;
 /// registered before the shared Netezza chain so they win over Identifier /
 /// @SET / LBracket-RBracket. Strings are the shared '(...)''-escaped literal
 /// (the N'...' prefix lexes as an Identifier followed by a StringLiteral, as
-/// in the reference lexer); #temp/##temp tables are intentionally not lexed.
+/// in the reference lexer); #temp/##temp table names use the dedicated
+/// MssqlTempTableIdentifier token the reference lexer defines.
 /// </summary>
 public static class MssqlLexer
 {
     private static readonly TokenizerBuilder<NzToken> Builder = NzLexer.AppendSharedTokens(
         new TokenizerBuilder<NzToken>()
+            .Match(Span.Regex(@"^##?[A-Za-z0-9_][\w$]*"), NzToken.MssqlTempTableIdentifier)
             .Match(Span.Regex(@"^@@?[A-Za-z_][\w$]*"), NzToken.MssqlVariable)
             .Match(Span.Regex(@"^\[(?:[^\]]|\]\])*\]"), NzToken.MssqlBracketedIdentifier)
             .Match(Span.Regex(@"CROSS\s+APPLY\b", RegexOptions.IgnoreCase), NzToken.MssqlCrossApply, requireDelimiters: false)

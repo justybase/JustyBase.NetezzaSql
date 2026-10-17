@@ -134,6 +134,7 @@ public partial class NzSqlParser
         or NzToken.Db2Identity or NzToken.Db2Nickname
         // Mssql-only tokens (never emitted by the other lexers).
         or NzToken.MssqlVariable or NzToken.MssqlBracketedIdentifier
+        or NzToken.MssqlTempTableIdentifier
         or NzToken.MySqlBacktickIdentifier
         or NzToken.MssqlTop or NzToken.MssqlOutput or NzToken.MssqlProc
         // SQLite-only tokens (never emitted by the other lexers).

@@ -1043,6 +1043,7 @@ public partial class NzSqlParser
             or NzToken.Owner or NzToken.Hash or NzToken.Start
             // Mssql-only tokens (never emitted by the other lexers).
             or NzToken.MssqlVariable or NzToken.MssqlBracketedIdentifier
+            or NzToken.MssqlTempTableIdentifier
             or NzToken.MySqlBacktickIdentifier
             // SQLite-only tokens (never emitted by the other lexers).
             or NzToken.SqliteBracketedIdentifier

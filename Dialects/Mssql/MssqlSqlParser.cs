@@ -23,6 +23,8 @@ public partial class MssqlSqlParser : NzSqlParser
 
     protected override bool SupportsEmptyQualifiedNameSegment => false;
 
+    protected override bool SupportsDropIfExistsBeforeTarget => true;
+
     public override Statement? Parse()
     {
         SkipSemicolons();
@@ -49,10 +51,17 @@ public partial class MssqlSqlParser : NzSqlParser
             Advance();
             result = null;
         }
-        else if (k is NzToken.Declare or NzToken.Set or NzToken.Begin)
+        else if (k is NzToken.Declare or NzToken.Set)
         {
-            // DECLARE @x INT, SET @x = 1 and thin BEGIN...END are opaque tails.
+            // DECLARE @x INT and SET @x = 1 are opaque tails.
             result = ParseCommandTailFallback(Peek());
+        }
+        else if (k == NzToken.Begin)
+        {
+            // Anonymous T-SQL BEGIN...END block. The shared statement loop would
+            // stop at the first inner semicolon and then choke on END, so the
+            // balanced block is consumed here.
+            result = ParseMssqlBeginEndUnit();
         }
         else
         {
@@ -62,6 +71,47 @@ public partial class MssqlSqlParser : NzSqlParser
         if (result is null)
             SynchronizeStatement();
         return result;
+    }
+
+    // BEGIN <statement>... [;] END [TRY|CATCH] — thin anonymous block. Only
+    // BEGIN/END depth is tracked; inner statements stay an opaque token range.
+    private MssqlBeginEndStatement? ParseMssqlBeginEndUnit()
+    {
+        var startTok = Peek();
+        var startIdx = _pos;
+        Advance(); // BEGIN
+
+        var depth = 1;
+        while (depth > 0 && Peek().Kind != NzToken.Unknown)
+        {
+            if (Peek().Kind == NzToken.Begin)
+            {
+                depth++;
+                Advance();
+            }
+            else if (Peek().Kind == NzToken.End)
+            {
+                depth--;
+                Advance();
+                // END TRY / END CATCH close their block; a following BEGIN CATCH
+                // is a new statement that the outer loop parses.
+                if (depth == 0 && Peek().Kind is NzToken.MssqlTry or NzToken.MssqlCatch)
+                    Advance();
+            }
+            else
+            {
+                Advance();
+            }
+        }
+
+        if (depth != 0)
+        {
+            AddParserError("Unterminated MSSQL BEGIN...END block (expected END)", startTok, "PAR001");
+            _pos = startIdx;
+            return null;
+        }
+
+        return new MssqlBeginEndStatement(FromToken(startTok), _tokens[startIdx.._pos].ToArray());
     }
 
     private Statement? ParseMssqlCreateOrFallback()

@@ -30,7 +30,8 @@ public partial class MssqlSqlParser
             hasInto = true;
             Advance();
             while (Peek().Kind is NzToken.Identifier or NzToken.QuotedIdentifier
-                or NzToken.MssqlBracketedIdentifier)
+                or NzToken.MssqlBracketedIdentifier or NzToken.MssqlTempTableIdentifier
+                or NzToken.MssqlVariable)
             {
                 Advance();
                 if (Peek().Kind == NzToken.Comma) Advance(); else break;

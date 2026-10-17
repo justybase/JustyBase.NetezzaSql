@@ -9,6 +9,7 @@ public static class NzTokenExtensions
             or NzToken.QuotedIdentifier
             or NzToken.MySqlBacktickIdentifier
             or NzToken.MssqlBracketedIdentifier
+            or NzToken.MssqlTempTableIdentifier
             or NzToken.AccessBracketedIdentifier
             or NzToken.AccessBacktickIdentifier
             or NzToken.SqliteBracketedIdentifier;

@@ -156,6 +156,19 @@ public sealed class SqliteSqlParserTests
         Assert.Contains("CHECK (age >= 0)", formatted, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("SELECT random()")]
+    [InlineData("SELECT like('a%', name) FROM t")]
+    [InlineData("SELECT * FROM t WHERE name COLLATE NOCASE = 'abc'")]
+    [InlineData("SELECT * FROM t WHERE name = 'abc' COLLATE NOCASE")]
+    public void Parse_BuiltinKeywordFunctionsAndCollate(string sql)
+    {
+        var (statements, errors) = Parse(sql);
+        Assert.IsType<SelectStatement>(Assert.Single(statements));
+        Assert.True(errors.Count == 0,
+            string.Join(Environment.NewLine, errors.Select(e => e.Message)));
+    }
+
     [Fact]
     public void Parse_CreateTable_AsSelect()
     {

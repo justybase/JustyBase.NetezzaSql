@@ -306,6 +306,7 @@ public enum NzToken
     MssqlEncryption,           // ENCRYPTION
     MssqlVariable,             // @name or @@name
     MssqlBracketedIdentifier,  // [name] or [na]]me]
+    MssqlTempTableIdentifier,  // #local or ##global temp table name
 
     // PostgreSQL-specific tokens (produced only by PostgreSqlLexer).
     PostgreSqlUnsupportedNetezza,
