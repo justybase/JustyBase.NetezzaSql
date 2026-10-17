@@ -266,6 +266,7 @@ public sealed class SharedSqlConformanceTests
     }
 
     private static string RenderSql(string sql) => sql
+        .Replace("{{cf}}", "JB_CF_FIXTURE", StringComparison.Ordinal)
         .Replace("{{proc}}", "JB_CF_PROCEDURE", StringComparison.Ordinal)
         .Replace("{{table}}", "JUST_DATA.ADMIN.JB_CF_TABLE", StringComparison.Ordinal)
         .Replace("{{table2}}", "JUST_DATA.ADMIN.JB_CF_TABLE2", StringComparison.Ordinal)
@@ -287,7 +288,7 @@ public sealed class SharedSqlConformanceTests
             : throw new DirectoryNotFoundException(
                 "Shared SQL conformance repository was not found. Set JUSTYBASE_SQL_CONFORMANCE_PATH.");
 
-    private static bool TryGetConformanceRoot(out string? root)
+    internal static bool TryGetConformanceRoot(out string? root)
     {
         var configured = Environment.GetEnvironmentVariable("JUSTYBASE_SQL_CONFORMANCE_PATH");
         if (!string.IsNullOrWhiteSpace(configured))
@@ -306,6 +307,8 @@ public sealed class SharedSqlConformanceTests
         {
             var candidates = new[]
             {
+                Path.Combine(current.FullName, "Fixtures", "sql-conformance"),
+                Path.Combine(current.FullName, "tests", "JustyBase.NetezzaSql.Tests", "Fixtures", "sql-conformance"),
                 Path.Combine(current.FullName, "JustyBase.SqlConformance"),
                 current.Parent is null ? string.Empty : Path.Combine(current.Parent.FullName, "JustyBase.SqlConformance")
             };

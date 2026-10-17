@@ -81,19 +81,20 @@ public sealed class SharedSqlConformanceReportTests
     {
         string status;
         string message;
-        if (testCase.Dialect is not "netezza" and not "common"
-            || testCase.Dialect == "common" && !testCase.AppliesTo.Contains("netezza", StringComparer.Ordinal))
+        var dialectName = testCase.Dialect == "common" ? "netezza" : testCase.Dialect;
+        var supported = Enum.TryParse<SqlDialect>(dialectName, ignoreCase: true, out var selectedDialect)
+            && Enum.IsDefined(selectedDialect);
+        if (!supported || (testCase.Dialect == "common" && !testCase.AppliesTo.Contains("netezza", StringComparer.Ordinal)))
         {
             status = "not-applicable";
-            message = "The .NET adapter currently covers Netezza and common cases applicable to Netezza.";
+            message = "No production SQL dialect exists for this case in the .NET library.";
         }
         else if (testCase.VerificationStatus == "needsVerification")
         {
             status = "needs-verification";
             message = "The corpus marks this case as needing verification.";
         }
-        else if (Enum.TryParse<SqlDialect>("Netezza", ignoreCase: true, out var netezza)
-            && outcomes.TryGetValue((testCase.Id, netezza), out var evaluations)
+        else if (outcomes.TryGetValue((testCase.Id, selectedDialect), out var evaluations)
             && evaluations.Count > 0)
         {
             status = evaluations.All(evaluation => evaluation.Passed) ? "pass" : "fail";
@@ -184,6 +185,8 @@ public sealed class SharedSqlConformanceReportTests
         {
             var candidates = new[]
             {
+                Path.Combine(current.FullName, "Fixtures", "sql-conformance"),
+                Path.Combine(current.FullName, "tests", "JustyBase.NetezzaSql.Tests", "Fixtures", "sql-conformance"),
                 Path.Combine(current.FullName, "JustyBase.SqlConformance"),
                 current.Parent is null ? string.Empty : Path.Combine(current.Parent.FullName, "JustyBase.SqlConformance")
             };

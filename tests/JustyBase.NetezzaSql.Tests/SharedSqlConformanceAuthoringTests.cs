@@ -70,7 +70,7 @@ public sealed class SharedSqlConformanceAuthoringTests
                     await AssertCompletion(root, sql, cursor, schema, dialect, id);
                     break;
                 case "diagnostics":
-                    AssertDiagnostics(root, sql, schema, id);
+                    AssertDiagnostics(root, sql, schema, id, dialect);
                     break;
                 case "semantic":
                     AssertSemantic(root, sql, cursor, schema, dialect, id);
@@ -263,11 +263,11 @@ public sealed class SharedSqlConformanceAuthoringTests
         }
     }
 
-    private static void AssertDiagnostics(JsonElement root, string sql, ISchemaProvider? schema, string id)
+    private static void AssertDiagnostics(JsonElement root, string sql, ISchemaProvider? schema, string id, SqlDialect dialect)
     {
         var expected = root.GetProperty("expect");
         var pipeline = GetString(expected, "pipeline", "full");
-        var actual = CollectLintIssues(sql, schema, pipeline);
+        var actual = CollectLintIssues(sql, schema, pipeline, dialect, LoadServerVersion(root));
         AssertDiagnosticExpectation(expected, actual, sql, schema, id);
     }
 
@@ -696,6 +696,7 @@ public sealed class SharedSqlConformanceAuthoringTests
 
     internal static string StatementKindName(Statement statement) => statement switch
     {
+        PostgreSqlCommandStatement command => command.Command.ToLowerInvariant(),
         SelectStatement => "select",
         InsertStatement => "insert",
         UpdateStatement => "update",
@@ -796,9 +797,9 @@ public sealed class SharedSqlConformanceAuthoringTests
     }
 
     private static IReadOnlyList<LintIssue> CollectLintIssues(
-        string sql, ISchemaProvider? schema, string pipeline)
+        string sql, ISchemaProvider? schema, string pipeline, SqlDialect dialect = SqlDialect.Netezza, int? serverVersionNum = null)
     {
-        using var engine = new LintEngine(SqlDialect.Netezza);
+        using var engine = new LintEngine(dialect);
         var issues = new List<LintIssue>();
         if (pipeline is "cheap" or "full")
             issues.AddRange(engine.RunCheapRules(sql));
@@ -807,7 +808,7 @@ public sealed class SharedSqlConformanceAuthoringTests
             // The expensive analyzer needs an explicit metadata provider. An
             // empty provider keeps syntax-only cases on the real parser path.
             issues.AddRange(engine.RunExpensiveAnalysis(new LintConfig(
-                sql, schema ?? new InMemorySchemaProvider(), DocumentUri: $"conformance:{Guid.NewGuid():N}" )).Issues);
+                sql, schema ?? new InMemorySchemaProvider(), DocumentUri: $"conformance:{Guid.NewGuid():N}", Dialect: dialect, ServerVersionNum: serverVersionNum)).Issues);
         }
         return issues;
     }
@@ -933,6 +934,15 @@ public sealed class SharedSqlConformanceAuthoringTests
             ? CompletionTriggerKind.Automatic
             : CompletionTriggerKind.Explicit;
 
+    private static int? LoadServerVersion(JsonElement root)
+    {
+        var fixture = GetString(root, "metadataFixture");
+        if (fixture.Length == 0) return null;
+        using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(ConformanceRoot(), "fixtures", "metadata", fixture + ".json")));
+        return document.RootElement.TryGetProperty("executionContext", out var context)
+            && context.TryGetProperty("serverVersionNum", out var version) ? version.GetInt32() : null;
+    }
+
     private static ISchemaProvider? LoadSchema(JsonElement root)
     {
         var fixtureName = GetString(root, "metadataFixture");
@@ -1010,6 +1020,7 @@ public sealed class SharedSqlConformanceAuthoringTests
     }
 
     private static string RenderSql(string sql) => sql
+        .Replace("{{cf}}", "JB_CF_FIXTURE", StringComparison.Ordinal)
         .Replace("{{proc}}", "JB_CF_PROCEDURE", StringComparison.Ordinal)
         .Replace("{{table}}", "JUST_DATA.ADMIN.JB_CF_TABLE", StringComparison.Ordinal)
         .Replace("{{table2}}", "JUST_DATA.ADMIN.JB_CF_TABLE2", StringComparison.Ordinal)
@@ -1096,6 +1107,8 @@ public sealed class SharedSqlConformanceAuthoringTests
         {
             var candidates = new[]
             {
+                Path.Combine(current.FullName, "Fixtures", "sql-conformance"),
+                Path.Combine(current.FullName, "tests", "JustyBase.NetezzaSql.Tests", "Fixtures", "sql-conformance"),
                 Path.Combine(current.FullName, "JustyBase.SqlConformance"),
                 current.Parent is null ? string.Empty : Path.Combine(current.Parent.FullName, "JustyBase.SqlConformance")
             };
