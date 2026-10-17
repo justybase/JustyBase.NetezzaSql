@@ -127,6 +127,17 @@ public partial class MssqlSqlParser : NzSqlParser
             return null;
         }
 
+        // CREATE [GLOBAL] TEMP|TEMPORARY TABLE is Netezza-only syntax; T-SQL
+        // uses #local / ##global table names instead. Live SQL Server 2022
+        // rejects these with Msg 343 (Unknown object type).
+        if (obj is NzToken.Temp or NzToken.Temporary or NzToken.Global)
+        {
+            AddParserError("CREATE TEMP TABLE is Netezza-only syntax and is not supported in MSSQL",
+                Peek(look), "PAR001");
+            Advance();
+            return null;
+        }
+
         if (StartsMssqlProcedure())
             return ParseMssqlProcedureUnit();
 

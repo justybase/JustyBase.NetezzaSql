@@ -93,6 +93,9 @@ public sealed class MssqlSqlParserTests
     [InlineData("GENERATE STATISTICS ON sales")]
     [InlineData("CREATE TABLE t (a INT) DISTRIBUTE ON (a)")]
     [InlineData("CREATE EXTERNAL TABLE ext_sales (id INT)")]
+    [InlineData("CREATE TEMP TABLE local_table (ID INT)")]
+    [InlineData("CREATE GLOBAL TEMP TABLE global_table (ID INT)")]
+    [InlineData("CREATE TEMPORARY TABLE local_table (ID INT)")]
     public void ParseMssql_RejectsNetezzaOnly(string sql)
     {
         var (_, errors) = Parse(sql);
