@@ -68,7 +68,35 @@ public sealed partial class SqliteSqlParser : NzSqlParser
             return new Literal(FromToken(token), LiteralKind.Blob, token.ToStringValue());
         }
 
+        // SQLite built-in functions whose names are keywords elsewhere
+        // (random(), like(), match(), replace(), raise()). GLOB and REGEXP lex
+        // as plain identifiers in the shared chain, so they already route
+        // through the standard function-call path.
+        if (Peek().Kind is NzToken.Random or NzToken.Like
+                or NzToken.Match or NzToken.Replace or NzToken.Raise
+            && Peek(1).Kind == NzToken.LParen)
+        {
+            return ParseFunctionCall(Advance());
+        }
+
         return null;
+    }
+
+    protected override Expression ParseDialectPostfix(Expression expression)
+    {
+        // COLLATE binds tighter than comparison operators and may appear on
+        // either operand: `x COLLATE NOCASE = 'a'` and `x = 'a' COLLATE NOCASE`.
+        if (Peek().Kind != NzToken.SqliteCollate)
+            return expression;
+        var collate = Advance();
+        var name = ExpectNameToken();
+        return new BinaryExpression(
+            FromToken(collate),
+            BinaryOperator.Collate,
+            expression,
+            new ColumnReference(FromToken(name), null, StripQuotes(name.ToStringValue()),
+                IdentifierQuote(name.Kind)),
+            "COLLATE");
     }
 
     protected override (TableName Table, Token<NzToken> FirstToken) ParseTableName()

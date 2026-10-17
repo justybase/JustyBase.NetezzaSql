@@ -689,12 +689,18 @@ public partial class NzSqlParser
         // Netezza syntax (DROP TABLE documentation):
         //   DROP TABLE <table> [, ...] [IF EXISTS]
         // The leading IF EXISTS form is not Netezza syntax, and no other DROP
-        // object class accepts a trailing IF EXISTS.
+        // object class accepts a trailing IF EXISTS. Dialects such as T-SQL put
+        // IF EXISTS before the object name instead.
         bool ifExists = false;
+        bool ifExistsBeforeTarget = false;
         if (Peek().Kind == NzToken.If)
         {
-            AddParserError("Netezza does not accept IF EXISTS before the object name; use DROP TABLE <name> IF EXISTS",
-                Peek(), "PAR001");
+            if (!SupportsDropIfExistsBeforeTarget)
+            {
+                AddParserError("Netezza does not accept IF EXISTS before the object name; use DROP TABLE <name> IF EXISTS",
+                    Peek(), "PAR001");
+            }
+            ifExistsBeforeTarget = true;
             Advance();
             if (Peek().Kind == NzToken.Exists)
             {
@@ -743,8 +749,18 @@ public partial class NzSqlParser
             ParseCommandTail();
         }
 
-        return new DropStatement(FromToken(dropTok), objectType, targets, ifExists);
+        return new DropStatement(FromToken(dropTok), objectType, targets, ifExists)
+        {
+            IfExistsBeforeTarget = ifExistsBeforeTarget
+        };
     }
+
+    /// <summary>
+    /// Dialect hook: true when the dialect spells DROP as
+    /// <c>DROP TABLE IF EXISTS &lt;name&gt;</c> (T-SQL) instead of the Netezza
+    /// trailing form.
+    /// </summary>
+    protected virtual bool SupportsDropIfExistsBeforeTarget => false;
 
     private TableName ParseDropTarget()
     {

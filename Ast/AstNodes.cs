@@ -728,6 +728,7 @@ public enum BinaryOperator
     Like, Ilike, NotLike, NotIlike, In, NotIn,
     Between, NotBetween,
     Is, IsNot,
+    Collate,
     Plus, Minus, Multiply, Divide, Modulo, Caret,
     Concat,
     JsonArrow, JsonTextArrow, JsonPath, JsonTextPath, JsonExists, JsonExistsAny, JsonExistsAll
@@ -966,6 +967,13 @@ public record Db2ProcedureUnitStatement(
 public record MssqlProcedureUnitStatement(
     SourcePosition Position,
     TableName Name,
+    IReadOnlyList<Token<NzToken>> Tokens
+) : Statement(Position);
+
+// Mssql: thin BEGIN...END block. Kept as an opaque, offset-stable token range
+// because the shared grammar does not model T-SQL statement lists.
+public record MssqlBeginEndStatement(
+    SourcePosition Position,
     IReadOnlyList<Token<NzToken>> Tokens
 ) : Statement(Position);
 

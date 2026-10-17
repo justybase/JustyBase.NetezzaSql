@@ -138,6 +138,9 @@ public sealed class NzSqlFormatter
             case MssqlProcedureUnitStatement mssqlProc:
                 FormatOracleTokenRange(mssqlProc.Tokens);
                 break;
+            case MssqlBeginEndStatement mssqlBlock:
+                FormatOracleTokenRange(mssqlBlock.Tokens);
+                break;
             case Db2DeclareGlobalTempTableStatement dgtt:
                 Write("DECLARE GLOBAL TEMPORARY TABLE ");
                 Write(FormatTableName(dgtt.Name));
@@ -2260,6 +2263,7 @@ public sealed class NzSqlFormatter
         BinaryOperator.NotBetween => "NOT BETWEEN",
         BinaryOperator.Is => "IS",
         BinaryOperator.IsNot => "IS NOT",
+        BinaryOperator.Collate => "COLLATE",
         BinaryOperator.Plus => "+",
         BinaryOperator.Minus => "-",
         BinaryOperator.Multiply => "*",
