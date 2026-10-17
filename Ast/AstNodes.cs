@@ -104,7 +104,11 @@ public record SelectStatement(
     IReadOnlyList<Token<NzToken>>? SqliteWindowTokens = null,
     // Access: TOP / external database / WITH OWNERACCESS OPTION metadata.
     AccessQueryOptions? AccessOptions = null
-) : Statement(Position);
+) : Statement(Position)
+{
+    /// <summary>Rows of a VALUES query; null for an ordinary SELECT.</summary>
+    public IReadOnlyList<IReadOnlyList<Expression>>? ValuesRows { get; init; }
+}
 
 public record InsertStatement(
     SourcePosition Position,
@@ -120,7 +124,10 @@ public record InsertStatement(
     PostgreSqlOnConflictClause? OnConflict = null,
     // SQLite: INSERT OR ROLLBACK|ABORT|REPLACE|FAIL|IGNORE clause tokens.
     IReadOnlyList<Token<NzToken>>? SqliteOrTokens = null
-) : Statement(Position);
+) : Statement(Position)
+{
+    public bool DefaultValues { get; init; }
+}
 
 public record UpdateStatement(
     SourcePosition Position,
@@ -152,7 +159,10 @@ public record DeleteStatement(
     // Access keeps the complete target reference for joined DELETE syntax.
     TableReference? AccessTargetReference = null,
     bool AccessWildcard = false
-) : Statement(Position);
+) : Statement(Position)
+{
+    public bool PostgreSqlUsing { get; init; }
+}
 
 public record MergeStatement(
     SourcePosition Position,
@@ -161,9 +171,15 @@ public record MergeStatement(
     TableSource Source,
     Expression OnCondition,
     IReadOnlyList<MergeClause> Clauses
-) : Statement(Position);
+) : Statement(Position)
+{
+    public ReturningClause? Returning { get; init; }
+}
 
-public abstract record MergeClause(SourcePosition Position) : AstNode(Position);
+public abstract record MergeClause(SourcePosition Position) : AstNode(Position)
+{
+    public bool NotMatchedBySource { get; init; }
+}
 
 public record MergeMatchedUpdateClause(
     SourcePosition Position,
@@ -243,7 +259,11 @@ public record DropStatement(
     string ObjectType,
     IReadOnlyList<TableName> Targets,
     bool IfExists
-) : Statement(Position);
+) : Statement(Position)
+{
+    public bool IfExistsBeforeTarget { get; init; }
+    public string? DropBehavior { get; init; }
+}
 
 public record AlterTableStatement(
     SourcePosition Position,
@@ -323,7 +343,10 @@ public record CteDefinition(
     string Name,
     IReadOnlyList<string>? Columns,
     SelectStatement Query
-) : AstNode(Position);
+) : AstNode(Position)
+{
+    public string? Materialization { get; init; }
+}
 
 public record SetStatement(
     SourcePosition Position
@@ -387,7 +410,11 @@ public record TableSource(
     bool Lateral = false,
     FunctionCall? TableFunction = null,
     char? AliasQuote = null
-) : AstNode(Position);
+) : AstNode(Position)
+{
+    public IReadOnlyList<string>? ColumnAliases { get; init; }
+    public bool WithOrdinality { get; init; }
+}
 
 public record TableName(
     string Name,
@@ -611,8 +638,13 @@ public record FunctionCall(
     IReadOnlyList<Expression>? Arguments,
     FilterClause? Filter,
     OverClause? Over,
-    WithinGroupClause? WithinGroup = null
-) : Expression(Position);
+    WithinGroupClause? WithinGroup = null,
+    IReadOnlyList<OrderByItem>? ArgumentOrderBy = null
+) : Expression(Position)
+{
+    public IReadOnlyList<Token<NzToken>>? PostgreSqlTokens { get; init; }
+    public IReadOnlyList<string>? ResultColumnNames { get; init; }
+}
 
 public record WithinGroupClause(
     SourcePosition Position,
@@ -698,7 +730,7 @@ public enum BinaryOperator
     Is, IsNot,
     Plus, Minus, Multiply, Divide, Modulo, Caret,
     Concat,
-    JsonArrow, JsonTextArrow, JsonPath, JsonTextPath
+    JsonArrow, JsonTextArrow, JsonPath, JsonTextPath, JsonExists, JsonExistsAny, JsonExistsAll
 }
 
 public record UnaryExpression(
@@ -880,7 +912,10 @@ public record ReturningClause(
     IReadOnlyList<string> Columns,
     IReadOnlyList<string>? IntoVariables = null,
     IReadOnlyList<ReturningItem>? Items = null
-) : AstNode(Position);
+) : AstNode(Position)
+{
+    public IReadOnlyDictionary<string, string>? TransitionAliases { get; init; }
+}
 
 public record OracleReturningClause(
     SourcePosition Position,
@@ -998,7 +1033,11 @@ public record AccessCrosstabStatement(
     Expression PivotExpression,
     IReadOnlyList<Expression>? InValues,
     AccessQueryOptions? AccessOptions = null
-) : Statement(Position);
+) : Statement(Position)
+{
+    /// <summary>Rows of a VALUES query; null for an ordinary SELECT.</summary>
+    public IReadOnlyList<IReadOnlyList<Expression>>? ValuesRows { get; init; }
+}
 
 public record AccessCreateIndexStatement(
     SourcePosition Position,
@@ -1030,3 +1069,10 @@ public record AccessDropIndexStatement(
     TableName Table,
     char? NameQuote = null
 ) : Statement(Position);
+
+/// <summary>PostgreSQL command envelope with an offset-stable token body.</summary>
+public record PostgreSqlCommandStatement(SourcePosition Position, string Command,
+    IReadOnlyList<Token<NzToken>> Tokens) : Statement(Position);
+
+/// <summary>An indexed SQL array expression, preserving the index for semantic traversal.</summary>
+public record ArraySubscriptExpression(SourcePosition Position, Expression Array, Expression Index) : Expression(Position);

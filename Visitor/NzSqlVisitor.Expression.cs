@@ -18,6 +18,9 @@ public partial class NzSqlVisitor
             case CaseExpression ce: VisitCase(ce); break;
             case CastExpression c: Visit(c.Expression); CheckTypeLength(c.TargetType, c.Position); break;
             case CastFunctionExpression cf: Visit(cf.Expression); CheckTypeLength(cf.TargetType, cf.Position); break;
+            case ArraySubscriptExpression subscript:
+                Visit(subscript.Array); Visit(subscript.Index);
+                break;
             case ArrayExpression array:
                 foreach (var item in array.Items) Visit(item);
                 break;
@@ -131,7 +134,7 @@ public partial class NzSqlVisitor
                 return;
             }
 
-            if (!table.Columns.Any(c => c.Name.Equals(cr.Name, StringComparison.OrdinalIgnoreCase)))
+            if (!table.Columns.Any(c => c.Name.Equals(cr.Name, IsPostgreSql ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase)))
             {
                 var endCol = cr.Position.Column + cr.Name.Length;
                 AddError(
@@ -153,7 +156,7 @@ public partial class NzSqlVisitor
         var currentScopeTables = _scope.GetCurrentScopeTables()
             .Where(t => t.Columns is { Count: > 0 }).ToList();
         var currentMatches = currentScopeTables
-            .Where(t => t.Columns!.Any(c => c.Name.Equals(cr.Name, StringComparison.OrdinalIgnoreCase)))
+            .Where(t => t.Columns!.Any(c => c.Name.Equals(cr.Name, IsPostgreSql ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase)))
             .ToList();
 
         if (currentMatches.Count == 1) return;
@@ -165,7 +168,7 @@ public partial class NzSqlVisitor
 
         // Check all scopes
         var allMatches = tablesWithKnownColumns
-            .Where(t => t.Columns!.Any(c => c.Name.Equals(cr.Name, StringComparison.OrdinalIgnoreCase)))
+            .Where(t => t.Columns!.Any(c => c.Name.Equals(cr.Name, IsPostgreSql ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase)))
             .ToList();
 
         if (allMatches.Count == 0 && currentMatches.Count == 0)
@@ -236,6 +239,8 @@ public partial class NzSqlVisitor
         {
             foreach (var arg in fc.Arguments) Visit(arg);
         }
+        if (fc.ArgumentOrderBy is not null)
+            foreach (var order in fc.ArgumentOrderBy) Visit(order.Expression);
         if (fc.Over?.PartitionBy is not null)
         {
             foreach (var pe in fc.Over.PartitionBy) Visit(pe);

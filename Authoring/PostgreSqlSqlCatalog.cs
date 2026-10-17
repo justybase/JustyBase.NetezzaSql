@@ -26,7 +26,8 @@ public sealed class PostgreSqlSqlCatalog : ISqlAuthoringCatalog
     [
         Function("ARRAY_AGG", NetezzaFunctionCategory.Aggregate, "ARRAY_AGG(expression)"),
         Function("DATE_TRUNC", NetezzaFunctionCategory.DateTime, "DATE_TRUNC(precision, source)"),
-        Function("GENERATE_SERIES", NetezzaFunctionCategory.System, "GENERATE_SERIES(start, stop [, step])"),
+        new("GENERATE_SERIES", NetezzaFunctionCategory.System,
+            [new NetezzaFunctionSignature("GENERATE_SERIES(start, stop, step?)", "PostgreSQL series generator.", [new("start", null), new("stop", null), new("step?", null)])]),
         Function("JSONB_AGG", NetezzaFunctionCategory.Aggregate, "JSONB_AGG(expression)"),
         Function("JSONB_BUILD_OBJECT", NetezzaFunctionCategory.Conversion, "JSONB_BUILD_OBJECT(key, value, ...)"),
         Function("JSON_BUILD_OBJECT", NetezzaFunctionCategory.Conversion, "JSON_BUILD_OBJECT(key, value, ...)"),

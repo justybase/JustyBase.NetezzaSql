@@ -139,6 +139,7 @@ public partial class NzSqlParser
                 SourcePosition.FromToken(Peek()), "PAR101"));
         }
 
+        var materialization = ParseCteMaterialization();
         Expect(NzToken.LParen);
         // Inside parens: either a select statement or a nested WITH...SELECT
         WithClause? nestedWith = null;
@@ -168,7 +169,43 @@ public partial class NzSqlParser
                 query.TopTokens, query.DistinctOn, query.SqliteWindowTokens, query.AccessOptions);
         }
 
-        return new CteDefinition(SourcePosition.FromToken(Peek()), name, columns, query);
+        return new CteDefinition(SourcePosition.FromToken(Peek()), name, columns, query) { Materialization = materialization };
+    }
+
+    /// <summary>Dialect-specific CTE materialization modifier after AS.</summary>
+    protected virtual string? ParseCteMaterialization() => null;
+
+    protected virtual bool SupportsValuesQuery => false;
+    protected virtual bool SupportsScalarValuesRows => false;
+
+    protected SelectStatement ParseValuesQuery(WithClause? with = null)
+    {
+        var start = Expect(NzToken.Values);
+        var rows = new List<IReadOnlyList<Expression>>();
+        do
+        {
+            if (rows.Count > 0) Expect(NzToken.Comma);
+            IReadOnlyList<Expression> row;
+            if (Peek().Kind == NzToken.LParen)
+            {
+                Advance();
+                row = ParseExpressionList();
+                Expect(NzToken.RParen);
+            }
+            else if (SupportsScalarValuesRows) row = new[] { ParseExpression() };
+            else
+            {
+                AddParserError("VALUES requires a parenthesized row", Peek(), "PAR001");
+                break;
+            }
+            if (rows.Count > 0 && row.Count != rows[0].Count)
+                AddParserError("VALUES rows must have equal column counts", Peek(), "PAR001");
+            rows.Add(row);
+        } while (Peek().Kind == NzToken.Comma);
+        var items = rows.Count == 0 ? new List<SelectItem>() : rows[0].Select((value, index) =>
+            new SelectItem(value.Position, value, $"column{index + 1}")).ToList();
+        return new SelectStatement(FromToken(start), null, items, null, null, null, null, null, null, null, null, with)
+            { ValuesRows = rows };
     }
 
     // ====== SELECT Statement ======

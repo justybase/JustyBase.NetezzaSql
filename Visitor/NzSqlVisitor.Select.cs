@@ -293,11 +293,11 @@ public partial class NzSqlVisitor
             }
 
             // Don't re-add CTE tables to the scope — they're already in Ctes
-            var aliasKey = (table.Alias ?? table.Name).ToUpperInvariant();
+            var aliasKey = IsPostgreSql ? table.Alias ?? table.Name : (table.Alias ?? table.Name).ToUpperInvariant();
             var existingTable = _scope.FindTable(aliasKey);
             // Also check by table name (CTEs are stored under their own name, not the alias)
             if (existingTable is null && table.Alias is not null)
-                existingTable = _scope.FindTable(table.Name.ToUpperInvariant());
+                existingTable = _scope.FindTable(IsPostgreSql ? table.Name : table.Name.ToUpperInvariant());
             if (existingTable is not null && existingTable.IsCte)
             {
                 var key = aliasKey;
@@ -323,7 +323,8 @@ public partial class NzSqlVisitor
 
         if ((source.FunctionSource || source.TableFunction is not null) && source.Alias is not null)
         {
-            var funcInfo = new TableInfo(source.Alias, IsCte: false, IsTempTable: false);
+            var funcInfo = new TableInfo(source.Alias, IsCte: false, IsTempTable: false,
+                Columns: source.ColumnAliases?.Select(name => new ColumnInfo(name)).ToArray());
             _scope.AddTable(funcInfo);
         }
 
@@ -334,7 +335,8 @@ public partial class NzSqlVisitor
             Visit(source.Subquery);
             if (source.Alias is not null)
             {
-                var subCols = InferColumnsFromSelect(source.Subquery);
+                var subCols = source.ColumnAliases is not null
+                    ? source.ColumnAliases.Select(name => new ColumnInfo(name)).ToList() : InferColumnsFromSelect(source.Subquery);
                 var subInfo = new TableInfo(source.Alias, IsCte: false, IsTempTable: false,
                     Columns: subCols.Count > 0 ? subCols : null);
                 _scope.AddTable(subInfo);

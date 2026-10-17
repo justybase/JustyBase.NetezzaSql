@@ -49,7 +49,7 @@ public class CompletionScopeProvider
         // the parser returned one and let the caller use token fallback only
         // when parsing could not produce a statement at all.
 
-        var builder = new ScopeBuilder();
+        var builder = new ScopeBuilder(caseSensitive: _dialect == SqlDialect.PostgreSql);
         var walker = new ScopeWalker(builder, _schema, _dialect, cursor, tokens);
         walker.Build(stmt);
         return builder;
@@ -259,6 +259,7 @@ internal class ScopeWalker
                 WalkExpression(filter.Condition, level);
                 return;
             case FunctionCall function:
+                if (function.ArgumentOrderBy is not null) foreach (var order in function.ArgumentOrderBy) WalkExpression(order.Expression, level);
                 if (function.Arguments is not null)
                     foreach (var argument in function.Arguments)
                         WalkExpression(argument, level);
@@ -267,6 +268,9 @@ internal class ScopeWalker
                 if (function.Over?.PartitionBy is not null)
                     foreach (var partition in function.Over.PartitionBy)
                         WalkExpression(partition, level);
+                return;
+            case ArraySubscriptExpression subscript:
+                WalkExpression(subscript.Array, level); WalkExpression(subscript.Index, level);
                 return;
             case ArrayExpression array:
                 foreach (var item in array.Items)
@@ -401,7 +405,8 @@ internal class ScopeWalker
     {
         if (source.Table is not null)
         {
-            var table = BuildTableInfo(source.Table, source.Alias);
+            var alias = _dialect == SqlDialect.PostgreSql && source.AliasQuote is null ? source.Alias?.ToLowerInvariant() : source.Alias;
+            var table = BuildTableInfo(source.Table, alias);
             var scoped = _scope.FindTable(source.Table.Name);
             if (scoped is { IsCte: true })
             {
@@ -418,7 +423,8 @@ internal class ScopeWalker
         {
             if (source.Alias is not null)
             {
-                var subCols = InferSubqueryColumns(source.Subquery);
+                var subCols = source.ColumnAliases is not null
+                    ? source.ColumnAliases.Select(name => new ColumnInfo(name)).ToList() : InferSubqueryColumns(source.Subquery);
                 _scope.AddTable(new TableInfo(source.Alias, IsCte: false, IsTempTable: false,
                     Columns: subCols.Count > 0 ? subCols : null, IsDerived: true));
             }
@@ -427,7 +433,8 @@ internal class ScopeWalker
 
         if (source.FunctionSource && source.Alias is not null)
         {
-            _scope.AddTable(new TableInfo(source.Alias, IsCte: false, IsTempTable: false, IsDerived: true));
+            _scope.AddTable(new TableInfo(source.Alias, IsCte: false, IsTempTable: false, IsDerived: true,
+                Columns: source.ColumnAliases?.Select(name => new ColumnInfo(name)).ToArray()));
         }
     }
 

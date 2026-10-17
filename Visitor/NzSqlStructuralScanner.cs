@@ -13,6 +13,11 @@ public static class NzSqlStructuralScanner
 
     public static IEnumerable<ValidationError> Scan(string sql, SqlDialect dialect)
     {
+        if (dialect == SqlDialect.PostgreSql)
+        {
+            foreach (var issue in ScanPostgreSql(sql)) yield return issue;
+            yield break;
+        }
         // PAR002: Consecutive commas
         for (int i = 0; i < sql.Length - 1; i++)
         {
@@ -205,6 +210,25 @@ public static class NzSqlStructuralScanner
             yield return new ValidationError(
                 "Mismatched parentheses — more '(' than ')'",
                 "warning", pos, "PAR112", pos.Line, pos.Column + 1);
+        }
+    }
+    private static IEnumerable<ValidationError> ScanPostgreSql(string sql)
+    {
+        Token<NzToken>[]? tokens = null;
+        ValidationError? failure = null;
+        try { tokens = PostgreSqlLexer.Tokenize(sql).ToArray(); }
+        catch (Superpower.ParseException error)
+        {
+            failure = new ValidationError("PostgreSQL lexical error: " + error.Message, "error", new SourcePosition(1, 1, 0), "LEX001");
+        }
+        if (failure is not null) { yield return failure; yield break; }
+        for (var i = 0; i < tokens!.Length; i++)
+        {
+            var token = tokens[i];
+            if (token.Kind == NzToken.PostgreSqlInvalidLiteral)
+                yield return new ValidationError("Unterminated PostgreSQL literal or empty quoted identifier", "error", SourcePosition.FromToken(token), "PAR110");
+            if (token.Kind == NzToken.Comma && i > 0 && tokens[i - 1].Kind == NzToken.Comma)
+                yield return new ValidationError("Consecutive commas are not allowed", "error", SourcePosition.FromToken(token), "PAR002");
         }
     }
 }

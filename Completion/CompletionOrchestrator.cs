@@ -61,6 +61,18 @@ public static class CompletionOrchestrator
         options ??= new CompletionOrchestrationOptions();
         offset = Math.Clamp(offset, 0, text.Length);
 
+        if (dialect == SqlDialect.PostgreSql)
+        {
+            try
+            {
+                var protectedToken = JustyBase.NetezzaSqlParser.Lexer.PostgreSqlLexer.Tokenize(text)
+                    .FirstOrDefault(token => token.Kind is JustyBase.NetezzaSqlParser.Lexer.NzToken.StringLiteral
+                        or JustyBase.NetezzaSqlParser.Lexer.NzToken.PostgreSqlInvalidLiteral
+                        && token.Position.Absolute < offset && offset < token.Position.Absolute + token.Span.Length);
+                if (protectedToken.Span.Length > 0) return new CompletionOrchestrationResult([], []);
+            }
+            catch (Superpower.ParseException) { }
+        }
         IReadOnlyList<CompletionItem> engineItems = [];
         string engineSql = text;
         int engineCursor = offset;

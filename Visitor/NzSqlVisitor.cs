@@ -14,6 +14,7 @@ public partial class NzSqlVisitor
     private readonly ISchemaProvider? _schema;
     private readonly ISqlAuthoringCatalog _catalog;
     private readonly string? _activeDatabase;
+    private bool IsPostgreSql => _catalog is PostgreSqlSqlCatalog;
     private readonly HashSet<string> _accessParameterNames = new(StringComparer.OrdinalIgnoreCase);
 
     // Context tracking
@@ -53,7 +54,7 @@ public partial class NzSqlVisitor
         ISqlAuthoringCatalog? catalog = null,
         string? activeDatabase = null)
     {
-        _scope = new ScopeBuilder();
+        _scope = new ScopeBuilder(caseSensitive: catalog is PostgreSqlSqlCatalog);
         _schema = schema;
         _catalog = catalog ?? NetezzaSqlAuthoringCatalog.Instance;
         _activeDatabase = string.IsNullOrWhiteSpace(activeDatabase) ? null : activeDatabase;

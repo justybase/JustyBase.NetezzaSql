@@ -10,6 +10,7 @@ public partial class Db2SqlParser
 
     protected override SelectStatement ParseSelectStatement(WithClause? with = null)
     {
+        if (Peek().Kind == NzToken.Values) return ParseValuesQuery(with);
         var sel = Expect(NzToken.Select);
 
         bool distinct = false;

@@ -12,6 +12,10 @@ public partial class NzSqlParser
 {
     // ====== INSERT Statement ======
 
+    protected virtual bool SupportsUpdateAliasAs => false;
+
+    protected virtual bool SupportsDefaultInsertValues => false;
+
     protected virtual InsertStatement? ParseInsert()
     {
         var insertTok = Expect(NzToken.Insert);
@@ -78,6 +82,11 @@ public partial class NzSqlParser
                     return null;
                 }
             }
+        }
+        else if (SupportsDefaultInsertValues && Peek().Kind == NzToken.Default)
+        {
+            Advance();
+            Expect(NzToken.Values);
         }
         else if (Peek().Kind == NzToken.Values)
         {
@@ -172,7 +181,7 @@ public partial class NzSqlParser
             var asTok = Advance();
             if (Peek().Kind is NzToken.Identifier or NzToken.QuotedIdentifier)
                 alias = Advance().ToStringValue();
-            _errors.Add(new ValidationError(
+            if (!SupportsUpdateAliasAs) _errors.Add(new ValidationError(
                 "UPDATE table AS alias is not supported in Netezza — use UPDATE table alias without AS",
                 "error", SourcePosition.FromToken(asTok), "SQL046",
                 EndLine: asTok.Position.Line, EndColumn: asTok.Position.Column + asTok.Span.Length));

@@ -20,7 +20,8 @@ public readonly record struct LintConfig(
     IReadOnlyList<LintRule>? AdditionalRules = null,
     IDictionary<string, RuleSeverityConfig>? RuleSeverities = null,
     SqlDialect Dialect = SqlDialect.Netezza,
-    string? ActiveDatabase = null
+    string? ActiveDatabase = null,
+    int? ServerVersionNum = null
 );
 
 /// <summary>
@@ -229,6 +230,10 @@ public sealed class LintEngine : IDisposable
         if (ct.IsCancellationRequested)
             return new LintResult(issues, _registry.ExpensiveRules.Count, 0, 0, false);
 
+        var versionIssues = _dialect == SqlDialect.PostgreSql
+            ? PostgreSqlVersionDiagnostics.Analyze(sql, config.ServerVersionNum) : Array.Empty<LintIssue>();
+        issues.AddRange(versionIssues);
+
         // Step A: Statement index + diff
         var state = _validationSession.PrepareDocument(documentUri, sql);
         var effectiveDirtyIndices = ExpandDirtyIndicesForScriptContext(state);
@@ -261,7 +266,7 @@ public sealed class LintEngine : IDisposable
             {
                 sw.Stop();
                 _metrics.RecordExpensiveRun(sw.Elapsed, cacheHit: true);
-                return new LintResult(allCached, _registry.ExpensiveRules.Count, 0, 0, true);
+                return new LintResult(allCached.Concat(versionIssues).ToArray(), _registry.ExpensiveRules.Count, 0, 0, true);
             }
         }
 

@@ -213,6 +213,7 @@ public partial class NzSqlParser
         Statement? result = k switch
         {
             NzToken.Select or NzToken.LParen => ParseSelect(),
+            NzToken.Values when SupportsValuesQuery => ParseSelectStatement(),
             NzToken.With => ParseWithTopLevel(),
             NzToken.Insert => ParseInsert(),
             NzToken.Update => ParseUpdate(),

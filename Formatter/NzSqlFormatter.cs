@@ -51,6 +51,9 @@ public sealed class NzSqlFormatter
             case AccessDropIndexStatement dropIndex:
                 FormatAccessDropIndex(dropIndex);
                 break;
+            case PostgreSqlCommandStatement command:
+                FormatPostgreSqlTokenRange(command.Tokens);
+                break;
             case SelectStatement select:
                 FormatSelectCore(select);
                 break;
@@ -206,6 +209,15 @@ public sealed class NzSqlFormatter
         }
     }
 
+    private void FormatPostgreSqlTokenRange(IReadOnlyList<Token<NzToken>> tokens)
+    {
+        if (tokens.Count == 0) return;
+        var source = tokens[0].Span.Source;
+        var start = tokens[0].Position.Absolute;
+        var end = tokens[^1].Position.Absolute + tokens[^1].Span.Length;
+        Write(source is null ? FormatOpaqueTokens(tokens) : source.Substring(start, end - start));
+    }
+
     private void FormatSelectCore(SelectStatement stmt)
     {
         if (stmt.With is not null)
@@ -214,6 +226,22 @@ public sealed class NzSqlFormatter
             NewLine();
         }
 
+        if (stmt.ValuesRows is not null)
+        {
+            Write("VALUES ");
+            for (var i = 0; i < stmt.ValuesRows.Count; i++)
+            {
+                if (i > 0) Write(", ");
+                Write("(");
+                for (var j = 0; j < stmt.ValuesRows[i].Count; j++)
+                {
+                    if (j > 0) Write(", ");
+                    FormatExpression(stmt.ValuesRows[i][j]);
+                }
+                Write(")");
+            }
+            return;
+        }
         Write("SELECT");
         if (stmt.Modifier is not null)
         {
@@ -518,7 +546,9 @@ public sealed class NzSqlFormatter
                 Write(")");
             }
 
-            Write(" AS (");
+            Write(" AS ");
+            if (cte.Materialization is not null) Write(cte.Materialization + " ");
+            Write("(");
             FormatSelectCore(cte.Query);
             Write(")");
         }
@@ -569,11 +599,13 @@ public sealed class NzSqlFormatter
         if (src.TableFunction is not null)
         {
             FormatExpression(src.TableFunction);
+            if (src.WithOrdinality) Write(" WITH ORDINALITY");
             if (src.Alias is not null)
             {
                 Write(" AS ");
                 Write(FormatTableIdentifier(src.Alias, src.AliasQuote));
             }
+            if (src.ColumnAliases is not null) Write("(" + string.Join(", ", src.ColumnAliases) + ")");
             return;
         }
 
@@ -604,6 +636,7 @@ public sealed class NzSqlFormatter
             Write(" AS ");
             Write(FormatTableIdentifier(src.Alias, src.AliasQuote));
         }
+        if (src.ColumnAliases is not null) Write("(" + string.Join(", ", src.ColumnAliases) + ")");
     }
 
     private void FormatJoin(JoinClause join)
@@ -666,7 +699,8 @@ public sealed class NzSqlFormatter
             Write(")");
         }
 
-        if (stmt.Values is { Count: > 0 })
+        if (stmt.DefaultValues) Write(" DEFAULT VALUES");
+        else if (stmt.Values is { Count: > 0 })
         {
             Write(" VALUES");
             for (int i = 0; i < stmt.Values.Count; i++)
@@ -780,7 +814,7 @@ public sealed class NzSqlFormatter
         if (stmt.From is { Count: > 0 })
         {
             NewLine();
-            Write("FROM ");
+            Write(stmt.PostgreSqlUsing ? "USING " : "FROM ");
             FormatFrom(stmt.From);
         }
 
@@ -834,6 +868,8 @@ public sealed class NzSqlFormatter
         if (returning is null) return;
         NewLine();
         Write("RETURNING ");
+        if (returning.TransitionAliases is { Count: > 0 })
+            Write("WITH (" + string.Join(", ", returning.TransitionAliases.Select(pair => pair.Key + " AS " + pair.Value)) + ") ");
         if (returning.Items is { Count: > 0 })
         {
             for (var i = 0; i < returning.Items.Count; i++)
@@ -881,6 +917,7 @@ public sealed class NzSqlFormatter
             NewLine();
             FormatMergeClause(clause);
         }
+        FormatReturning(stmt.Returning);
     }
 
     private void FormatMergeClause(MergeClause clause)
@@ -888,7 +925,7 @@ public sealed class NzSqlFormatter
         switch (clause)
         {
             case MergeMatchedUpdateClause u:
-                Write("WHEN MATCHED");
+                Write(clause.NotMatchedBySource ? "WHEN NOT MATCHED BY SOURCE" : "WHEN MATCHED");
                 if (u.Condition is not null)
                 {
                     Write(" AND ");
@@ -908,7 +945,7 @@ public sealed class NzSqlFormatter
                 break;
 
             case MergeMatchedDeleteClause d:
-                Write("WHEN MATCHED");
+                Write(clause.NotMatchedBySource ? "WHEN NOT MATCHED BY SOURCE" : "WHEN MATCHED");
                 if (d.Condition is not null)
                 {
                     Write(" AND ");
@@ -1146,6 +1183,7 @@ public sealed class NzSqlFormatter
     {
         Write("DROP ");
         Write(stmt.ObjectType);
+        if (stmt.IfExists && stmt.IfExistsBeforeTarget) Write(" IF EXISTS");
         if (stmt.Targets.Count > 0)
         {
             Write(" ");
@@ -1157,8 +1195,9 @@ public sealed class NzSqlFormatter
             }
         }
         // Netezza places the optional IF EXISTS after the target list.
-        if (stmt.IfExists)
+        if (stmt.IfExists && !stmt.IfExistsBeforeTarget)
             Write(" IF EXISTS");
+        if (stmt.DropBehavior is not null) Write(" " + stmt.DropBehavior);
     }
 
     private void FormatAlterTable(AlterTableStatement stmt)
@@ -1616,6 +1655,11 @@ public sealed class NzSqlFormatter
                 Write("*");
                 break;
             case FunctionCall functionCall:
+                if (functionCall.PostgreSqlTokens is not null)
+                {
+                    FormatPostgreSqlTokenRange(functionCall.PostgreSqlTokens);
+                    break;
+                }
                 if (functionCall.Schema is not null)
                 {
                     Write(functionCall.Schema);
@@ -1636,6 +1680,17 @@ public sealed class NzSqlFormatter
                         if (i > 0)
                             Write(", ");
                         FormatExpression(functionCall.Arguments[i]);
+                    }
+                }
+                if (functionCall.ArgumentOrderBy is not null)
+                {
+                    Write(" ORDER BY ");
+                    for (var i = 0; i < functionCall.ArgumentOrderBy.Count; i++)
+                    {
+                        if (i > 0) Write(", ");
+                        var item = functionCall.ArgumentOrderBy[i];
+                        FormatExpression(item.Expression);
+                        if (item.Descending) Write(" DESC");
                     }
                 }
                 Write(")");
@@ -1667,6 +1722,10 @@ public sealed class NzSqlFormatter
                 Write(binary.OperatorText ?? OpString(binary.Operator));
                 Write(" ");
                 FormatExpression(binary.Right);
+                break;
+            case ArraySubscriptExpression subscript:
+                Write("("); FormatExpression(subscript.Array); Write(")[");
+                FormatExpression(subscript.Index); Write("]");
                 break;
             case ArrayExpression array:
                 Write("ARRAY[");
@@ -2212,6 +2271,9 @@ public sealed class NzSqlFormatter
         BinaryOperator.JsonTextArrow => "->>",
         BinaryOperator.JsonPath => "#>",
         BinaryOperator.JsonTextPath => "#>>",
+        BinaryOperator.JsonExists => "?",
+        BinaryOperator.JsonExistsAny => "?|",
+        BinaryOperator.JsonExistsAll => "?&",
         _ => "?"
     };
 
