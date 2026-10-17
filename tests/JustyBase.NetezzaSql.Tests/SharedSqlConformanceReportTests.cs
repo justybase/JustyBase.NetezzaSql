@@ -193,7 +193,8 @@ public sealed class SharedSqlConformanceReportTests
 
     private static SharedSqlConformanceApplicability.CorpusCaseDescriptor ToDescriptor(CorpusCase testCase) =>
         new(testCase.Id, testCase.Category, testCase.Contract, testCase.Priority,
-            testCase.Dialect, testCase.AppliesTo, testCase.VerificationStatus, testCase.DeclaredDivergence);
+            testCase.Dialect, testCase.AppliesTo, testCase.RequiresCapabilities,
+            testCase.VerificationStatus, testCase.DeclaredDivergence);
 
     private static void Add(
         Dictionary<(string Id, SqlDialect Dialect), List<Evaluation>> outcomes,
@@ -226,6 +227,9 @@ public sealed class SharedSqlConformanceReportTests
                 var appliesTo = item.TryGetProperty("appliesTo", out var applies)
                     ? applies.EnumerateArray().Select(entry => entry.GetString() ?? "").ToArray()
                     : Array.Empty<string>();
+                var requiresCapabilities = item.TryGetProperty("requiresCapabilities", out var capabilities)
+                    ? capabilities.EnumerateArray().Select(entry => entry.GetString() ?? "").ToArray()
+                    : Array.Empty<string>();
                 var declaredDivergence = item.TryGetProperty("knownDivergence", out var divergences)
                     && divergences.EnumerateArray().Any(divergence =>
                         GetString(divergence, "repository") == Implementation);
@@ -237,6 +241,7 @@ public sealed class SharedSqlConformanceReportTests
                     GetString(item, "priority"),
                     GetString(item, "dialect"),
                     appliesTo,
+                    requiresCapabilities,
                     verification,
                     declaredDivergence);
             }
@@ -271,6 +276,7 @@ public sealed class SharedSqlConformanceReportTests
         string Priority,
         string Dialect,
         string[] AppliesTo,
+        string[] RequiresCapabilities,
         string VerificationStatus,
         bool DeclaredDivergence);
 

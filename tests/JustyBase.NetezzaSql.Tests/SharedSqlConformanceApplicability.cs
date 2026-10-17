@@ -61,6 +61,49 @@ internal static class SharedSqlConformanceApplicability
         ParserCategories.Contains(category) || AuthoringCategories.Contains(category);
 
     /// <summary>
+    /// Language capabilities this conformance adapter declares per dialect, used
+    /// to honour `requiresCapabilities`. Only capabilities whose absence the
+    /// corpus exercises today are listed; anything unknown is treated as not
+    /// declared so the gap stays visible as missing-capability debt instead of a
+    /// silently skipped or failed case. Netezza is the deep dialect and declares
+    /// every capability.
+    /// </summary>
+    internal static bool DeclaresCapability(string dialect, string capability)
+    {
+        if (string.Equals(dialect, "netezza", StringComparison.Ordinal))
+            return true;
+        if (string.Equals(dialect, "sqlite", StringComparison.Ordinal))
+        {
+            // The .NET SQLite surface does not implement UPDATE/DELETE
+            // ORDER BY ... LIMIT (SQLITE_ENABLE_UPDATE_DELETE_LIMIT syntax).
+            return capability switch
+            {
+                "triggerBodies" => true,
+                _ => false,
+            };
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Required capabilities the resolved execution dialect does not declare.
+    /// Cases with missing capabilities are not executed: their gap is recorded
+    /// as missing-capability parity debt instead of an assertion failure.
+    /// </summary>
+    internal static IReadOnlyList<string> MissingCapabilities(
+        string dialect, IReadOnlyList<string> requiresCapabilities, IReadOnlyList<string> appliesTo)
+    {
+        if (requiresCapabilities.Count == 0)
+            return Array.Empty<string>();
+        var executionDialect = ResolveExecutionDialect(dialect, appliesTo);
+        if (executionDialect.Length == 0)
+            return Array.Empty<string>();
+        return requiresCapabilities
+            .Where(capability => !DeclaresCapability(executionDialect, capability))
+            .ToArray();
+    }
+
+    /// <summary>
     /// Resolves the dialect a case executes in. Non-common cases keep their own
     /// dialect; `common` cases resolve to the first preferred product dialect
     /// named by `appliesTo`.
@@ -111,6 +154,16 @@ internal static class SharedSqlConformanceApplicability
                 $"the .NET library has no support for dialect `{executionDialect}`");
         }
 
+        var missing = testCase.RequiresCapabilities
+            .Where(capability => !DeclaresCapability(executionDialect, capability))
+            .ToArray();
+        if (missing.Length > 0)
+        {
+            return new CaseClassification(
+                MissingCapability, executionDialect,
+                $"dialect `{executionDialect}` does not declare [{string.Join(", ", missing)}]");
+        }
+
         if (!SupportsCategory(testCase.Category))
         {
             return new CaseClassification(
@@ -159,6 +212,7 @@ internal static class SharedSqlConformanceApplicability
         string Priority,
         string Dialect,
         IReadOnlyList<string> AppliesTo,
+        IReadOnlyList<string> RequiresCapabilities,
         string VerificationStatus,
         bool DeclaredDivergence);
 }

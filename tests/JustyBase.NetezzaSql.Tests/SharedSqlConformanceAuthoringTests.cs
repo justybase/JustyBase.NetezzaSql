@@ -51,6 +51,16 @@ public sealed class SharedSqlConformanceAuthoringTests
                 continue;
             }
 
+            var requiresCapabilities = root.TryGetProperty("requiresCapabilities", out var requires)
+                ? requires.EnumerateArray().Select(entry => entry.GetString() ?? "").ToArray()
+                : Array.Empty<string>();
+            var appliesToAuthoring = root.TryGetProperty("appliesTo", out var applies)
+                ? applies.EnumerateArray().Select(entry => entry.GetString() ?? "").ToArray()
+                : Array.Empty<string>();
+            if (SharedSqlConformanceApplicability.MissingCapabilities(
+                    dialect.ToString().ToLowerInvariant(), requiresCapabilities, appliesToAuthoring).Count > 0)
+                continue;
+
             yield return [GetString(root, "id"), json, dialect];
         }
         if (!yielded)
