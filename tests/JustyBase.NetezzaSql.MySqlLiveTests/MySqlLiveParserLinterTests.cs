@@ -39,6 +39,9 @@ public sealed class MySqlLiveFixture : IDisposable
     }
 }
 
+/// Live MySQL verification for the C# MySQL lexer/parser/linter.
+/// Requires a real external MySQL connection, so it is excluded from standard gates.
+[Trait("Category", "LiveDatabase")]
 public sealed class MySqlLiveParserLinterTests : IClassFixture<MySqlLiveFixture>
 {
     private readonly MySqlLiveFixture _fixture;

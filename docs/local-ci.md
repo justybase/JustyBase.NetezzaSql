@@ -9,7 +9,7 @@ pwsh .\eng\Verify-Local.ps1
 This script runs, in order:
 
 1. `dotnet restore` and `dotnet build` (Release)
-2. `dotnet test` on the full solution (Release, excluding `Category=Performance`, `Category=SqlConformance` and `Category=LiveConformance` — the shared `JustyBase.SqlConformance` corpus is an external local-only dependency and only runs explicitly when `JUSTYBASE_SQL_CONFORMANCE_PATH` is set; live conformance additionally requires the `JUSTYBASE_RUN_LIVE_CONFORMANCE=1` opt-in plus live `NZ_DEV_*` credentials)
+2. `dotnet test` on the full solution (Release, excluding `Category=Performance`, `Category=SqlConformance`, `Category=LiveConformance` and `Category=LiveDatabase` — the shared `JustyBase.SqlConformance` corpus is an external local-only dependency and only runs explicitly when `JUSTYBASE_SQL_CONFORMANCE_PATH` is set; live conformance additionally requires the `JUSTYBASE_RUN_LIVE_CONFORMANCE=1` opt-in plus live `NZ_DEV_*` credentials; `LiveDatabase` tests require a real external database connection and never run in the standard suite, even when live `*_HOST` env vars are set locally)
 3. `pwsh .\eng\Test-Coverage.ps1` — per-library line/branch gates (parser, DDL, catalog, **Core**, **ImportExport**, **Ai**, **Sqlite**, Netezza integration)
 4. `git diff --check` — trailing whitespace and conflict markers
 
@@ -33,6 +33,34 @@ git config core.hooksPath eng/githooks
 ```
 
 Copy or rename [eng/githooks/pre-push.sample](../eng/githooks/pre-push.sample) to `pre-push` if your Git client requires an extensionless hook file.
+
+## Test categories
+
+Standard tests (CI and `Verify-Local`):
+
+- no private corpus
+- no live database
+- no `LiveConformance`
+- filter: `Category!=Performance&Category!=SqlConformance&Category!=LiveConformance&Category!=LiveDatabase`
+
+`SqlConformance`:
+
+- explicit only
+- requires `JUSTYBASE_SQL_CONFORMANCE_PATH` pointing at the private sibling checkout
+- `dotnet test .\JustyBase.NetezzaSql.sln --filter "Category=SqlConformance"`
+
+`LiveDatabase`:
+
+- explicit only
+- every test that requires a real external database connection carries `Trait("Category", "LiveDatabase")`
+- run explicitly, e.g. `dotnet test .\JustyBase.NetezzaSql.sln --filter "Category=LiveDatabase"`
+- individual suites additionally require their live configuration (`NZ_DEV_*`, `ORACLE_LIVE_TEST_*`, `POSTGRES_LIVE_TEST_*`, `MSSQL_LIVE_TEST_*`, `MYSQL_LIVE_TEST_*`, `DB2_LIVE_TEST_*`)
+
+`LiveConformance`:
+
+- explicit only
+- may require private corpus + live database + the `JUSTYBASE_RUN_LIVE_CONFORMANCE=1` opt-in
+- tests that also need a real DB connection carry both `LiveConformance` and `LiveDatabase`
 
 ## Live Netezza import proof (optional, local only)
 

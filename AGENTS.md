@@ -13,7 +13,7 @@ Run commands from the repository root:
 ```powershell
 dotnet build .\JustyBase.NetezzaSqlParser.csproj
 dotnet build .\JustyBase.NetezzaDdl\JustyBase.NetezzaDdl.csproj
-dotnet test .\JustyBase.NetezzaSql.sln --filter "Category!=Performance&Category!=SqlConformance"
+dotnet test .\JustyBase.NetezzaSql.sln --filter "Category!=Performance&Category!=SqlConformance&Category!=LiveConformance&Category!=LiveDatabase"
 pwsh .\eng\Verify-Local.ps1
 ```
 

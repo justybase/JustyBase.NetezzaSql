@@ -9,7 +9,9 @@ namespace JustyBase.NetezzaSql.IntegrationTests;
 /// (read-only-probes, disposable-ddl, dml-fixture). Emits one
 /// CONFORMANCE_LIVE_RESULT marker per suite. Run with:
 /// dotnet test ... --filter Category=LiveConformance
+/// Requires a real external Netezza connection (Category=LiveDatabase on top of LiveConformance).
 /// </summary>
+[Trait("Category", "LiveDatabase")]
 public sealed class SharedSqlConformanceLiveProbeTests
 {
     [OptInLiveConformanceFact]

@@ -7,7 +7,9 @@ namespace JustyBase.NetezzaSql.IntegrationTests;
 /// <summary>
 /// Optional live checks using the repository's Netezza driver. They never
 /// open a connection in the normal offline test suite.
+/// Requires a real external Netezza connection, so it is excluded from standard gates.
 /// </summary>
+[Trait("Category", "LiveDatabase")]
 public sealed class NetezzaLiveSmokeTests
 {
     [Fact]

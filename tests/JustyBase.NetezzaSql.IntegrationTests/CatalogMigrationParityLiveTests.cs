@@ -7,7 +7,9 @@ namespace JustyBase.NetezzaSql.IntegrationTests;
 /// <summary>
 /// Live smoke for the modern shared catalog SQL used by the Legacy host after the legacy catalog
 /// SQL file was retired (<c>NetezzaCatalogSql.Legacy.cs</c>). Gated by NZ_DEV_* (soft-skip).
+/// Requires a real external Netezza connection, so it is excluded from standard gates.
 /// </summary>
+[Trait("Category", "LiveDatabase")]
 public sealed class CatalogMigrationParityLiveTests
 {
     private static bool TryOpen(out NzConnection? connection)

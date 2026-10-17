@@ -62,7 +62,9 @@ public sealed class Db2LiveFixture : IDisposable
 /// <summary>
 /// Live Db2 LUW verification for the C# Db2 lexer/parser/linter.
 /// Soft-skips without DB2_LIVE_TEST_* or when the IBM driver/clidriver is unavailable.
+/// Requires a real external Db2 connection, so it is excluded from standard gates.
 /// </summary>
+[Trait("Category", "LiveDatabase")]
 public sealed class Db2LiveParserLinterTests : IClassFixture<Db2LiveFixture>
 {
     private readonly Db2LiveFixture _fx;

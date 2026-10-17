@@ -7,7 +7,9 @@ namespace JustyBase.NetezzaSql.IntegrationTests;
 /// Environment-gated end-to-end coverage for the shared import contract.
 /// Soft-skip when NZ_DEV_* is missing. Pipe topology failures soft-skip unless
 /// NZ_REQUIRE_PIPE=1 (strict local/pipe-capable setups).
+/// Requires a real external Netezza connection, so it is excluded from standard gates.
 /// </summary>
+[Trait("Category", "LiveDatabase")]
 public sealed class NetezzaLiveImportTests
 {
     [Fact]

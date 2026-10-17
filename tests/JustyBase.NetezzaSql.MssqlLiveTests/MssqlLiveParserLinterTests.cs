@@ -56,7 +56,9 @@ public sealed class MssqlLiveFixture : IDisposable
 /// <summary>
 /// Live SQL Server verification for the C# MSSQL lexer/parser/linter.
 /// Soft-skips without MSSQL_LIVE_TEST_* or when the driver cannot connect.
+/// Requires a real external SQL Server connection, so it is excluded from standard gates.
 /// </summary>
+[Trait("Category", "LiveDatabase")]
 public sealed class MssqlLiveParserLinterTests : IClassFixture<MssqlLiveFixture>
 {
     private readonly MssqlLiveFixture _fx;

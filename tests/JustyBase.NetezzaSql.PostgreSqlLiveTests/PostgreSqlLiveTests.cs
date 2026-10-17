@@ -27,6 +27,9 @@ public sealed class PostgreSqlLiveFixture : IDisposable
     }
 }
 
+/// Live PostgreSQL verification for the C# PostgreSQL lexer/parser.
+/// Requires a real external PostgreSQL connection, so it is excluded from standard gates.
+[Trait("Category", "LiveDatabase")]
 public sealed class PostgreSqlLiveParserTests : IClassFixture<PostgreSqlLiveFixture>
 {
     private readonly PostgreSqlLiveFixture _fixture;

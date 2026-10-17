@@ -68,7 +68,9 @@ public sealed class OracleLiveFixture : IDisposable
 /// <summary>
 /// Live Oracle verification for the C# Oracle lexer/parser/linter.
 /// Soft-skips without ORACLE_LIVE_TEST_*; creates disposable fixtures when connected.
+/// Requires a real external Oracle connection, so it is excluded from standard gates.
 /// </summary>
+[Trait("Category", "LiveDatabase")]
 public sealed class OracleLiveParserLinterTests : IClassFixture<OracleLiveFixture>
 {
     private readonly OracleLiveFixture _fx;
