@@ -15,6 +15,9 @@
     <PackageReference Include="JustyBase.NetezzaDriver" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="Oracle.ManagedDataAccess.Core" />
+    <!-- Nearest-wins override for the transitive Pkcs pulled by ODP.NET;
+         version is managed centrally in Directory.Packages.props. -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio">
       <PrivateAssets>all</PrivateAssets>
