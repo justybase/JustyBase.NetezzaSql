@@ -25,7 +25,17 @@ public sealed class SharedSqlConformanceAuthoringTests
         "formatting", "hover", "recovery"
     };
 
-    public static IEnumerable<object[]> SharedCases()
+    public static IEnumerable<object[]> SharedCases() => SharedCases(includeNeedsVerification: false);
+
+    /// <summary>
+    /// The same authoring rows with <c>needsVerification</c> cases included. Used
+    /// by the report adapter, which records the observed behaviour of unresolved
+    /// expectations (matches/differs) without asserting them.
+    /// </summary>
+    public static IEnumerable<object[]> SharedCasesIncludingNeedsVerification() =>
+        SharedCases(includeNeedsVerification: true);
+
+    private static IEnumerable<object[]> SharedCases(bool includeNeedsVerification)
     {
         var yielded = false;
         foreach (var (json, dialect) in LoadCases())
@@ -35,7 +45,8 @@ public sealed class SharedSqlConformanceAuthoringTests
             var root = document.RootElement;
             var category = GetString(root, "category");
             if (!Categories.Contains(category)
-                || GetString(root.GetProperty("verification"), "status", "source-backed") == "needsVerification")
+                || (!includeNeedsVerification
+                    && GetString(root.GetProperty("verification"), "status", "source-backed") == "needsVerification"))
             {
                 continue;
             }

@@ -17,7 +17,18 @@ public sealed class SharedSqlConformanceTests
     internal const string MissingRepoMessage =
         "JUSTYBASE_SQL_CONFORMANCE_PATH is required for local SQL conformance tests.";
 
-    public static IEnumerable<object[]> SharedParserCases()
+    public static IEnumerable<object[]> SharedParserCases() =>
+        SharedParserCases(includeNeedsVerification: false);
+
+    /// <summary>
+    /// The same parser rows with <c>needsVerification</c> cases included. Used by
+    /// the report adapter, which records the observed behaviour of unresolved
+    /// expectations (matches/differs) without asserting them.
+    /// </summary>
+    public static IEnumerable<object[]> SharedParserCasesIncludingNeedsVerification() =>
+        SharedParserCases(includeNeedsVerification: true);
+
+    private static IEnumerable<object[]> SharedParserCases(bool includeNeedsVerification)
     {
         var yielded = false;
         foreach (var (caseJson, dialect) in LoadCases())
@@ -27,7 +38,8 @@ public sealed class SharedSqlConformanceTests
             var root = document.RootElement;
             var category = GetString(root, "category");
             var verification = GetString(root.GetProperty("verification"), "status", "source-backed");
-            if (!ParserCategories.Contains(category) || verification == "needsVerification")
+            if (!ParserCategories.Contains(category)
+                || (!includeNeedsVerification && verification == "needsVerification"))
                 continue;
 
             var expected = root.GetProperty("expect");
