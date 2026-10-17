@@ -458,6 +458,9 @@ internal sealed class NzSymbolCollector
             case CastFunctionExpression castFn:
                 CollectExpression(castFn.Expression, tokens, scope);
                 break;
+            case ArraySubscriptExpression subscript:
+                CollectExpression(subscript.Array, tokens, scope); CollectExpression(subscript.Index, tokens, scope);
+                break;
             case ArrayExpression array:
                 foreach (var item in array.Items)
                     CollectExpression(item, tokens, scope);
@@ -489,6 +492,7 @@ internal sealed class NzSymbolCollector
                 CollectExpression(quantified.Right, tokens, scope);
                 break;
             case FunctionCall fn:
+                if (fn.ArgumentOrderBy is not null) foreach (var order in fn.ArgumentOrderBy) CollectExpression(order.Expression, tokens, scope);
                 if (fn.Arguments is not null)
                     foreach (var arg in fn.Arguments)
                         CollectExpression(arg, tokens, scope);

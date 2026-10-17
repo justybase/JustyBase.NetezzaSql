@@ -210,6 +210,8 @@ public partial class NzSqlVisitor
             (ce.ElseClause is not null && ExpressionContainsColumnRef(ce.ElseClause)),
         CastExpression c => ExpressionContainsColumnRef(c.Expression),
         CastFunctionExpression cf => ExpressionContainsColumnRef(cf.Expression),
+        ArraySubscriptExpression subscript => ExpressionContainsColumnRef(subscript.Array) || ExpressionContainsColumnRef(subscript.Index),
+        ArrayExpression array => array.Items.Any(ExpressionContainsColumnRef),
         InExpression ie =>
             ExpressionContainsColumnRef(ie.Left) ||
             (ie.Values?.Any(ExpressionContainsColumnRef) == true),
@@ -235,6 +237,8 @@ public partial class NzSqlVisitor
             (ce.ElseClause is not null && ExpressionContainsAggregate(ce.ElseClause)),
         CastExpression c => ExpressionContainsAggregate(c.Expression),
         CastFunctionExpression cf => ExpressionContainsAggregate(cf.Expression),
+        ArraySubscriptExpression subscript => ExpressionContainsAggregate(subscript.Array) || ExpressionContainsAggregate(subscript.Index),
+        ArrayExpression array => array.Items.Any(ExpressionContainsAggregate),
         InExpression ie =>
             ExpressionContainsAggregate(ie.Left) ||
             (ie.Values?.Any(ExpressionContainsAggregate) == true),
@@ -259,6 +263,8 @@ public partial class NzSqlVisitor
             (ce.ElseClause is not null && ExpressionContainsWindowFunction(ce.ElseClause)),
         CastExpression c => ExpressionContainsWindowFunction(c.Expression),
         CastFunctionExpression cf => ExpressionContainsWindowFunction(cf.Expression),
+        ArraySubscriptExpression subscript => ExpressionContainsWindowFunction(subscript.Array) || ExpressionContainsWindowFunction(subscript.Index),
+        ArrayExpression array => array.Items.Any(ExpressionContainsWindowFunction),
         _ => false
     };
 

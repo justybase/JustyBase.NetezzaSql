@@ -5,8 +5,12 @@ namespace JustyBase.NetezzaSqlParser.Parser;
 
 public sealed partial class PostgreSqlSqlParser
 {
+    protected override bool SupportsUpdateAliasAs => true;
+    protected override bool SupportsDefaultInsertValues => true;
     protected override InsertStatement? ParseInsert()
     {
+        var defaultValues = _tokens.Skip(_pos).TakeWhile(t => t.Kind != NzToken.Semicolon).Any(t => t.Kind == NzToken.Default)
+            && _tokens.Skip(_pos).TakeWhile(t => t.Kind != NzToken.Semicolon).Any(t => t.Kind == NzToken.Values);
         var insert = base.ParseInsert();
         if (insert is null) return null;
 
@@ -14,7 +18,7 @@ public sealed partial class PostgreSqlSqlParser
         if (Peek().Kind == NzToken.On)
             conflict = ParseOnConflict();
         var returning = ParseReturningClause();
-        return insert with { OnConflict = conflict, Returning = returning };
+        return insert with { OnConflict = conflict, Returning = returning, DefaultValues = defaultValues && insert.Values is null && insert.SourceQuery is null };
     }
 
     protected override UpdateStatement? ParseUpdate()
@@ -26,9 +30,15 @@ public sealed partial class PostgreSqlSqlParser
 
     protected override DeleteStatement? ParseDelete()
     {
-        var delete = base.ParseDelete();
-        if (delete is null) return null;
-        return delete with { Returning = ParseReturningClause() };
+        var start = Expect(NzToken.Delete);
+        Expect(NzToken.From);
+        var (target, _) = ParseTableName();
+        var alias = ParseAliasName();
+        IReadOnlyList<TableReference>? usingTables = null;
+        if (Peek().Kind == NzToken.Using) { Advance(); usingTables = ParseTableReferences(); }
+        Expression? where = null;
+        if (Peek().Kind == NzToken.Where) { Advance(); where = ParseExpression(); }
+        return new DeleteStatement(FromToken(start), target, alias, where, ParseReturningClause(), From: usingTables) { PostgreSqlUsing = usingTables is not null };
     }
 
     private PostgreSqlOnConflictClause ParseOnConflict()
@@ -68,6 +78,8 @@ public sealed partial class PostgreSqlSqlParser
                 ConstraintName: constraintName);
         }
 
+        if (columns is null && constraintName is null)
+            AddParserError("ON CONFLICT DO UPDATE requires an inference target", Peek(), "PAR001");
         Expect(NzToken.Update);
         Expect(NzToken.Set);
         var items = new List<UpdateSetItem> { ParsePostgreSqlSetItem() };
@@ -107,6 +119,22 @@ public sealed partial class PostgreSqlSqlParser
         if (Peek().Kind != NzToken.PostgreSqlReturning)
             return null;
         var returning = Advance();
+        Dictionary<string, string>? transitions = null;
+        if (Peek().Kind == NzToken.With)
+        {
+            transitions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            Advance(); Expect(NzToken.LParen);
+            do
+            {
+                if (!(PostgreSqlWordIs("OLD") || PostgreSqlWordIs("NEW")))
+                    AddParserError("RETURNING alias must name OLD or NEW", Peek(), "PAR001");
+                var transition = Advance().ToStringValue(); Expect(NzToken.As);
+                transitions[transition] = ExpectNameToken().ToStringValue();
+                if (Peek().Kind != NzToken.Comma) break;
+                Advance();
+            } while (true);
+            Expect(NzToken.RParen);
+        }
         var items = new List<ReturningItem>();
         items.Add(ParseReturningItem());
         while (Peek().Kind == NzToken.Comma)
@@ -123,7 +151,7 @@ public sealed partial class PostgreSqlSqlParser
             StarExpression => "*",
             _ => string.Empty
         }).ToArray();
-        return new ReturningClause(FromToken(returning), columns, Items: items);
+        return new ReturningClause(FromToken(returning), columns, Items: items) { TransitionAliases = transitions };
     }
 
     private ReturningItem ParseReturningItem()

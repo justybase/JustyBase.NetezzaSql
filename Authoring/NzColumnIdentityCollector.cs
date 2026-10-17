@@ -375,6 +375,9 @@ internal sealed class NzColumnIdentityCollector
             case CastFunctionExpression castFunction:
                 Walk(castFunction.Expression, frame);
                 break;
+            case ArraySubscriptExpression subscript:
+                Walk(subscript.Array, frame); Walk(subscript.Index, frame);
+                break;
             case ArrayExpression array:
                 foreach (var item in array.Items) Walk(item, frame);
                 break;
@@ -402,6 +405,7 @@ internal sealed class NzColumnIdentityCollector
                 Walk(quantified.Right, frame);
                 break;
             case FunctionCall function:
+                if (function.ArgumentOrderBy is not null) foreach (var order in function.ArgumentOrderBy) Walk(order.Expression, frame);
                 if (function.Arguments is not null) foreach (var argument in function.Arguments) Walk(argument, frame);
                 if (function.Filter is not null) Walk(function.Filter.Condition, frame);
                 if (function.Over is not null)

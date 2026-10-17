@@ -61,6 +61,7 @@ public partial class NzSqlParser
                     Unknown: false);
             }
         }
+        left = ParseDialectComparison(left);
         var opKind = Peek().Kind;
 
         if (IsComparisonOp(opKind) || (opKind == NzToken.Not && Peek(1).Kind is NzToken.Like or NzToken.Ilike))
@@ -185,7 +186,7 @@ public partial class NzSqlParser
         NzToken.EqualsOp or NzToken.NotEquals or NzToken.LessThan or NzToken.GreaterThan or
         NzToken.LessThanEquals or NzToken.GreaterThanEquals or NzToken.Like or NzToken.Ilike;
 
-    private Expression ParseAdditive()
+    protected Expression ParseAdditive()
     {
         var left = ParseMultiplicative();
         while (true)
@@ -273,11 +274,17 @@ public partial class NzSqlParser
         }
 
         // Postfix :: type cast (e.g. 1::VARCHAR, col::NUMERIC(10,2))
-        while (Peek().Kind == NzToken.DoubleColon)
+        while (true)
         {
-            Advance();
-            var type = ParseDataType();
-            expr = new CastFunctionExpression(expr.Position, expr, type);
+            if (Peek().Kind == NzToken.DoubleColon)
+            {
+                Advance();
+                expr = new CastFunctionExpression(expr.Position, expr, ParseDataType());
+                continue;
+            }
+            var next = ParseDialectPostfix(expr);
+            if (ReferenceEquals(next, expr)) break;
+            expr = next;
         }
 
         return expr;
@@ -477,6 +484,10 @@ public partial class NzSqlParser
     /// </summary>
     protected virtual Expression? TryParseDialectPrimary() => null;
 
+    protected virtual Expression ParseDialectComparison(Expression expression) => expression;
+    protected virtual Expression ParseDialectPostfix(Expression expression) => expression;
+    protected virtual bool AllowOrderedAggregateArguments => false;
+
     protected Expression ParseFunctionCall(Token<NzToken> name)
     {
         Expect(NzToken.LParen);
@@ -521,6 +532,12 @@ public partial class NzSqlParser
             withinGroup = new WithinGroupClause(FromToken(orderBy), ParseOrderByItems());
         }
 
+        IReadOnlyList<OrderByItem>? argumentOrderBy = null;
+        if (AllowOrderedAggregateArguments && Peek().Kind == NzToken.OrderBy)
+        {
+            Advance();
+            argumentOrderBy = ParseOrderByItems();
+        }
         Expect(NzToken.RParen);
 
         if (withinGroup is null && (Peek().Kind == NzToken.Within ||
@@ -556,7 +573,7 @@ public partial class NzSqlParser
             over = ParseOverClause();
 
         return new FunctionCall(FromToken(name), functionName, null,
-            distinct, star, args.Count > 0 ? args : null, filter, over, withinGroup);
+            distinct, star, args.Count > 0 ? args : null, filter, over, withinGroup, argumentOrderBy);
     }
 
     private FilterClause ParseFilterClause()

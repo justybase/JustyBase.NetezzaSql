@@ -51,7 +51,21 @@ public partial class NzSqlVisitor
         if (stmt.SourceQuery is not null)
             Visit(stmt.SourceQuery);
 
+        if (IsPostgreSql)
+        {
+            var columns = GetSchemaTable(stmt.Target)?.Columns;
+            _scope.AddTable(new TableInfo("excluded", Alias: "excluded", Columns: columns));
+            if (stmt.OnConflict?.UpdateItems is not null)
+                foreach (var item in stmt.OnConflict.UpdateItems) { Visit(item.Column); Visit(item.Value); }
+            VisitPostgreSqlReturning(stmt.Returning);
+        }
         _scope.ExitScope();
+    }
+
+    private void VisitPostgreSqlReturning(ReturningClause? clause)
+    {
+        if (!IsPostgreSql || clause?.Items is null) return;
+        foreach (var item in clause.Items) Visit(item.Expression);
     }
 
     public void Visit(UpdateStatement stmt)
@@ -89,6 +103,7 @@ public partial class NzSqlVisitor
         if (stmt.Where is not null)
             Visit(stmt.Where);
 
+        VisitPostgreSqlReturning(stmt.Returning);
         _scope.ExitScope();
     }
 
@@ -117,6 +132,7 @@ public partial class NzSqlVisitor
         if (stmt.Where is not null)
             Visit(stmt.Where);
 
+        VisitPostgreSqlReturning(stmt.Returning);
         _scope.ExitScope();
     }
 

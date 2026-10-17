@@ -1641,7 +1641,7 @@ public class NzCompletionEngine
 
     // ====== Table Reference Extraction ======
 
-    private static string ExtractQualifier(Token<NzToken>[] tokens)
+    private string ExtractQualifier(Token<NzToken>[] tokens)
     {
         for (int i = tokens.Length - 1; i > 0; i--)
         {
@@ -1649,7 +1649,8 @@ public class NzCompletionEngine
                 (tokens[i - 1].Kind.IsIdentifierLike()
                  || IsKeywordUsableAsName(tokens[i - 1].Kind)))
             {
-                return tokens[i - 1].ToIdentifierText();
+                var name = tokens[i - 1].ToIdentifierText();
+                return _dialect == SqlDialect.PostgreSql && tokens[i - 1].Kind != NzToken.QuotedIdentifier ? name.ToLowerInvariant() : name;
             }
         }
         return string.Empty;

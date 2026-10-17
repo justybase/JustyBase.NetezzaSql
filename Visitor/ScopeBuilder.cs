@@ -9,20 +9,24 @@ namespace JustyBase.NetezzaSqlParser.Visitor;
 public class ScopeBuilder
 {
     private Scope _currentScope;
+    private readonly bool _caseSensitive;
+    private StringComparer Comparer => _caseSensitive ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase;
+    private string Key(string name) => _caseSensitive ? name : name.ToUpperInvariant();
 
-    public ScopeBuilder()
+    public ScopeBuilder(bool caseSensitive = false)
     {
+        _caseSensitive = caseSensitive;
         _currentScope = new Scope(
-            new Dictionary<string, TableInfo>(StringComparer.OrdinalIgnoreCase),
-            new Dictionary<string, CteInfo>(StringComparer.OrdinalIgnoreCase),
+            new Dictionary<string, TableInfo>(Comparer),
+            new Dictionary<string, CteInfo>(Comparer),
             null, 0);
     }
 
     public void Reset()
     {
         _currentScope = new Scope(
-            new Dictionary<string, TableInfo>(StringComparer.OrdinalIgnoreCase),
-            new Dictionary<string, CteInfo>(StringComparer.OrdinalIgnoreCase),
+            new Dictionary<string, TableInfo>(Comparer),
+            new Dictionary<string, CteInfo>(Comparer),
             null, 0);
     }
 
@@ -31,8 +35,8 @@ public class ScopeBuilder
     public void EnterScope()
     {
         _currentScope = new Scope(
-            new Dictionary<string, TableInfo>(StringComparer.OrdinalIgnoreCase),
-            new Dictionary<string, CteInfo>(StringComparer.OrdinalIgnoreCase),
+            new Dictionary<string, TableInfo>(Comparer),
+            new Dictionary<string, CteInfo>(Comparer),
             _currentScope, _currentScope.Level + 1);
     }
 
@@ -45,7 +49,7 @@ public class ScopeBuilder
     /// <summary>Add table to current scope. Returns existing table with same alias/name if duplicate.</summary>
     public TableInfo? AddTable(TableInfo table)
     {
-        var key = (table.Alias ?? table.Name).ToUpperInvariant();
+        var key = Key(table.Alias ?? table.Name);
         if (_currentScope.Tables.TryGetValue(key, out var existing))
         {
             // CTE registration first installs a placeholder, then resolves its
@@ -65,12 +69,12 @@ public class ScopeBuilder
 
     public void AddCte(CteInfo cte)
     {
-        _currentScope.Ctes[cte.Name.ToUpperInvariant()] = cte;
+        _currentScope.Ctes[Key(cte.Name)] = cte;
     }
 
     public TableInfo? FindTable(string nameOrAlias)
     {
-        var key = nameOrAlias.ToUpperInvariant();
+        var key = Key(nameOrAlias);
         var scope = _currentScope;
         while (scope is not null)
         {
@@ -86,7 +90,7 @@ public class ScopeBuilder
     public IReadOnlyList<TableInfo> GetAllVisibleTables()
     {
         var all = new List<TableInfo>();
-        var seenCteNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenCteNames = new HashSet<string>(Comparer);
         var scope = _currentScope;
         while (scope is not null)
         {
@@ -107,7 +111,7 @@ public class ScopeBuilder
     public IReadOnlyList<TableInfo> GetCurrentScopeTables()
     {
         var tables = new List<TableInfo>(_currentScope.Tables.Values);
-        var tableKeys = new HashSet<string>(_currentScope.Tables.Keys, StringComparer.OrdinalIgnoreCase);
+        var tableKeys = new HashSet<string>(_currentScope.Tables.Keys, Comparer);
         foreach (var cte in _currentScope.Ctes.Values)
         {
             if (!tableKeys.Contains(cte.Name))

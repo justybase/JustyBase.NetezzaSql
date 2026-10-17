@@ -13,6 +13,10 @@ public sealed partial class PostgreSqlSqlParser : NzSqlParser
     {
     }
 
+    protected override bool SupportsValuesQuery => true;
+    protected override bool AllowOrderedAggregateArguments => true;
+    protected override bool AllowWindowNameAfterOver => true;
+
     protected override bool SupportsFetchFirst => true;
 
     protected override bool SupportsTimestamptz => true;
@@ -47,7 +51,8 @@ public sealed partial class PostgreSqlSqlParser : NzSqlParser
 
                 var next = i + 1 < _tokens.Length ? _tokens[i + 1].Kind : NzToken.Unknown;
                 var word = token.ToStringValue();
-                var isStorageClause = statementStart
+                var isStorageClause = (word.Equals("MINUS", StringComparison.OrdinalIgnoreCase) && next == NzToken.Select)
+                    || statementStart
                     || (next == NzToken.On && !word.Equals("GROOM", StringComparison.OrdinalIgnoreCase))
                     || (word.Equals("GROOM", StringComparison.OrdinalIgnoreCase) && next == NzToken.Table)
                     || (sawGroom && (word.Equals("VERSIONS", StringComparison.OrdinalIgnoreCase)
@@ -62,7 +67,18 @@ public sealed partial class PostgreSqlSqlParser : NzSqlParser
             _unsupportedSyntaxReported = true;
         }
 
-        var result = base.Parse();
+        SkipSemicolons();
+        if (_pos >= _tokens.Length) return null;
+        var result = Peek().Kind switch
+        {
+            NzToken.Values => ParseValuesQuery(),
+            NzToken.Explain => ParsePostgreSqlExplain(),
+            NzToken.Merge => ParsePostgreSqlMerge(),
+            NzToken.PostgreSqlDo => ParsePostgreSqlDo(),
+            NzToken.Drop => ParsePostgreSqlDrop(),
+            NzToken.Generate => RejectPostgreSqlCommand("GENERATE STATISTICS is not PostgreSQL syntax"),
+            _ => base.Parse(),
+        };
         if (result is null)
             SynchronizeStatement();
         return result;
@@ -73,7 +89,7 @@ public sealed partial class PostgreSqlSqlParser : NzSqlParser
     protected override (TableName Table, Token<NzToken> FirstToken) ParseTableName()
     {
         var first = ExpectNameToken();
-        var firstName = StripQuotes(first.ToStringValue());
+        var firstName = PostgreSqlName(first);
         if (Peek().Kind != NzToken.Dot)
             return (new TableName(firstName, NameQuote: QuoteOf(first)), first);
 
@@ -85,7 +101,7 @@ public sealed partial class PostgreSqlSqlParser : NzSqlParser
         }
 
         var second = ExpectNameToken();
-        var secondName = StripQuotes(second.ToStringValue());
+        var secondName = PostgreSqlName(second);
         if (Peek().Kind == NzToken.Dot)
         {
             AddParserError("PostgreSQL relation names contain at most schema.table", Peek(), "PAR001");
@@ -103,51 +119,27 @@ public sealed partial class PostgreSqlSqlParser : NzSqlParser
 
     protected override TableSource ParseTableSource()
     {
-        if (Peek().Kind != NzToken.PostgreSqlLateral)
-            return base.ParseTableSource();
-
-        var lateral = Advance();
+        var lateral = Peek().Kind == NzToken.PostgreSqlLateral;
+        if (lateral) Advance();
         if (IsContextualIdentifier(Peek().Kind) && Peek(1).Kind == NzToken.LParen)
         {
-            var functionName = Advance();
-            var function = (FunctionCall)ParseFunctionCall(functionName);
-            string? functionAlias = null;
-            SourcePosition? functionAliasPosition = null;
-            if (Peek().Kind == NzToken.As)
-                Advance();
-            if (IsContextualIdentifier(Peek().Kind))
-            {
-                var aliasToken = Advance();
-                functionAlias = StripQuotes(aliasToken.ToStringValue());
-                functionAliasPosition = FromToken(aliasToken);
-            }
-            ParseTableSourceSuffix(ref functionAlias, ref functionAliasPosition);
-            return new TableSource(FromToken(lateral), null, null, functionAlias,
-                AliasPosition: functionAliasPosition, Lateral: true, TableFunction: function);
+            var name = Advance();
+            FunctionCall function;
+            if (name.ToStringValue().Equals("JSON_TABLE", StringComparison.OrdinalIgnoreCase))
+                function = ParsePostgreSqlJsonTable(name);
+            else function = (FunctionCall)ParseFunctionCall(name);
+            var ordinality = Peek().Kind == NzToken.With;
+            if (ordinality) { Advance(); ExpectPostgreSqlWord("ORDINALITY"); }
+            var alias = ParseAliasName(out var aliasQuote);
+            if (aliasQuote is null) alias = alias?.ToLowerInvariant();
+            var columns = Peek().Kind == NzToken.LParen ? ParsePostgreSqlIdentifierList() : function.ResultColumnNames;
+            return new TableSource(FromToken(name), null, null, alias, FunctionSource: true,
+                Lateral: lateral, TableFunction: function, AliasQuote: aliasQuote) { ColumnAliases = columns, WithOrdinality = ordinality };
         }
-
-        if (Peek().Kind != NzToken.LParen)
-        {
-            AddParserError("LATERAL must be followed by a parenthesized subquery", Peek(), "PAR001");
-            return new TableSource(FromToken(lateral), null, null, null, Lateral: true);
-        }
-
-        var lp = Advance();
-        var query = ParseSelectStatement();
-        Expect(NzToken.RParen);
-        string? alias = null;
-        SourcePosition? aliasPosition = null;
-        if (Peek().Kind == NzToken.As)
-            Advance();
-        if (IsContextualIdentifier(Peek().Kind))
-        {
-            var aliasToken = Advance();
-            alias = StripQuotes(aliasToken.ToStringValue());
-            aliasPosition = FromToken(aliasToken);
-        }
-        ParseTableSourceSuffix(ref alias, ref aliasPosition);
-        return new TableSource(FromToken(lp), null, query, alias,
-            AliasPosition: aliasPosition, Lateral: true);
+        var source = base.ParseTableSource();
+        if (source.Subquery is not null && Peek().Kind == NzToken.LParen)
+            source = source with { ColumnAliases = ParsePostgreSqlIdentifierList() };
+        return lateral ? source with { Lateral = true } : source;
     }
 
     protected override Expression? TryParseDialectPrimary()
@@ -170,14 +162,44 @@ public sealed partial class PostgreSqlSqlParser : NzSqlParser
             return new ArrayExpression(FromToken(array), items);
         }
 
+        if (IsContextualIdentifier(Peek().Kind) && Peek(1).Kind == NzToken.Dot
+            && IsContextualIdentifier(Peek(2).Kind) && Peek(3).Kind == NzToken.LParen)
+        {
+            var schema = Advance();
+            Advance();
+            return ((FunctionCall)ParseFunctionCall(Advance())) with { Schema = StripQuotes(schema.ToStringValue()) };
+        }
+        if (IsContextualIdentifier(Peek().Kind) && Peek(1).Kind != NzToken.StringLiteral)
+        {
+            var first = Advance();
+            if (Peek().Kind == NzToken.LParen) return ParseFunctionCall(first);
+            if (Peek().Kind == NzToken.Dot)
+            {
+                Advance();
+                var second = Peek();
+                if (!IsContextualIdentifier(second.Kind) && second.Kind != NzToken.Multiply)
+                {
+                    AddParserError("Expected column after qualifier", second, "PAR001");
+                    return new ColumnReference(FromToken(first), PostgreSqlName(first), "", QualifierQuote: QuoteOf(first));
+                }
+                Advance();
+                return new ColumnReference(FromToken(first), PostgreSqlName(first), PostgreSqlName(second),
+                    NameQuote: QuoteOf(second), QualifierQuote: QuoteOf(first));
+            }
+            return new ColumnReference(FromToken(first), null, PostgreSqlName(first), NameQuote: QuoteOf(first));
+        }
         return null;
     }
+
+    private static string PostgreSqlName(Token<NzToken> token) =>
+        token.Kind == NzToken.QuotedIdentifier ? StripQuotes(token.ToStringValue()) : token.ToStringValue().ToLowerInvariant();
 
     protected override DataTypeInfo ParseDataType()
     {
         var first = ExpectNameToken();
         var parts = new List<string> { StripQuotes(first.ToStringValue()) };
-        while (Peek().Kind is NzToken.Identifier or NzToken.QuotedIdentifier or NzToken.With)
+        while (PostgreSqlWordIs("PRECISION") || PostgreSqlWordIs("VARYING") || PostgreSqlWordIs("WITH")
+            || PostgreSqlWordIs("WITHOUT") || PostgreSqlWordIs("TIME") || PostgreSqlWordIs("ZONE"))
             parts.Add(StripQuotes(Advance().ToStringValue()));
 
         IReadOnlyList<string>? parameters = null;

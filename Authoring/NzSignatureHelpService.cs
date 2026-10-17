@@ -19,7 +19,7 @@ public static class NzSignatureHelpService
 
         parsingCoordinator?.GetOrCreate(documentUri ?? "default", dialect).Parse(text);
         offset = Math.Clamp(offset, 0, text.Length);
-        catalog ??= NetezzaSqlAuthoringCatalog.Instance;
+        catalog ??= DialectRuntime.AuthoringCatalog(dialect);
 
         try
         {

@@ -16,6 +16,9 @@ public partial class Db2SqlParser : NzSqlParser
     {
     }
 
+    protected override bool SupportsValuesQuery => true;
+    protected override bool SupportsScalarValuesRows => true;
+
     protected override bool SupportsFetchFirst => true;
 
     protected override bool SupportsMultiRowValues => true;
@@ -30,7 +33,9 @@ public partial class Db2SqlParser : NzSqlParser
         var k = Peek().Kind;
 
         Statement? result;
-        if (k == NzToken.Db2DeclareGlobalTemporary)
+        if (k == NzToken.Values)
+            result = ParseValuesQuery();
+        else if (k == NzToken.Db2DeclareGlobalTemporary)
             result = ParseDeclareGlobalTempTable();
         else if (k == NzToken.Create)
             result = ParseDb2CreateOrFallback();

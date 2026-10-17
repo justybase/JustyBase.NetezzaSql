@@ -10,6 +10,18 @@ public static class PostgreSqlLexer
 {
     private static readonly TokenizerBuilder<NzToken> Builder = NzLexer.AppendSharedTokens(
         new TokenizerBuilder<NzToken>()
+            .Match(Span.Regex(@"^\$(?<tag>[_\p{L}][_\p{L}\p{N}]*|)\$[\s\S]*?\$\k<tag>\$"), NzToken.StringLiteral)
+            .Match(Span.Regex(@"^\$(?:[_\p{L}][_\p{L}\p{N}]*)?\$[\s\S]*"), NzToken.PostgreSqlInvalidLiteral)
+            .Match(Span.Regex(@"^[eE]'(?:\\[\s\S]|''|[^'\\])*'"), NzToken.StringLiteral)
+            .Match(Span.Regex(@"^[eE]'[\s\S]*"), NzToken.PostgreSqlInvalidLiteral)
+            .Match(Span.Regex("^\"\"(?!\")"), NzToken.PostgreSqlInvalidLiteral)
+            .Match(Span.EqualTo("?|"), NzToken.PostgreSqlJsonExistsAny)
+            .Match(Span.EqualTo("?&"), NzToken.PostgreSqlJsonExistsAll)
+            .Match(Span.EqualTo("?"), NzToken.PostgreSqlJsonExists)
+            .Match(NzLexer.Kw("VALUE"), NzToken.Identifier)
+            .Match(NzLexer.Kw("WINDOW"), NzToken.SqliteWindow)
+            .Match(NzLexer.Kw("MINUS"), NzToken.PostgreSqlUnsupportedNetezza)
+            .Match(NzLexer.Kw("STATISTICS"), NzToken.PostgreSqlUnsupportedNetezza)
             // This token deliberately wins over the Netezza keyword chain so
             // unsupported storage commands become parser diagnostics.
             .Match(Span.Regex(@"(?i)\b(?:DISTRIBUTE|ORGANIZE|GROOM|VERSIONS|RECLAIM|BACKUPSET)\b"),

@@ -406,6 +406,11 @@ public enum NzToken
     // Legacy script variable token appended to preserve existing enum values.
     AmpersandIdentifier,          // &variable
 
+    PostgreSqlInvalidLiteral,
+    PostgreSqlJsonExists,
+    PostgreSqlJsonExistsAny,
+    PostgreSqlJsonExistsAll,
+
     // Short aliases retained for consumers that use generic operator names.
     JsonTextPath = PostgreSqlJsonTextPath,
     JsonPath = PostgreSqlJsonPath,
