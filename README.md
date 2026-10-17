@@ -95,13 +95,17 @@ Requires the .NET 10 SDK.
 ```powershell
 dotnet restore .\JustyBase.NetezzaSql.sln
 dotnet build .\JustyBase.NetezzaSql.sln -c Release
-dotnet test .\JustyBase.NetezzaSql.sln -c Release
+dotnet test .\JustyBase.NetezzaSql.sln -c Release --filter "Category!=Performance&Category!=SqlConformance"
 pwsh .\eng\Verify-Local.ps1
 ```
 
 Before pushing to `master`, prefer `Verify-Local.ps1` (build, tests, coverage gates, whitespace) — see [docs/local-ci.md](docs/local-ci.md).
 
-The test suite covers parser and linter conformance, malformed SQL, runtime behavior, DDL helpers, and regression cases.
+The standard test suite covers parser and linter behavior, malformed SQL, runtime behavior, DDL helpers, and regression cases. Shared SQL conformance
+(`Category=SqlConformance`) is an explicit local-only gate: set
+`JUSTYBASE_SQL_CONFORMANCE_PATH` to a local JustyBase.SqlConformance checkout
+and run `dotnet test .\JustyBase.NetezzaSql.sln --filter "Category=SqlConformance"`.
+The corpus is not vendored into this repository and is not used by standard CI.
 
 Optional database-backed smoke tests:
 

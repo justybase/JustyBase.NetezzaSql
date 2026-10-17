@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using JustyBase.NetezzaSqlParser.Caching;
 using JustyBase.NetezzaSqlParser.Dialects;
@@ -7,19 +5,39 @@ using JustyBase.NetezzaSqlParser.Formatter;
 using JustyBase.NetezzaSqlParser.Linter;
 using JustyBase.NetezzaSqlParser.Visitor;
 using JustyBase.Tests.NetezzaSqlParser;
+using Xunit;
 
 namespace JustyBase.NetezzaSql.Tests;
 
+/// <summary>
+/// Local-only PostgreSQL corpus checks. All cases come from the sibling
+/// JustyBase.SqlConformance checkout via JUSTYBASE_SQL_CONFORMANCE_PATH;
+/// this class is excluded from standard CI with the other SqlConformance tests.
+/// </summary>
+[Trait("Category", "SqlConformance")]
 public sealed class PostgreSqlSharedCorpusTests
 {
-    public static IEnumerable<object[]> PositiveCases() => SharedSqlConformanceTests.SharedParserCases()
-        .Where(data => (SqlDialect)data[1] == SqlDialect.PostgreSql && (string)data[7] == "True")
-        .Select(data => new object[] { (string)data[0], ((string)data[5]).Replace("{{cf}}", "JB_CF_FIXTURE", StringComparison.Ordinal) });
+    public static IEnumerable<object[]> PositiveCases()
+    {
+        var rows = SharedSqlConformanceTests.SharedParserCases()
+            .Where(data => (SqlDialect)data[1] == SqlDialect.PostgreSql && (string)data[7] == "True")
+            .Select(data => new object[] { (string)data[0], ((string)data[5]).Replace("{{cf}}", "JB_CF_FIXTURE", StringComparison.Ordinal) })
+            .ToArray();
+        // Without a corpus the shared cases are empty; surface the readable
+        // conformance error instead of an empty-theory discovery failure.
+        if (rows.Length == 0)
+            yield return new object[] { SharedSqlConformanceTests.MissingRepoSentinelId, string.Empty };
+        else
+            foreach (var row in rows)
+                yield return row;
+    }
 
     [Theory]
     [MemberData(nameof(PositiveCases))]
     public void Formatting_preserves_accepted_PostgreSql_syntax(string id, string sql)
     {
+        if (id == SharedSqlConformanceTests.MissingRepoSentinelId)
+            throw SharedSqlConformanceTests.RequireConformanceRootException();
         using var parser = new ParsingRuntime(SqlDialect.PostgreSql);
         var before = parser.Parse(sql);
         Assert.True(before.Valid, id);
@@ -36,6 +54,8 @@ public sealed class PostgreSqlSharedCorpusTests
     [Fact]
     public void Version_warnings_follow_context_changes_for_unchanged_SQL()
     {
+        if (!SharedSqlConformanceTests.TryGetConformanceRoot(out _))
+            throw SharedSqlConformanceTests.RequireConformanceRootException();
         var sql = (string)PositiveCases().Single(row => (string)row[0] == "postgresql.parser.virtual.001")[1];
         using var engine = new LintEngine(SqlDialect.PostgreSql);
         var schema = new InMemorySchemaProvider();
@@ -43,28 +63,5 @@ public sealed class PostgreSqlSharedCorpusTests
         Assert.Contains(engine.RunExpensiveAnalysis(config).Issues, issue => issue.RuleId == "PG001");
         Assert.DoesNotContain(engine.RunExpensiveAnalysis(config with { ServerVersionNum = 180000 }).Issues, issue => issue.RuleId == "PG001");
         Assert.DoesNotContain(engine.RunExpensiveAnalysis(config with { ServerVersionNum = null }).Issues, issue => issue.RuleId == "PG001");
-    }
-
-    [Fact]
-    public void Pinned_snapshot_content_matches_its_manifest()
-    {
-        Assert.True(SharedSqlConformanceTests.TryGetConformanceRoot(out var root));
-        var manifestPath = Path.Combine(root!, "snapshot.json");
-        if (!File.Exists(manifestPath))
-        {
-            Assert.False(string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("JUSTYBASE_SQL_CONFORMANCE_PATH")));
-            return;
-        }
-        using var manifest = JsonDocument.Parse(File.ReadAllText(manifestPath));
-        var hashes = new SortedDictionary<string, string>(StringComparer.Ordinal);
-        foreach (var file in manifest.RootElement.GetProperty("files").EnumerateObject())
-        {
-            var text = File.ReadAllText(Path.Combine(root!, file.Name)).Replace("\r\n", "\n", StringComparison.Ordinal);
-            var digest = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
-            Assert.Equal(file.Value.GetString(), digest);
-            hashes.Add(file.Name, digest);
-        }
-        var contentHash = Convert.ToHexStringLower(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(hashes)));
-        Assert.Equal(manifest.RootElement.GetProperty("contentHash").GetString(), contentHash);
     }
 }

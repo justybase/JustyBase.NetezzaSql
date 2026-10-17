@@ -1,6 +1,6 @@
 ---
 name: multidialect-conformance
-description: Status and rules of the multidialect SQL conformance program for JustyBase.NetezzaSql (C# library), a consumer of the pinned JustyBase.SqlConformance snapshot. Use when changing PostgreSQL or Netezza parser, linter or completion behaviour covered by the corpus, regenerating its fixtures, or touching the .NET SDK pin.
+description: Status and rules of the multidialect SQL conformance program for JustyBase.NetezzaSql (C# library), a local-only consumer of the JustyBase.SqlConformance corpus. Use when changing PostgreSQL or Netezza parser, linter or completion behaviour covered by the corpus or running the local conformance tests.
 ---
 
 # Multidialect conformance: JustyBase.NetezzaSql
@@ -11,16 +11,28 @@ file is a working summary and may lag behind it.
 
 ## Role
 
-The library pins a snapshot of the shared corpus under
-`tests/JustyBase.NetezzaSql.Tests/Fixtures/sql-conformance/` and runs the shared
-conformance tests against it, including the PostgreSQL shared-corpus tests.
+SQL conformance tests (`Category=SqlConformance`) are optional local developer
+tests. This repository does not vendor the corpus and standard CI never uses
+it. Conformance tests read the sibling checkout directly via
+`JUSTYBASE_SQL_CONFORMANCE_PATH`:
 
-- Check the pin: `python3 ../JustyBase.SqlConformance/scripts/snapshot.py --corpus-root ../JustyBase.SqlConformance --output tests/JustyBase.NetezzaSql.Tests/Fixtures/sql-conformance --dialect common --dialect db2 --dialect mssql --dialect mysql --dialect netezza --dialect oracle --dialect postgresql --dialect sqlite --check`
-- Never edit the pinned fixtures by hand.
+```powershell
+$env:JUSTYBASE_SQL_CONFORMANCE_PATH = (Resolve-Path ..\JustyBase.SqlConformance).Path
+dotnet test .\JustyBase.NetezzaSql.sln --filter "Category=SqlConformance"
+```
+
+- Standard gates (`dotnet test --filter "Category!=Performance&Category!=SqlConformance"`,
+  `eng/Verify-Local.ps1`, `eng/Test-Coverage.ps1`, CI workflows) work without
+  the corpus.
+- A missing `JUSTYBASE_SQL_CONFORMANCE_PATH` on an explicit conformance run is
+  an `InvalidOperationException`, never a silent skip; a set-but-invalid path
+  is a `DirectoryNotFoundException`.
 
 ## Current state
 
-- Pin: `feac362`, `corpusDirty: false`, 2464 cases for this dialect set.
+- No committed corpus snapshot. The former `feac362` snapshot under
+  `tests/JustyBase.NetezzaSql.Tests/Fixtures/sql-conformance/` and its
+  snapshot-manifest verification are removed.
 - Commits on `origin/master`: `73d7852` (ISNULL signature), `e120774` (SDK pin),
   `9aee0ad` (snapshot pin and PostgreSQL shared-corpus tests), `7132f9c`
   (C# PostgreSQL parser alignment).
@@ -38,13 +50,16 @@ conformance tests against it, including the PostgreSQL shared-corpus tests.
 - PostgreSQL live checks read `POSTGRES_LIVE_TEST_*` (alias of `PG_LIVE_TEST_*`,
   set in `~/.bashrc`). The dev host is `192.168.0.61`. Missing configuration fails
   the live test; it does not skip.
-- Do not commit fixtures that were not regenerated from a clean corpus commit.
+- Do not commit corpus cases or regenerated fixtures into this repository.
 - Parser changes need a focused regression test for every newly accepted form,
   verified against the production engine first.
 
 ## Related projects
 
 - `JustyBase.SqlConformance`: the corpus owner and source of truth.
-- `justybase-vscode`: TypeScript consumer, pinned snapshot under `src/__tests__/sqlParser/fixtures/sqlConformance/`.
-- `justybase_rust_tauri`: Rust consumer, pinned snapshot under `crates/app-core/tests/fixtures/sql-conformance/`.
-- `justybase` (C# application): routes Oracle, PostgreSQL and MySQL to the Netezza profile; this library does not change that routing.
+- `justybase-vscode`: TypeScript consumer, local-only via
+  `JUSTYBASE_SQL_CONFORMANCE_PATH` (`npm run test:conformance`).
+- `justybase_rust_tauri`: Rust consumer, still pins a snapshot under
+  `crates/app-core/tests/fixtures/sql-conformance/` (out of scope here).
+- `justybase` (C# application): routes Oracle, PostgreSQL and MySQL to the
+  Netezza profile; this library does not change that routing.

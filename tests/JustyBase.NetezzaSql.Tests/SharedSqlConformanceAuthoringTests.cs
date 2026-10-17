@@ -54,7 +54,7 @@ public sealed class SharedSqlConformanceAuthoringTests
         SqlDialect dialect)
     {
         if (id == SharedSqlConformanceTests.MissingRepoSentinelId)
-            throw new DirectoryNotFoundException(SharedSqlConformanceTests.MissingRepoMessage);
+            throw SharedSqlConformanceTests.RequireConformanceRootException();
         using var document = JsonDocument.Parse(caseJson);
         var root = document.RootElement;
         var category = GetString(root, "category");
@@ -1087,10 +1087,13 @@ public sealed class SharedSqlConformanceAuthoringTests
     private static string ConformanceRoot() =>
         TryGetConformanceRoot(out var root) && root is not null
             ? root
-            : throw new DirectoryNotFoundException("Set JUSTYBASE_SQL_CONFORMANCE_PATH to the local JustyBase.SqlConformance repository.");
+            : throw SharedSqlConformanceTests.RequireConformanceRootException();
 
     private static bool TryGetConformanceRoot(out string? root)
     {
+        // The local JustyBase.SqlConformance checkout selected by
+        // JUSTYBASE_SQL_CONFORMANCE_PATH is the only corpus source.
+        // There is intentionally no fallback to vendored fixtures.
         var configured = Environment.GetEnvironmentVariable("JUSTYBASE_SQL_CONFORMANCE_PATH");
         if (!string.IsNullOrWhiteSpace(configured))
         {
@@ -1098,24 +1101,6 @@ public sealed class SharedSqlConformanceAuthoringTests
             if (Directory.Exists(Path.Combine(full, "dialects")))
             {
                 root = full;
-                return true;
-            }
-            root = null;
-            return false;
-        }
-        for (var current = new DirectoryInfo(AppContext.BaseDirectory); current is not null; current = current.Parent)
-        {
-            var candidates = new[]
-            {
-                Path.Combine(current.FullName, "Fixtures", "sql-conformance"),
-                Path.Combine(current.FullName, "tests", "JustyBase.NetezzaSql.Tests", "Fixtures", "sql-conformance"),
-                Path.Combine(current.FullName, "JustyBase.SqlConformance"),
-                current.Parent is null ? string.Empty : Path.Combine(current.Parent.FullName, "JustyBase.SqlConformance")
-            };
-            var found = candidates.FirstOrDefault(candidate => candidate.Length > 0 && Directory.Exists(Path.Combine(candidate, "dialects")));
-            if (found is not null)
-            {
-                root = found;
                 return true;
             }
         }
