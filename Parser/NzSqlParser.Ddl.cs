@@ -686,12 +686,15 @@ public partial class NzSqlParser
 
         var targets = new List<TableName>();
 
-        // Netezza syntax: DROP TABLE [IF EXISTS] table_name [, ...]
-        // Also supported: DROP TABLE table_name [, ...] IF EXISTS
+        // Netezza syntax (DROP TABLE documentation):
+        //   DROP TABLE <table> [, ...] [IF EXISTS]
+        // The leading IF EXISTS form is not Netezza syntax, and no other DROP
+        // object class accepts a trailing IF EXISTS.
         bool ifExists = false;
         if (Peek().Kind == NzToken.If)
         {
-            AddParserError("Netezza does not support DROP IF EXISTS", Peek(), "PAR001");
+            AddParserError("Netezza does not accept IF EXISTS before the object name; use DROP TABLE <name> IF EXISTS",
+                Peek(), "PAR001");
             Advance();
             if (Peek().Kind == NzToken.Exists)
             {
@@ -714,10 +717,14 @@ public partial class NzSqlParser
             targets.Add(ParseDropTarget());
         }
 
-        // Also handle IF EXISTS after table names (Netezza form)
+        // Trailing IF EXISTS is the documented Netezza form, but only for DROP TABLE.
         if (!ifExists && Peek().Kind == NzToken.If)
         {
-            AddParserError("Netezza does not support DROP IF EXISTS", Peek(), "PAR001");
+            if (!string.Equals(objectType, "TABLE", StringComparison.Ordinal))
+            {
+                AddParserError($"Only DROP TABLE accepts a trailing IF EXISTS in Netezza",
+                    Peek(), "PAR001");
+            }
             Advance();
             if (Peek().Kind == NzToken.Exists)
             {

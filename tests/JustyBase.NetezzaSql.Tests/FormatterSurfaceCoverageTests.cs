@@ -32,7 +32,7 @@ public sealed class FormatterSurfaceCoverageTests
     [InlineData("ALTER TABLE t DROP COLUMN a")]
     [InlineData("CREATE EXTERNAL TABLE ext (id INT) USING (DATAOBJECT('file') DELIMITER ',')")]
     [InlineData("CREATE SEQUENCE seq START WITH 1 INCREMENT BY 1")]
-    [InlineData("DROP VIEW IF EXISTS v")]
+    [InlineData("DROP TABLE v IF EXISTS")]
     [InlineData("SET CATALOG DB")]
     public void Formatter_HandlesCommandTailStatements(string sql)
     {

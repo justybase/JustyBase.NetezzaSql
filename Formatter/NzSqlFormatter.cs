@@ -1146,8 +1146,6 @@ public sealed class NzSqlFormatter
     {
         Write("DROP ");
         Write(stmt.ObjectType);
-        if (stmt.IfExists)
-            Write(" IF EXISTS");
         if (stmt.Targets.Count > 0)
         {
             Write(" ");
@@ -1158,6 +1156,9 @@ public sealed class NzSqlFormatter
                 Write(FormatTableName(stmt.Targets[i]));
             }
         }
+        // Netezza places the optional IF EXISTS after the target list.
+        if (stmt.IfExists)
+            Write(" IF EXISTS");
     }
 
     private void FormatAlterTable(AlterTableStatement stmt)

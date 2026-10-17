@@ -53,7 +53,7 @@ public partial class NzSqlVisitor
     private static readonly HashSet<string> KnownExternalTableOptions = new(StringComparer.OrdinalIgnoreCase)
     {
         "BOOLSTYLE", "COMPRESS", "CRINSTRING", "CTRLCHARS", "DATAOBJECT",
-        "DATEDELIM", "DATESTYLE", "DATETIMEDELIM", "DECIMALDELIM", "DELIMITER",
+        "DATEDELIM", "DATESTYLE", "DATETIMEDELIM", "DECIMALDELIM", "DELIM", "DELIMITER",
         "ENCODING", "ESCAPECHAR", "FILLRECORD", "FORMAT", "IGNOREZERO",
         "INCLUDEHEADER", "INCLUDEZEROSECONDS", "LAYOUT", "LFINSTRING", "LOGDIR",
         "MAXERRORS", "MAXROWS", "MERIDIANDELIM", "NULLVALUE", "QUOTEDVALUE",

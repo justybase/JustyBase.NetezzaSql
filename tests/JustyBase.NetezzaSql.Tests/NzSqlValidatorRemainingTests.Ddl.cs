@@ -145,8 +145,15 @@ public sealed partial class NzSqlValidatorRemainingTests
     [Fact]
     public void Validate_NodeParity_DropTableIfExists()
     {
-        // Live Netezza rejects DROP IF EXISTS (live evidence 2026-10-06).
+        // The leading IF EXISTS position is not Netezza syntax.
         ExpectSyntaxError("DROP TABLE IF EXISTS TESTDB..EMPLOYEES;", _schema);
+    }
+
+
+    [Fact]
+    public void Validate_NodeParity_DropTableTrailingIfExists()
+    {
+        ExpectValid("DROP TABLE TESTDB..EMPLOYEES IF EXISTS;", _schema);
     }
 
 

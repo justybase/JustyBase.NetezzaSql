@@ -220,8 +220,29 @@ public sealed partial class NzSqlValidatorDdlTests
     [Fact]
     public void DropTableIfExists()
     {
-        // Live Netezza rejects DROP IF EXISTS (live evidence 2026-10-06).
-        ExpectSyntaxError("DROP TABLE TESTDB.PUBLIC.EMPLOYEES IF EXISTS;", _schema);
+        // Netezza documents the trailing form: DROP TABLE <table> [, ...] [IF EXISTS].
+        ExpectValid("DROP TABLE TESTDB.PUBLIC.EMPLOYEES IF EXISTS;", _schema);
+    }
+
+
+    [Fact]
+    public void DropTableIfExists_LeadingFormIsRejected()
+    {
+        ExpectSyntaxError("DROP TABLE IF EXISTS TESTDB.PUBLIC.EMPLOYEES;", _schema);
+    }
+
+
+    [Fact]
+    public void DropTableIfExists_MultipleTargets()
+    {
+        ExpectValid("DROP TABLE TESTDB.PUBLIC.EMPLOYEES, TESTDB.PUBLIC.DEPARTMENTS IF EXISTS;", _schema);
+    }
+
+
+    [Fact]
+    public void DropViewIfExistsIsRejected()
+    {
+        ExpectSyntaxError("DROP VIEW TESTDB.PUBLIC.EMP_VIEW IF EXISTS;", _schema);
     }
 
 
@@ -492,6 +513,16 @@ public sealed partial class NzSqlValidatorDdlTests
 
 
     [Fact]
+    public void CreateExternalTable_DelimSynonym()
+    {
+        // DELIM is an accepted synonym of DELIMITER in the USING clause.
+        ExpectValid(
+            "CREATE EXTERNAL TABLE ext_delim (id INT4) USING (DATAOBJECT ('/tmp/data.csv') FORMAT TEXT DELIM '|');",
+            _schema);
+    }
+
+
+    [Fact]
     public void CreateExternalTable_InvalidColumnDataType()
     {
         ExpectErrorCode(
@@ -561,8 +592,8 @@ public sealed partial class NzSqlValidatorDdlTests
     [Fact]
     public void DropTableIfExists_Simple()
     {
-        // Live Netezza rejects DROP IF EXISTS (live evidence 2026-10-06).
-        ExpectSyntaxError("DROP TABLE my_table IF EXISTS", _schema);
+        // Netezza documents the trailing form: DROP TABLE <table> [, ...] [IF EXISTS].
+        ExpectValid("DROP TABLE my_table IF EXISTS", _schema);
     }
 
 
