@@ -154,30 +154,17 @@ public sealed class SharedSqlConformanceLiveNetezzaTests
 
     private static string ConformanceRoot()
     {
+        // The local JustyBase.SqlConformance checkout selected by
+        // JUSTYBASE_SQL_CONFORMANCE_PATH is the only corpus source.
         var configured = Environment.GetEnvironmentVariable("JUSTYBASE_SQL_CONFORMANCE_PATH");
-        if (!string.IsNullOrWhiteSpace(configured))
-        {
-            var full = Path.GetFullPath(configured);
-            if (Directory.Exists(Path.Combine(full, "dialects")))
-                return full;
-            throw new DirectoryNotFoundException($"JUSTYBASE_SQL_CONFORMANCE_PATH does not contain dialects/: {full}");
-        }
-
-        for (var current = new DirectoryInfo(AppContext.BaseDirectory); current is not null; current = current.Parent)
-        {
-            var candidates = new[]
-            {
-                Path.Combine(current.FullName, "JustyBase.SqlConformance"),
-                current.Parent is null ? string.Empty : Path.Combine(current.Parent.FullName, "JustyBase.SqlConformance")
-            };
-            var found = candidates.FirstOrDefault(candidate =>
-                candidate.Length > 0 && Directory.Exists(Path.Combine(candidate, "dialects")));
-            if (found is not null)
-                return found;
-        }
-
+        if (string.IsNullOrWhiteSpace(configured))
+            throw new InvalidOperationException(
+                "JUSTYBASE_SQL_CONFORMANCE_PATH is required for local SQL conformance tests.");
+        var full = Path.GetFullPath(configured);
+        if (Directory.Exists(Path.Combine(full, "dialects")))
+            return full;
         throw new DirectoryNotFoundException(
-            "Shared SQL conformance repository was not found. Set JUSTYBASE_SQL_CONFORMANCE_PATH.");
+            $"JUSTYBASE_SQL_CONFORMANCE_PATH does not contain a SQL conformance corpus (missing dialects/): {full}");
     }
 
     private static string Required(string name)

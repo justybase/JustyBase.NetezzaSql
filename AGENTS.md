@@ -13,8 +13,17 @@ Run commands from the repository root:
 ```powershell
 dotnet build .\JustyBase.NetezzaSqlParser.csproj
 dotnet build .\JustyBase.NetezzaDdl\JustyBase.NetezzaDdl.csproj
-dotnet test
+dotnet test .\JustyBase.NetezzaSql.sln --filter "Category!=Performance&Category!=SqlConformance"
 pwsh .\eng\Verify-Local.ps1
+```
+
+SQL conformance tests (`Category=SqlConformance`) are explicit local-only
+developer tests. They read the sibling JustyBase.SqlConformance checkout via
+`JUSTYBASE_SQL_CONFORMANCE_PATH` and never run in standard CI:
+
+```powershell
+$env:JUSTYBASE_SQL_CONFORMANCE_PATH = (Resolve-Path ..\JustyBase.SqlConformance).Path
+dotnet test .\JustyBase.NetezzaSql.sln --filter "Category=SqlConformance"
 ```
 
 Build individual projects while developing. `dotnet test` discovers standard test projects. `Verify-Local.ps1` runs the local CI checks, including builds, tests, coverage gates, and `git diff --check`; run it before pushing to `master`.

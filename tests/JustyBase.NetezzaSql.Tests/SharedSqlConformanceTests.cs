@@ -15,8 +15,7 @@ public sealed class SharedSqlConformanceTests
 
     internal const string MissingRepoSentinelId = "__conformance_repo_missing__";
     internal const string MissingRepoMessage =
-        "Shared SQL conformance repository was not found. Set JUSTYBASE_SQL_CONFORMANCE_PATH " +
-        "or check out the private JustyBase.SqlConformance repo next to this one.";
+        "JUSTYBASE_SQL_CONFORMANCE_PATH is required for local SQL conformance tests.";
 
     public static IEnumerable<object[]> SharedParserCases()
     {
@@ -105,7 +104,7 @@ public sealed class SharedSqlConformanceTests
         string cursorMarker)
     {
         if (id == MissingRepoSentinelId)
-            throw new DirectoryNotFoundException(MissingRepoMessage);
+            throw RequireConformanceRootException();
         var sql = RenderSql(sourceSql);
         if (cursorMarker.Length > 0)
         {
@@ -136,7 +135,7 @@ public sealed class SharedSqlConformanceTests
         int expectedStatementCount)
     {
         if (id == MissingRepoSentinelId)
-            throw new DirectoryNotFoundException(MissingRepoMessage);
+            throw RequireConformanceRootException();
         var sql = RenderSql(sourceSql);
         if (cursorMarker.Length > 0)
         {
@@ -185,7 +184,7 @@ public sealed class SharedSqlConformanceTests
     public void Shared_parser_contracts_have_no_unresolved_P0_cases()
     {
         if (!TryGetConformanceRoot(out _))
-            throw new DirectoryNotFoundException(MissingRepoMessage);
+            throw RequireConformanceRootException();
         var unresolved = LoadCases()
             .Where(item =>
             {
@@ -285,11 +284,22 @@ public sealed class SharedSqlConformanceTests
     private static string ConformanceRoot() =>
         TryGetConformanceRoot(out var root) && root is not null
             ? root
-            : throw new DirectoryNotFoundException(
-                "Shared SQL conformance repository was not found. Set JUSTYBASE_SQL_CONFORMANCE_PATH.");
+            : throw RequireConformanceRootException();
+
+    internal static Exception RequireConformanceRootException()
+    {
+        var configured = Environment.GetEnvironmentVariable("JUSTYBASE_SQL_CONFORMANCE_PATH");
+        if (string.IsNullOrWhiteSpace(configured))
+            return new InvalidOperationException(MissingRepoMessage);
+        return new DirectoryNotFoundException(
+            $"JUSTYBASE_SQL_CONFORMANCE_PATH does not contain a SQL conformance corpus (missing dialects/): {Path.GetFullPath(configured)}");
+    }
 
     internal static bool TryGetConformanceRoot(out string? root)
     {
+        // The local JustyBase.SqlConformance checkout selected by
+        // JUSTYBASE_SQL_CONFORMANCE_PATH is the only corpus source.
+        // There is intentionally no fallback to vendored fixtures.
         var configured = Environment.GetEnvironmentVariable("JUSTYBASE_SQL_CONFORMANCE_PATH");
         if (!string.IsNullOrWhiteSpace(configured))
         {
@@ -297,26 +307,6 @@ public sealed class SharedSqlConformanceTests
             if (Directory.Exists(Path.Combine(full, "dialects")))
             {
                 root = full;
-                return true;
-            }
-            root = null;
-            return false;
-        }
-
-        for (var current = new DirectoryInfo(AppContext.BaseDirectory); current is not null; current = current.Parent)
-        {
-            var candidates = new[]
-            {
-                Path.Combine(current.FullName, "Fixtures", "sql-conformance"),
-                Path.Combine(current.FullName, "tests", "JustyBase.NetezzaSql.Tests", "Fixtures", "sql-conformance"),
-                Path.Combine(current.FullName, "JustyBase.SqlConformance"),
-                current.Parent is null ? string.Empty : Path.Combine(current.Parent.FullName, "JustyBase.SqlConformance")
-            };
-            var found = candidates.FirstOrDefault(candidate =>
-                candidate.Length > 0 && Directory.Exists(Path.Combine(candidate, "dialects")));
-            if (found is not null)
-            {
-                root = found;
                 return true;
             }
         }
