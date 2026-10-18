@@ -838,6 +838,21 @@ public partial class NzSqlParser
         return new CastExpression(FromToken(c), expr, type);
     }
 
+    /// <summary>
+    /// Netezza rejects these type names in CREATE TABLE column definitions
+    /// (live Netezza 11.2 evidence-campaign run 20261018f, .111/.112).
+    /// Dialects that accept them (PostgreSQL SERIAL, Oracle CLOB/BLOB, ...)
+    /// override this hook. The base parser only calls it for CREATE TABLE
+    /// column definitions so CAST and other type positions keep prior behavior.
+    /// </summary>
+    protected virtual bool IsUnsupportedColumnTypeName(string upperName, bool hasParameters) => upperName switch
+    {
+        "SERIAL" or "BIGSERIAL" => true,
+        "CLOB" or "NCLOB" => hasParameters,
+        "BLOB" => !hasParameters,
+        _ => false,
+    };
+
     protected virtual DataTypeInfo ParseDataType()
     {
         var first = Peek().Kind is NzToken.QuotedIdentifier or NzToken.MySqlBacktickIdentifier

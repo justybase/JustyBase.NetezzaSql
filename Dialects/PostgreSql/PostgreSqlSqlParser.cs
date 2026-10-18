@@ -23,6 +23,10 @@ public sealed partial class PostgreSqlSqlParser : NzSqlParser
 
     protected override bool SupportsMultiRowValues => true;
 
+    // PostgreSQL natively supports SERIAL/BIGSERIAL column types; the base
+    // Netezza-only rejection must not apply here.
+    protected override bool IsUnsupportedColumnTypeName(string upperName, bool hasParameters) => false;
+
     public override Statement? Parse()
     {
         // Report unsupported storage syntax even when it appears in a DDL

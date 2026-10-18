@@ -506,4 +506,80 @@ public sealed partial class NzSqlValidatorDdlTests
     {
         ExpectValid("SELECT ${MY_VAR} FROM TESTDB..EMPLOYEES;");
     }
+
+    // Live Netezza 11.2 rejects WITH ... INSERT: only SELECT or ( may follow
+    // the WITH clause (evidence-campaign 20261018f, dotnet-template.026).
+    // INSERT ... WITH ... (CTE after INSERT, in query position) stays valid,
+    // as does a WITH-led query inside CTAS.
+    [Theory]
+    [InlineData("WITH SRC AS (SELECT 1 AS CODE, 'Test' AS TITLE)\nINSERT INTO TESTDB..FILMS (CODE, TITLE) SELECT CODE, TITLE FROM SRC;")]
+    [InlineData("WITH SRC AS (SELECT 1 AS CODE) INSERT INTO T (CODE) SELECT CODE FROM SRC;")]
+    public void WithClauseFollowedByInsertIsRejected(string sql)
+    {
+        ExpectSyntaxError(sql, _schema);
+    }
+
+    [Fact]
+    public void WithInsertRejectionExplainsAllowedFollowers()
+    {
+        var result = Validate(
+            "WITH SRC AS (SELECT 1 AS CODE) INSERT INTO T (CODE) SELECT CODE FROM SRC;",
+            _schema);
+        var error = Assert.Single(result.Errors, e => e.Code.StartsWith("PAR") || e.Code.StartsWith("LEX"));
+        Assert.Contains("SELECT", error.Message, StringComparison.Ordinal);
+        Assert.Contains("INSERT", error.Message, StringComparison.Ordinal);
+    }
+
+    // Live Netezza 11.2 rejects INSERT ... WITH name (SELECT ...) without AS
+    // (dotnet-template.017); WITH name AS (...) stays valid.
+    [Theory]
+    [InlineData("INSERT INTO TESTDB..FILMS\nWITH ABC (SELECT 1 AS CODE, 'Test' AS TITLE)\nSELECT CODE, TITLE FROM ABC;")]
+    public void InsertWithWithoutAsIsRejected(string sql)
+    {
+        ExpectSyntaxError(sql, _schema);
+    }
+
+    [Theory]
+    [InlineData("WITH SRC AS (SELECT 1 AS CODE) SELECT CODE FROM SRC;")]
+    [InlineData("WITH SRC AS (SELECT 1 AS CODE) (SELECT CODE FROM SRC);")]
+    [InlineData("INSERT INTO TESTDB..FILMS (CODE, TITLE) SELECT CODE, TITLE FROM TESTDB..FILMS;")]
+    [InlineData("INSERT INTO TESTDB..FILMS (CODE) WITH SRC AS (SELECT 1 AS CODE) SELECT CODE FROM SRC;")]
+    [InlineData("CREATE TEMP TABLE T AS WITH SRC AS (SELECT 1 AS CODE) SELECT CODE FROM SRC;")]
+    public void WithSelectInsertWithAndCtasWithRemainValid(string sql)
+    {
+        ExpectValid(sql, _schema);
+    }
+
+    // Live Netezza 11.2 rejects SERIAL/BIGSERIAL as column typenames
+    // (evidence-campaign 20261018f, dotnet-template.111).
+    [Theory]
+    [InlineData("CREATE TABLE SERIAL_TYPES (ID SERIAL, BIG_ID BIGSERIAL);")]
+    [InlineData("CREATE TABLE T1 (ID SERIAL);")]
+    [InlineData("CREATE TABLE T1 (ID BIGSERIAL);")]
+    public void SerialColumnTypesAreRejected(string sql)
+    {
+        ExpectSyntaxError(sql, _schema);
+    }
+
+    // Live Netezza 11.2 rejects CLOB(n)/NCLOB(n) and bare BLOB as column
+    // typenames (evidence-campaign 20261018f, dotnet-template.112).
+    [Theory]
+    [InlineData("CREATE TABLE LOB_TYPES (DATA CLOB(1000), NDATA NCLOB(500), RAW BLOB);")]
+    [InlineData("CREATE TABLE T1 (DATA CLOB(1000));")]
+    [InlineData("CREATE TABLE T1 (DATA NCLOB(500));")]
+    [InlineData("CREATE TABLE T1 (RAW BLOB);")]
+    public void LobColumnTypeShapesAreRejected(string sql)
+    {
+        ExpectSyntaxError(sql, _schema);
+    }
+
+    [Theory]
+    [InlineData("CREATE TABLE T1 (DATA CLOB);")]
+    [InlineData("CREATE TABLE T1 (DATA NCLOB);")]
+    [InlineData("CREATE TABLE T1 (NAME VARCHAR(100));")]
+    [InlineData("SELECT CAST(1 AS VARCHAR(10));")]
+    public void OtherTypenameShapesRemainValid(string sql)
+    {
+        ExpectValid(sql, _schema);
+    }
 }

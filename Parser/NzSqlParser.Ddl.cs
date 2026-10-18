@@ -218,6 +218,16 @@ public partial class NzSqlParser
         var colName = nameTok.ToStringValue();
 
         var dataType = ParseDataType();
+        // Live Netezza 11.2 rejects SERIAL/BIGSERIAL, CLOB(n)/NCLOB(n) and
+        // bare BLOB as column typenames (evidence-campaign 20261018f,
+        // dotnet-template.111/.112). Narrow to exact name/parameter shapes so
+        // CAST and other type positions keep prior behavior; the virtual hook
+        // lets dialects with their own ParseDataType keep accepting them.
+        if (IsUnsupportedColumnTypeName(
+                dataType.Name.ToUpperInvariant(), (dataType.Parameters?.Count ?? 0) > 0))
+        {
+            AddParserError($"Netezza does not support column type '{dataType.Name}'", Peek(), "PAR001");
+        }
 
         var notNull = false;
         Expression? defaultValue = null;

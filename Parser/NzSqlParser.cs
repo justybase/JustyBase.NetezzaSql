@@ -273,14 +273,39 @@ public partial class NzSqlParser
         var with = ParseWithClause();
         if (Peek().Kind == NzToken.Select)
             return ParseSelectStatement(with);
+        if (Peek().Kind == NzToken.LParen)
+        {
+            // WITH ... (SELECT ...) is accepted (server allows SELECT or ()
+            // after WITH). Parse the parenthesized query, then attach the
+            // leading WITH clause to the resulting statement.
+            var inner = ParseSelect();
+            if (inner is null)
+                return null;
+            return inner with { With = with };
+        }
+        // Live Netezza 11.2 rejects WITH ... INSERT: only SELECT or ( may
+        // follow the WITH clause (evidence-campaign 20261018f,
+        // dotnet-template.026). INSERT ... WITH ... (CTE after INSERT, in
+        // query position) stays accepted via ParseInsert.
+        if (Peek().Kind == NzToken.Insert && !SupportsWithInsert)
+        {
+            AddParserError("WITH clause must be followed by SELECT or (; INSERT cannot follow a CTE",
+                Peek(), "PAR109");
+            return null;
+        }
         if (Peek().Kind == NzToken.Insert)
             return ParseInsertWithClause(with);
-        AddParserError("WITH clause must be followed by SELECT or INSERT",
+        AddParserError("WITH clause must be followed by SELECT or (",
             Peek(), "PAR109");
         if (_pos >= _tokens.Length)
             return RecoveredSelect(with.Position, with);
         return null;
     }
+
+    /// <summary>
+    /// Netezza rejects WITH ... INSERT; dialects that accept it override this.
+    /// </summary>
+    protected virtual bool SupportsWithInsert => false;
 
     private static SelectStatement RecoveredSelect(SourcePosition position, WithClause? with = null)
         => new(position, null, [], null, null, null, null, null, null, null, null, with);

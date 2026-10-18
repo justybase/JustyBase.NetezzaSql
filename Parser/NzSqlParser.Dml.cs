@@ -58,18 +58,14 @@ public partial class NzSqlParser
 
         if (Peek().Kind == NzToken.With)
         {
-            // Netezza also accepts INSERT ... WITH name (SELECT ...) SELECT ...
-            // without the AS keyword in this position.
+            // Live Netezza 11.2 rejects INSERT ... WITH name (SELECT ...)
+            // without AS (dotnet-template.017: found "SELECT" expecting an
+            // identifier). Only WITH name AS (...) is accepted here.
             if (Peek(1).Kind is NzToken.Identifier or NzToken.QuotedIdentifier
                 && Peek(2).Kind == NzToken.LParen)
             {
-                Advance();
-                Advance();
-                Advance();
-                ParseSelectStatement();
-                Expect(NzToken.RParen);
-                if (Peek().Kind == NzToken.Select)
-                    sourceQuery = ParseSelectStatement();
+                AddParserError("CTE definition requires AS before the subquery", Peek(2), "PAR101");
+                return null;
             }
             else
             {
