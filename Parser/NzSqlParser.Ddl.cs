@@ -906,10 +906,26 @@ public partial class NzSqlParser
     {
         var explainTok = Expect(NzToken.Explain);
 
-        // Consume EXPLAIN options: VERBOSE, DISTRIBUTION, PLANTEXT, PLANGRAPH
+        // The shared parser also handles dialect forms such as SQLite's QUERY PLAN.
+        // Count only Netezza's dedicated option tokens so those forms retain their
+        // prior identifier handling.
+        var netezzaOptionCount = 0;
         while (Peek().Kind is NzToken.Verbose or NzToken.Distribution
             or NzToken.Plantext or NzToken.Plangraph or NzToken.Identifier)
         {
+            var option = Peek();
+            if (option.Kind is NzToken.Verbose or NzToken.Distribution
+                or NzToken.Plantext or NzToken.Plangraph)
+            {
+                netezzaOptionCount++;
+                if (netezzaOptionCount > 1)
+                {
+                    AddParserError(
+                        "Netezza EXPLAIN accepts at most one option.",
+                        option,
+                        "PAR001");
+                }
+            }
             Advance();
         }
 

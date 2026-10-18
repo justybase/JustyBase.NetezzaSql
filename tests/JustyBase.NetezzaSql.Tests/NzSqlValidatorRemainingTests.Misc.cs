@@ -409,11 +409,6 @@ public sealed partial class NzSqlValidatorRemainingTests
     }
 
 
-    [Fact]
-    public void Validate_NodeParity_ExplainVerboseDistribution()
-    {
-        ExpectValid("EXPLAIN VERBOSE DISTRIBUTION SELECT * FROM TESTDB..EMPLOYEES;", _schema);
-    }
 
 
     [Fact]

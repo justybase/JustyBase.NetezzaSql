@@ -6,9 +6,20 @@ namespace JustyBase.Tests.NetezzaSqlParser;
 public sealed partial class NzSqlValidatorDdlTests
 {
     [Fact]
-    public void ExplainVerboseDistributionPlantext()
+    public void ExplainRejectsMultipleOptions()
     {
-        ExpectValid("EXPLAIN VERBOSE DISTRIBUTION PLANTEXT SELECT 1;", _schema);
+        ExpectSyntaxError("EXPLAIN VERBOSE DISTRIBUTION PLANTEXT SELECT 1;", _schema);
+    }
+
+    [Theory]
+    [InlineData("EXPLAIN SELECT 1;")]
+    [InlineData("EXPLAIN VERBOSE SELECT 1;")]
+    [InlineData("EXPLAIN DISTRIBUTION SELECT 1;")]
+    [InlineData("EXPLAIN PLANTEXT SELECT 1;")]
+    [InlineData("EXPLAIN PLANGRAPH SELECT 1;")]
+    public void ExplainAcceptsBaseAndSingleOptions(string sql)
+    {
+        ExpectValid(sql, _schema);
     }
 
 
