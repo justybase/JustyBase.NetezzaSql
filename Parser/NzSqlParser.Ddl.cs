@@ -832,10 +832,18 @@ public partial class NzSqlParser
         }
         if (first == NzToken.Drop && second == NzToken.Identifier)
         {
-            AddParserError(
-                "Netezza requires COLUMN and RESTRICT or CASCADE when dropping a column",
-                tokens[0], "PAR001");
-            return new UnknownAlterAction(position, raw);
+            // Live Netezza accepts DROP <column> without the COLUMN keyword as
+            // long as a referential action is present (probe 2026-10-18:
+            // `DROP STATUS CASCADE` really drops the column); only the missing
+            // RESTRICT/CASCADE is rejected.
+            if (!tokens.Any(token => token.Kind is NzToken.Cascade or NzToken.Restrict))
+            {
+                AddParserError(
+                    "Netezza requires RESTRICT or CASCADE when dropping a column",
+                    tokens[0], "PAR001");
+                return new UnknownAlterAction(position, raw);
+            }
+            return new DropColumnAlterAction(position, raw);
         }
         if (first == NzToken.Modify && second == NzToken.Column) return new ModifyColumnAlterAction(position, raw);
         if (first == NzToken.Rename && second == NzToken.Column) return new RenameColumnAlterAction(position, raw);

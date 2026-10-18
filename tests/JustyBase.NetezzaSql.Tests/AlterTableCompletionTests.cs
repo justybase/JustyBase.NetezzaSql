@@ -41,7 +41,17 @@ public sealed class AlterTableCompletionTests
     [Fact]
     public void AlterTable_DropColumnShorthand_IsRejected()
     {
-        // Live Netezza requires COLUMN and RESTRICT or CASCADE (live evidence 2026-10-06).
+        // Live Netezza rejects DROP <column> without RESTRICT or CASCADE
+        // (live evidence 2026-10-18).
         SqlTestHelpers.ExpectSyntaxError("ALTER TABLE TESTDB..EMPLOYEES DROP STATUS;", _schema);
+    }
+
+    [Fact]
+    public void AlterTable_DropColumnShorthand_WithBehavior_IsAccepted()
+    {
+        // Live Netezza accepts DROP <column> without the COLUMN keyword when a
+        // referential action is present (`ALTER TABLE ... DROP STATUS CASCADE`
+        // dropped the column on Release 11.2.2.1, probe 2026-10-18).
+        SqlTestHelpers.ExpectValid("ALTER TABLE TESTDB..EMPLOYEES DROP STATUS RESTRICT;", _schema);
     }
 }
