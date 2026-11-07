@@ -44,6 +44,8 @@ public class NzCompletionEngine
     private readonly DocumentParsingCoordinator? _parsingCoordinator;
     private readonly CompletionWildcardResolver _wildcardResolver;
     private readonly ISqlAuthoringCatalog _catalog;
+    private readonly HashSet<string> _deniedKeywords;
+    private readonly HashSet<string> _deniedFunctions;
     private readonly SqlDialect _dialect;
     private readonly string? _activeDatabase;
     private string? _documentUri;
@@ -74,6 +76,12 @@ public class NzCompletionEngine
         _schema = schema;
         _parsingCoordinator = parsingCoordinator;
         _catalog = catalog ?? NetezzaSqlAuthoringCatalog.Instance;
+        _deniedKeywords = new HashSet<string>(
+            _catalog.DeniedCompletionKeywords ?? Array.Empty<string>(),
+            StringComparer.OrdinalIgnoreCase);
+        _deniedFunctions = new HashSet<string>(
+            _catalog.DeniedFunctionNames ?? Array.Empty<string>(),
+            StringComparer.OrdinalIgnoreCase);
         _wildcardResolver = new CompletionWildcardResolver(schema, dialect, activeDatabase);
         _dialect = dialect;
         _activeDatabase = string.IsNullOrWhiteSpace(activeDatabase) ? null : activeDatabase;
@@ -789,7 +797,7 @@ public class NzCompletionEngine
     {
         foreach (var kw in keywords)
         {
-            if (kw.Length == 0) continue;
+            if (kw.Length == 0 || _deniedKeywords.Contains(kw)) continue;
             list.Add(new CompletionItem(kw, CompletionKind.Keyword, Priority: 20));
         }
     }
@@ -1027,9 +1035,17 @@ public class NzCompletionEngine
     private void AddFunctions(List<CompletionItem> list)
     {
         var catalogFunctions = _catalog.BuiltinFunctions
+            .Where(f => !_deniedFunctions.Contains(f.Name))
             .Select(f => (f.Name, Detail: f.Signatures.FirstOrDefault()?.Label));
-        var legacyFunctions = SqlContext.BuiltinFunctions
-            .Select(name => (Name: name, Detail: (string?)null));
+
+        // The legacy list is Netezza-specific (ADD_MONTHS, HASH4, INT1AND ...).
+        // Other dialects must rely on their authoring catalog only.
+        IEnumerable<(string Name, string? Detail)> legacyFunctions =
+            _dialect == SqlDialect.Netezza
+                ? SqlContext.BuiltinFunctions
+                    .Where(name => !_deniedFunctions.Contains(name))
+                    .Select(name => (Name: name, Detail: (string?)null))
+                : [];
 
         foreach (var fn in catalogFunctions.Concat(legacyFunctions).DistinctBy(f => f.Name, StringComparer.OrdinalIgnoreCase))
         {
@@ -2032,8 +2048,11 @@ public class NzCompletionEngine
             }
         }
 
-        foreach (var kw in AlterTableCompletion.GetKeywordsForPhase(phase))
+        foreach (var kw in AlterTableCompletion.GetKeywordsForPhase(phase, _catalog))
+        {
+            if (kw.Length == 0 || _deniedKeywords.Contains(kw)) continue;
             list.Add(new CompletionItem(kw, CompletionKind.Keyword, Priority: 20));
+        }
     }
 
     private static string? ExtractAlterTableName(Token<NzToken>[] tokens)

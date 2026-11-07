@@ -25,6 +25,15 @@ public interface ISqlAuthoringCatalog
     /// <summary>Dialect keywords shown by hover for non-identifier words.</summary>
     IReadOnlyList<string> Keywords { get; }
 
+    /// <summary>
+    /// Keywords/phrases the dialect must never suggest even when a shared
+    /// completion context adds them (for example Netezza LIMIT/GROOM on Db2).
+    /// </summary>
+    IReadOnlyList<string> DeniedCompletionKeywords => [];
+
+    /// <summary>Built-in function names the dialect must never suggest.</summary>
+    IReadOnlyList<string> DeniedFunctionNames => [];
+
     bool TryGetFunction(string name, out NetezzaBuiltinFunction function);
     bool TryGetDataType(string name, out NetezzaDataTypeSpec type);
 }
