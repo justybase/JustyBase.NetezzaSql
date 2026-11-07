@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- Deliberately dependency-free: this project is safe to reference from
+         hosts that do not ship any AI runtime or NuGet package. Keep it that way. -->
+    <IsAotCompatible>true</IsAotCompatible>
+    <PackageId>JustyBase.Ai.Contracts</PackageId>
+    <RootNamespace>JustyBase.Ai</RootNamespace>
+    <AssemblyName>JustyBase.Ai.Contracts</AssemblyName>
+    <PackageDescription>Lightweight, dependency-free AI chat model and port contracts for JustyBase hosts. Contains no AI SDK, Copilot, OpenAI or embedded-runtime dependencies.</PackageDescription>
+    <PackageTags>ai;contracts;chat;models;justybase</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

@@ -39,6 +39,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JustyBase.Ai.AotProbe", "te
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JustyBase.NetezzaSql.Benchmarks", "tests\JustyBase.NetezzaSql.Benchmarks\JustyBase.NetezzaSql.Benchmarks.csproj", "{908C6E87-D7B8-4E3D-9569-DBD60BA0D20D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JustyBase.Ai.Contracts", "JustyBase.Ai.Contracts\JustyBase.Ai.Contracts.csproj", "{4BC02781-5851-4218-8AE3-CEDA59372CE5}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -252,6 +254,18 @@ Global
 		{908C6E87-D7B8-4E3D-9569-DBD60BA0D20D}.Release|x64.Build.0 = Release|Any CPU
 		{908C6E87-D7B8-4E3D-9569-DBD60BA0D20D}.Release|x86.ActiveCfg = Release|Any CPU
 		{908C6E87-D7B8-4E3D-9569-DBD60BA0D20D}.Release|x86.Build.0 = Release|Any CPU
+		{4BC02781-5851-4218-8AE3-CEDA59372CE5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4BC02781-5851-4218-8AE3-CEDA59372CE5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4BC02781-5851-4218-8AE3-CEDA59372CE5}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{4BC02781-5851-4218-8AE3-CEDA59372CE5}.Debug|x64.Build.0 = Debug|Any CPU
+		{4BC02781-5851-4218-8AE3-CEDA59372CE5}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{4BC02781-5851-4218-8AE3-CEDA59372CE5}.Debug|x86.Build.0 = Debug|Any CPU
+		{4BC02781-5851-4218-8AE3-CEDA59372CE5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4BC02781-5851-4218-8AE3-CEDA59372CE5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4BC02781-5851-4218-8AE3-CEDA59372CE5}.Release|x64.ActiveCfg = Release|Any CPU
+		{4BC02781-5851-4218-8AE3-CEDA59372CE5}.Release|x64.Build.0 = Release|Any CPU
+		{4BC02781-5851-4218-8AE3-CEDA59372CE5}.Release|x86.ActiveCfg = Release|Any CPU
+		{4BC02781-5851-4218-8AE3-CEDA59372CE5}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

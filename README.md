@@ -2,7 +2,7 @@
 
 Open-source .NET libraries for working with SQL without requiring a live database connection.
 
-The solution ships nine NuGet libraries:
+The solution ships ten NuGet libraries:
 
 | Project | Purpose |
 | --- | --- |
@@ -13,6 +13,7 @@ The solution ships nine NuGet libraries:
 | `JustyBase.Sqlite` | UI-agnostic SQLite metadata, parser schema, and DDL integration components. |
 | `JustyBase.Core` | Shared host-agnostic app core: risk analysis, scripting dialect, execution contracts, schema cache/catalog ports. |
 | `JustyBase.ImportExport` | Shared Netezza import engines and tabular export writers used by Avalonia and Legacy hosts. |
+| `JustyBase.Ai.Contracts` | Dependency-free chat models, host ports, and the SQL-execution error store shared by AI and no-AI hosts. No AI SDK, Copilot, OpenAI, or embedded-runtime dependencies. |
 | `JustyBase.Ai` | UI-agnostic AI chat logic: chat service, tool executor, OpenAI-compatible and Codex backends, prompt building, and chat model contracts. |
 | `JustyBase.Ai.Embedded` | Embedded llama.cpp (`llama-server`) GGUF model management for FIM inline completion and AI chat. |
 
@@ -99,6 +100,18 @@ dotnet test .\JustyBase.NetezzaSql.sln -c Release --filter "Category!=Performanc
 pwsh .\eng\Verify-Local.ps1
 ```
 
+### No-AI build
+
+The seven core libraries do not reference the AI projects and can be built without restoring any AI NuGet package. Use the solution filter to exclude `JustyBase.Ai`, `JustyBase.Ai.Embedded`, `JustyBase.Ai.Contracts`, and the AI test/probe projects:
+
+```powershell
+dotnet restore .\JustyBase.NetezzaSql.NoAi.slnf
+dotnet build .\JustyBase.NetezzaSql.NoAi.slnf -c Release
+dotnet test .\JustyBase.NetezzaSql.NoAi.slnf -c Release --filter "Category!=Performance&Category!=SqlConformance"
+```
+
+`JustyBase.Ai.Contracts` is intentionally dependency-free and can be added to a no-AI host when it needs the shared chat model contracts; it pulls no AI SDK or runtime package.
+
 Before pushing to `master`, prefer `Verify-Local.ps1` (build, tests, coverage gates, whitespace) — see [docs/local-ci.md](docs/local-ci.md).
 
 The standard test suite covers parser and linter behavior, malformed SQL, runtime behavior, DDL helpers, and regression cases. Shared SQL conformance
@@ -114,10 +127,16 @@ Optional database-backed smoke tests:
 
 ## Create NuGet packages
 
-Pack all nine libraries under the same `PackageVersion` (default from `Directory.Build.props`):
+Pack all ten libraries under the same `PackageVersion` (default from `Directory.Build.props`):
 
 ```powershell
 dotnet pack .\JustyBase.NetezzaSql.sln -c Release -o .\artifacts
+```
+
+Pack only the no-AI libraries:
+
+```powershell
+dotnet pack .\JustyBase.NetezzaSql.NoAi.slnf -c Release -o .\artifacts
 ```
 
 Or pack individually:

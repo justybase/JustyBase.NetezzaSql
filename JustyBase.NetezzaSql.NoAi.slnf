@@ -1,0 +1,20 @@
+{
+  "solution": {
+    "path": "JustyBase.NetezzaSql.sln",
+    "projects": [
+      "JustyBase.NetezzaSqlParser.csproj",
+      "JustyBase.NetezzaDdl/JustyBase.NetezzaDdl.csproj",
+      "JustyBase.NetezzaCatalogSql/JustyBase.NetezzaCatalogSql.csproj",
+      "JustyBase.Netezza/JustyBase.Netezza.csproj",
+      "JustyBase.Core/JustyBase.Core.csproj",
+      "JustyBase.ImportExport/JustyBase.ImportExport.csproj",
+      "JustyBase.Sqlite/JustyBase.Sqlite.csproj",
+      "samples/JustyBase.NetezzaSql.Sample/JustyBase.NetezzaSql.Sample.csproj",
+      "tests/JustyBase.NetezzaSql.Tests/JustyBase.NetezzaSql.Tests.csproj",
+      "tests/JustyBase.Netezza.Tests/JustyBase.Netezza.Tests.csproj",
+      "tests/JustyBase.Sqlite.Tests/JustyBase.Sqlite.Tests.csproj",
+      "tests/JustyBase.NetezzaSql.IntegrationTests/JustyBase.NetezzaSql.IntegrationTests.csproj",
+      "tests/JustyBase.NetezzaSql.Benchmarks/JustyBase.NetezzaSql.Benchmarks.csproj"
+    ]
+  }
+}

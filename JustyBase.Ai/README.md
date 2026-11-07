@@ -21,6 +21,7 @@ The package has no UI dependency.
 
 | Package | Purpose |
 |---------|---------|
+| `JustyBase.Ai.Contracts` | Dependency-free chat models, host ports, and SQL error contracts shared with no-AI hosts |
 | `JustyBase.Ai.Embedded` | Embedded llama.cpp (`llama-server`) GGUF model management for FIM and local chat |
 | `GitHub.Copilot.SDK` | GitHub Copilot CLI bridge used by the Copilot chat backend |
 | `DiffPlex` | Diff generation for SQL patch approval flows |

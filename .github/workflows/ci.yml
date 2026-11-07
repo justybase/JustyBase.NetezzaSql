@@ -27,6 +27,12 @@ jobs:
       - name: Build
         run: dotnet build JustyBase.NetezzaSql.sln --no-restore --configuration Release
 
+      - name: Restore no-AI libraries
+        run: dotnet restore JustyBase.NetezzaSql.NoAi.slnf
+
+      - name: Build no-AI libraries
+        run: dotnet build JustyBase.NetezzaSql.NoAi.slnf --no-restore --configuration Release
+
       - name: Test
         run: dotnet test JustyBase.NetezzaSql.sln --no-build --configuration Release --logger trx --collect:"XPlat Code Coverage" --filter "Category!=Performance&Category!=SqlConformance&Category!=LiveConformance&Category!=LiveDatabase"
 
@@ -50,6 +56,7 @@ jobs:
           dotnet pack JustyBase.Sqlite/JustyBase.Sqlite.csproj --no-build --configuration Release --output artifacts/packages
           dotnet pack JustyBase.Core/JustyBase.Core.csproj --no-build --configuration Release --output artifacts/packages
           dotnet pack JustyBase.ImportExport/JustyBase.ImportExport.csproj --no-build --configuration Release --output artifacts/packages
+          dotnet pack JustyBase.Ai.Contracts/JustyBase.Ai.Contracts.csproj --no-build --configuration Release --output artifacts/packages
           dotnet pack JustyBase.Ai/JustyBase.Ai.csproj --no-build --configuration Release --output artifacts/packages
           dotnet pack JustyBase.Ai.Embedded/JustyBase.Ai.Embedded.csproj --no-build --configuration Release --output artifacts/packages
 
