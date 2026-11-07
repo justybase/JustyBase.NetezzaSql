@@ -17,52 +17,61 @@ public sealed class Db2LintRulesTests
         Registry().AllRules.SelectMany(r => r.Check(sql)).Select(i => i.RuleId).ToList();
 
     [Fact]
-    public void Registry_ContainsDB2001_Through_DB2008()
+    public void Registry_ContainsDB2L001_Through_DB2L008()
     {
         Assert.Equal(
-            ["DB2001", "DB2002", "DB2003", "DB2004", "DB2005", "DB2006", "DB2007", "DB2008"],
+            ["DB2L001", "DB2L002", "DB2L003", "DB2L004", "DB2L005", "DB2L006", "DB2L007", "DB2L008"],
             Db2LintRules.AllRules.Select(r => r.Id).ToArray());
     }
 
     [Fact]
-    public void DB2001_FlagsSelectStar()
+    public void AvaloniaRulesDoNotReuseRustDb2001ToDb2004DiagnosticCodes()
     {
-        Assert.Contains("DB2001", Ids("SELECT * FROM T"));
+        string[] rustLanguageCodes = ["DB2001", "DB2002", "DB2003", "DB2004"];
+
+        Assert.DoesNotContain(Db2LintRules.AllRules, rule => rustLanguageCodes.Contains(rule.Id));
+        Assert.All(Db2LintRules.AllRules, rule => Assert.StartsWith("DB2L", rule.Id));
     }
 
     [Fact]
-    public void DB2002_DB2003_FlagDeleteUpdateWithoutWhere()
+    public void DB2L001_FlagsSelectStar()
     {
-        Assert.Contains("DB2002", Ids("DELETE FROM T"));
-        Assert.Contains("DB2003", Ids("UPDATE T SET X = 1"));
+        Assert.Contains("DB2L001", Ids("SELECT * FROM T"));
     }
 
     [Fact]
-    public void DB2002_MultipartQuotedTable()
+    public void DB2L002_DB2L003_FlagDeleteUpdateWithoutWhere()
     {
-        Assert.Contains("DB2002", Ids("""DELETE FROM "SCHEMA"."TABLE" """));
-        Assert.DoesNotContain("DB2002", Ids("""DELETE FROM "SCHEMA"."TABLE" WHERE 1=1"""));
+        Assert.Contains("DB2L002", Ids("DELETE FROM T"));
+        Assert.Contains("DB2L003", Ids("UPDATE T SET X = 1"));
     }
 
     [Fact]
-    public void DB2004_DB2005_RejectNetezzaCarryOvers()
+    public void DB2L002_MultipartQuotedTable()
     {
-        Assert.Contains("DB2004", Ids("GROOM TABLE T"));
-        Assert.Contains("DB2005", Ids("CREATE TABLE T (A INT) DISTRIBUTE ON (A)"));
+        Assert.Contains("DB2L002", Ids("""DELETE FROM "SCHEMA"."TABLE" """));
+        Assert.DoesNotContain("DB2L002", Ids("""DELETE FROM "SCHEMA"."TABLE" WHERE 1=1"""));
     }
 
     [Fact]
-    public void DB2006_TopNWithoutOrderBy()
+    public void DB2L004_DB2L005_RejectNetezzaCarryOvers()
     {
-        Assert.Contains("DB2006", Ids("SELECT * FROM T FETCH FIRST 5 ROWS ONLY"));
-        Assert.DoesNotContain("DB2006", Ids("SELECT * FROM T ORDER BY ID FETCH FIRST 5 ROWS ONLY"));
+        Assert.Contains("DB2L004", Ids("GROOM TABLE T"));
+        Assert.Contains("DB2L005", Ids("CREATE TABLE T (A INT) DISTRIBUTE ON (A)"));
     }
 
     [Fact]
-    public void DB2007_DB2008_RejectLimitAndDoubleDot()
+    public void DB2L006_TopNWithoutOrderBy()
     {
-        Assert.Contains("DB2007", Ids("SELECT * FROM T LIMIT 10"));
-        Assert.Contains("DB2008", Ids("SELECT * FROM DB..TABLE"));
+        Assert.Contains("DB2L006", Ids("SELECT * FROM T FETCH FIRST 5 ROWS ONLY"));
+        Assert.DoesNotContain("DB2L006", Ids("SELECT * FROM T ORDER BY ID FETCH FIRST 5 ROWS ONLY"));
+    }
+
+    [Fact]
+    public void DB2L007_DB2L008_RejectLimitAndDoubleDot()
+    {
+        Assert.Contains("DB2L007", Ids("SELECT * FROM T LIMIT 10"));
+        Assert.Contains("DB2L008", Ids("SELECT * FROM DB..TABLE"));
     }
 
     [Fact]
@@ -70,11 +79,11 @@ public sealed class Db2LintRulesTests
     {
         var ids = Ids(
             "DELETE FROM ORDERS; UPDATE ORDERS SET STATUS = 1; SELECT * FROM ORDERS FETCH FIRST 10 ROWS ONLY; SELECT * FROM T LIMIT 5; SELECT * FROM DB..T;");
-        Assert.Contains("DB2001", ids);
-        Assert.Contains("DB2002", ids);
-        Assert.Contains("DB2003", ids);
-        Assert.Contains("DB2006", ids);
-        Assert.Contains("DB2007", ids);
-        Assert.Contains("DB2008", ids);
+        Assert.Contains("DB2L001", ids);
+        Assert.Contains("DB2L002", ids);
+        Assert.Contains("DB2L003", ids);
+        Assert.Contains("DB2L006", ids);
+        Assert.Contains("DB2L007", ids);
+        Assert.Contains("DB2L008", ids);
     }
 }

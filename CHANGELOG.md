@@ -4,6 +4,7 @@ All notable changes to this project will be documented here.
 
 ## Unreleased
 
+- Rename the Avalonia Db2 quality rule ids from `DB2001`–`DB2008` to `DB2L001`–`DB2L008` so they no longer collide with the Rust/Tauri language diagnostics `DB2001` (LIMIT), `DB2002` (ILIKE), `DB2003` (TEXT) and `DB2004` (special-register parentheses). Add the `Net.IBM.Data.Db2` package version used by the isolated Db2 live-proof project so it can build from a solution that uses central package management.
 - Remove the experimental `JustyBase.NetezzaSqlLsp` NativeAOT server (JSON-RPC protocol, handlers, LSP services, workspace). Editor intelligence stays in `JustyBase.NetezzaSqlParser` (`CompletionOrchestrator`, `NzHoverService`, `NzSignatureHelpService`, `NzRenameService`, `NzSymbolService`, `NzSemanticTokenClassifier`, `LintEngine`, `NzLintCodeActions`, `NzSqlFormatter`, `DialectRuntime`); dialect tests were migrated to those APIs. CI keeps NativeAOT publish smoke checks only for the `JustyBase.Ai` probe.
 
 ## 0.8.9

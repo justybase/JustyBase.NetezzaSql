@@ -59,7 +59,7 @@ public sealed class Db2DialectAuthoringTests
     public void Lint_Db2Dialect_ReportsDb2001SelectStar()
     {
         var issues = CheckDb2("SELECT * FROM employees");
-        Assert.Contains(issues, d => d.RuleId == "DB2001");
+        Assert.Contains(issues, d => d.RuleId == "DB2L001");
         Assert.Equal("Db2 SQL", DialectRuntime.DiagnosticSource(SqlDialect.Db2));
     }
 
@@ -67,7 +67,7 @@ public sealed class Db2DialectAuthoringTests
     public void Lint_Db2Dialect_DoesNotReportNzRules()
     {
         var issues = CheckDb2("SELECT * FROM employees");
-        Assert.Contains(issues, d => d.RuleId == "DB2001");
+        Assert.Contains(issues, d => d.RuleId == "DB2L001");
         Assert.DoesNotContain(issues, d => d.RuleId.StartsWith("NZ", StringComparison.Ordinal));
         Assert.DoesNotContain(issues, d => d.RuleId.StartsWith("ORA", StringComparison.Ordinal));
     }

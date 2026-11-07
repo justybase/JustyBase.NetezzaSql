@@ -29,7 +29,7 @@ focused .NET tests.
 | Oracle formatter output | — (no TS formatter override) | token-range reconstruction for Oracle statements in `NzSqlFormatter` | supported |
 | Db2 dialect lexer | `src/dialects/db2/sql/lexer.ts` | `Db2Lexer` (Db2* multi-word tokens before shared chain) | supported |
 | Db2 dialect parser | `src/dialects/db2/sql/parser.ts` | `Db2SqlParser` partials; DGTT/ALIAS/NICKNAME/PROCEDURE; FINAL TABLE; PAR001 rejections | supported |
-| Db2 quality rules | `extensions/db2/src/sql/qualityRules.ts` | `Db2LintRules` (DB2001–DB2008) via dialect-only `QualityRuleRegistry` | supported |
+| Db2 quality rules | `extensions/db2/src/sql/qualityRules.ts` | `Db2LintRules` (DB2L001–DB2L008; legacy DB2001–DB2008 ids renamed to avoid Rust language diagnostic collisions) via dialect-only `QualityRuleRegistry` | supported |
 | Db2 SQL authoring | `extensions/db2/src/sql/authoring.ts` | `Db2SqlCatalog` through `ISqlAuthoringCatalog` | supported |
 | MSSQL dialect lexer | `src/dialects/mssql/sql/lexer.ts` | `MssqlLexer` (Mssql* tokens and bracketed identifiers registered before shared chain) | supported |
 | MSSQL dialect parser | `src/dialects/mssql/sql/parser.ts` | `MssqlSqlParser` partials; TOP / OUTPUT / CROSS\|OUTER APPLY / bracketed identifiers / @variables / GO batches; PAR001 rejections | supported |

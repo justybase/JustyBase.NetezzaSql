@@ -3,38 +3,41 @@ using System.Text.RegularExpressions;
 namespace JustyBase.NetezzaSqlParser.Linter;
 
 /// <summary>
-/// Db2 LUW dialect lint rules. Port of extensions/db2/src/sql/qualityRules.ts
-/// (DB2001–DB2008). Registry for Db2 documents contains only these rules.
+/// Db2 LUW dialect lint rules. Port of extensions/db2/src/sql/qualityRules.ts.
+/// Avalonia uses the <c>DB2L</c> namespace (DB2L001–DB2L008) so these rules never
+/// collide with the Rust/Tauri language diagnostics DB2001 (LIMIT), DB2002 (ILIKE),
+/// DB2003 (TEXT) and DB2004 (CURRENT DATE with parentheses). Registry for Db2
+/// documents contains only these rules.
 /// </summary>
 public static class Db2LintRules
 {
     public static IReadOnlyList<LintRule> AllRules { get; } =
     [
-        new RuleDB2001_SelectStar(),
-        new RuleDB2002_DeleteWithoutWhere(),
-        new RuleDB2003_UpdateWithoutWhere(),
-        new RuleDB2004_NetezzaGroom(),
-        new RuleDB2005_NetezzaDistributeOn(),
-        new RuleDB2006_TopNWithoutOrderBy(),
-        new RuleDB2007_NetezzaLimit(),
-        new RuleDB2008_NetezzaDoubleDot(),
+        new RuleDB2L001_SelectStar(),
+        new RuleDB2L002_DeleteWithoutWhere(),
+        new RuleDB2L003_UpdateWithoutWhere(),
+        new RuleDB2L004_NetezzaGroom(),
+        new RuleDB2L005_NetezzaDistributeOn(),
+        new RuleDB2L006_TopNWithoutOrderBy(),
+        new RuleDB2L007_NetezzaLimit(),
+        new RuleDB2L008_NetezzaDoubleDot(),
     ];
 }
 
-public sealed class RuleDB2001_SelectStar : DelegatingLintRule
+public sealed class RuleDB2L001_SelectStar : DelegatingLintRule
 {
-    public RuleDB2001_SelectStar() : base(SharedQualityRuleFactory.CreateSelectStar(
-        "DB2001", "Select Star",
+    public RuleDB2L001_SelectStar() : base(SharedQualityRuleFactory.CreateSelectStar(
+        "DB2L001", "Select Star",
         "Avoid SELECT * in production Db2 queries when a stable projection is possible.",
         LintSeverity.Warning))
     {
     }
 }
 
-public sealed class RuleDB2002_DeleteWithoutWhere : DelegatingLintRule
+public sealed class RuleDB2L002_DeleteWithoutWhere : DelegatingLintRule
 {
-    public RuleDB2002_DeleteWithoutWhere() : base(SharedQualityRuleFactory.CreateDeleteWithoutWhere(
-        "DB2002", "Delete Without Where",
+    public RuleDB2L002_DeleteWithoutWhere() : base(SharedQualityRuleFactory.CreateDeleteWithoutWhere(
+        "DB2L002", "Delete Without Where",
         "DELETE without WHERE removes every row in the target table.",
         LintSeverity.Error,
         new SqlLintScannerOptions(HandleQQuotedStrings: true, StatementEnd: Db2LintHelpers.StatementEnd)))
@@ -42,10 +45,10 @@ public sealed class RuleDB2002_DeleteWithoutWhere : DelegatingLintRule
     }
 }
 
-public sealed class RuleDB2003_UpdateWithoutWhere : DelegatingLintRule
+public sealed class RuleDB2L003_UpdateWithoutWhere : DelegatingLintRule
 {
-    public RuleDB2003_UpdateWithoutWhere() : base(SharedQualityRuleFactory.CreateUpdateWithoutWhere(
-        "DB2003", "Update Without Where",
+    public RuleDB2L003_UpdateWithoutWhere() : base(SharedQualityRuleFactory.CreateUpdateWithoutWhere(
+        "DB2L003", "Update Without Where",
         "UPDATE without WHERE changes every row in the target table.",
         LintSeverity.Error,
         new SqlLintScannerOptions(HandleQQuotedStrings: true, StatementEnd: Db2LintHelpers.StatementEnd)))
@@ -53,9 +56,9 @@ public sealed class RuleDB2003_UpdateWithoutWhere : DelegatingLintRule
     }
 }
 
-public class RuleDB2004_NetezzaGroom : LintRule
+public class RuleDB2L004_NetezzaGroom : LintRule
 {
-    public override string Id => "DB2004";
+    public override string Id => "DB2L004";
     public override string Name => "Netezza Groom";
     public override string Description => "GROOM is Netezza-only; use RUNSTATS / REORG on Db2 LUW instead.";
     public override LintSeverity DefaultSeverity => LintSeverity.Error;
@@ -71,9 +74,9 @@ public class RuleDB2004_NetezzaGroom : LintRule
     }
 }
 
-public class RuleDB2005_NetezzaDistributeOn : LintRule
+public class RuleDB2L005_NetezzaDistributeOn : LintRule
 {
-    public override string Id => "DB2005";
+    public override string Id => "DB2L005";
     public override string Name => "Netezza Distribute On";
     public override string Description => "DISTRIBUTE ON is Netezza-only; use DISTRIBUTE BY HASH / ORGANIZE BY on Db2 LUW.";
     public override LintSeverity DefaultSeverity => LintSeverity.Error;
@@ -89,9 +92,9 @@ public class RuleDB2005_NetezzaDistributeOn : LintRule
     }
 }
 
-public class RuleDB2006_TopNWithoutOrderBy : LintRule
+public class RuleDB2L006_TopNWithoutOrderBy : LintRule
 {
-    public override string Id => "DB2006";
+    public override string Id => "DB2L006";
     public override string Name => "Top-N Without Order By";
     public override string Description =>
         "FETCH FIRST / OPTIMIZE FOR without ORDER BY in the same SELECT can return non-deterministic rows; add ORDER BY for stable top-N.";
@@ -112,9 +115,9 @@ public class RuleDB2006_TopNWithoutOrderBy : LintRule
     }
 }
 
-public class RuleDB2007_NetezzaLimit : LintRule
+public class RuleDB2L007_NetezzaLimit : LintRule
 {
-    public override string Id => "DB2007";
+    public override string Id => "DB2L007";
     public override string Name => "Netezza Limit";
     public override string Description => "LIMIT is Netezza-only; use FETCH FIRST n ROWS ONLY on Db2 LUW.";
     public override LintSeverity DefaultSeverity => LintSeverity.Error;
@@ -130,10 +133,10 @@ public class RuleDB2007_NetezzaLimit : LintRule
     }
 }
 
-public sealed class RuleDB2008_NetezzaDoubleDot : DelegatingLintRule
+public sealed class RuleDB2L008_NetezzaDoubleDot : DelegatingLintRule
 {
-    public RuleDB2008_NetezzaDoubleDot() : base(SharedQualityRuleFactory.CreateDoubleDotTable(
-        "DB2008", "Netezza Double-Dot Table",
+    public RuleDB2L008_NetezzaDoubleDot() : base(SharedQualityRuleFactory.CreateDoubleDotTable(
+        "DB2L008", "Netezza Double-Dot Table",
         "DB..TABLE is Netezza-only; use SCHEMA.TABLE or CURRENT SCHEMA on Db2 LUW.",
         LintSeverity.Error))
     {

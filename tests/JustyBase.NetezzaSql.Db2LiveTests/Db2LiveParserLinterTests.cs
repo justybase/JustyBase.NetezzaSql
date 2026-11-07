@@ -213,30 +213,30 @@ public sealed class Db2LiveParserLinterTests : IClassFixture<Db2LiveFixture>
         if (!RequireLive()) return;
 
         var selectStar = CheckDb2($"SELECT * FROM {_fx.QualifiedTable}");
-        Assert.Contains(selectStar, d => d.RuleId == "DB2001");
+        Assert.Contains(selectStar, d => d.RuleId == "DB2L001");
 
         var deleteAll = CheckDb2($"DELETE FROM {_fx.QualifiedTable}");
-        Assert.Contains(deleteAll, d => d.RuleId == "DB2002");
+        Assert.Contains(deleteAll, d => d.RuleId == "DB2L002");
 
         var updateAll = CheckDb2(
             $"UPDATE {_fx.QualifiedTable} SET NOTE = 'x'");
-        Assert.Contains(updateAll, d => d.RuleId == "DB2003");
+        Assert.Contains(updateAll, d => d.RuleId == "DB2L003");
 
         Assert.Contains(
             CheckDb2("GROOM TABLE T"),
-            d => d.RuleId == "DB2004");
+            d => d.RuleId == "DB2L004");
         Assert.Contains(
             CheckDb2("CREATE TABLE T (A INT) DISTRIBUTE ON (A)"),
-            d => d.RuleId == "DB2005");
+            d => d.RuleId == "DB2L005");
         Assert.Contains(
             CheckDb2($"SELECT ID FROM {_fx.QualifiedTable} FETCH FIRST 5 ROWS ONLY"),
-            d => d.RuleId == "DB2006");
+            d => d.RuleId == "DB2L006");
         Assert.Contains(
             CheckDb2("SELECT * FROM T LIMIT 10"),
-            d => d.RuleId == "DB2007");
+            d => d.RuleId == "DB2L007");
         Assert.Contains(
             CheckDb2("SELECT * FROM DB..TABLE"),
-            d => d.RuleId == "DB2008");
+            d => d.RuleId == "DB2L008");
 
         Assert.DoesNotContain(
             CheckDb2($"SELECT * FROM {_fx.QualifiedTable}"),
