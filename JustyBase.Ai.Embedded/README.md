@@ -24,7 +24,7 @@ The package is pure managed code (`HttpClient`, `Process`, `System.Text.Json` so
 
 ## Target framework
 
-- .NET 10
+- .NET 11
 - Native AOT compatible (`IsAotCompatible = true`)
 
 ## Build and test

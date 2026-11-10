@@ -42,7 +42,7 @@ To bundle the runtime again (self-contained installs without a system CLI), buil
 
 ## Target framework
 
-- .NET 10
+- .NET 11
 - Native AOT compatible (`IsAotCompatible = true`) — GitHub.Copilot.SDK 1.0.x bridges the Rust runtime via AOT-safe FFI and source-generated JSON
 
 ## Build and test

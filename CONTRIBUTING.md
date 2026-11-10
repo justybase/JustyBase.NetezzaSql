@@ -2,7 +2,7 @@
 
 ## Development setup
 
-Install the .NET 10 SDK, clone the repository, and run:
+Install the .NET 11 SDK, clone the repository, and run:
 
 ```powershell
 dotnet restore .\JustyBase.NetezzaSql.sln

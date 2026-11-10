@@ -23,7 +23,7 @@ still share the same chat model contracts with AI-enabled hosts.
 
 ## Target framework
 
-- .NET 10
+- .NET 11
 - Native AOT compatible
 
 ## Build

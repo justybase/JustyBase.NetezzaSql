@@ -91,7 +91,7 @@ Pass an implementation of `ISchemaProvider` to `SqlValidator` when semantic anal
 
 ## Build and test from source
 
-Requires the .NET 10 SDK.
+Requires the .NET 11 SDK.
 
 ```powershell
 dotnet restore .\JustyBase.NetezzaSql.sln

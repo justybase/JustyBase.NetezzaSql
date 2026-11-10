@@ -26,7 +26,7 @@ The package has no I/O, no UI dependency, and no database driver reference — i
 
 ## Target framework
 
-- .NET 10
+- .NET 11
 - Native AOT compatible (`IsAotCompatible = true`)
 
 ## Public contract
