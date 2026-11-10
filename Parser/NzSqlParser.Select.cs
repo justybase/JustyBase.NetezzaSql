@@ -89,6 +89,7 @@ public partial class NzSqlParser
 
     protected WithClause ParseWithClause()
     {
+        using var depth = EnterDepth("WITH clause");
         var withTok = Expect(NzToken.With);
         bool recursive = false;
         if (Peek().Kind == NzToken.Recursive) { recursive = true; Advance(); }
@@ -212,6 +213,7 @@ public partial class NzSqlParser
 
     protected virtual SelectStatement ParseSelectStatement(WithClause? with = null)
     {
+        using var depth = EnterDepth("SELECT statement");
         var sel = Expect(NzToken.Select);
 
         // SELECT DISTINCT / SELECT ALL

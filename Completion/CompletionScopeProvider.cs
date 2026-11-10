@@ -1,6 +1,7 @@
 using JustyBase.NetezzaSqlParser.Ast;
 using JustyBase.NetezzaSqlParser.Dialects;
 using JustyBase.NetezzaSqlParser.Lexer;
+using JustyBase.NetezzaSqlParser.Parser;
 using JustyBase.NetezzaSqlParser.Visitor;
 using Superpower.Model;
 
@@ -41,7 +42,17 @@ public class CompletionScopeProvider
     {
 
         var parser = DialectRuntime.CreateParser(tokens, _dialect);
-        var stmt = parser.Parse();
+        Statement? stmt;
+        try
+        {
+            stmt = parser.Parse();
+        }
+        catch (NzParserDepthException)
+        {
+            // Completion must stay alive even when the document is too deeply nested to parse.
+            return null;
+        }
+
         if (stmt is null) return null;
 
         // Editor SQL is often incomplete at the caret. A recoverable partial

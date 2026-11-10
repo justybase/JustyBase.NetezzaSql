@@ -7,11 +7,45 @@ namespace JustyBase.NetezzaSqlParser.Parser;
 
 public partial class NzSqlParser
 {
+    /// <summary>
+    /// How deeply the recursive-descent grammar may nest expressions, statements and CTEs. The parser
+    /// is recursive descent, so an adversarial (or generated) script with thousands of parentheses
+    /// would otherwise overflow the stack, which .NET cannot catch. This is deliberately far above
+    /// anything a person writes by hand but far below the point where the stack is at risk.
+    /// </summary>
+    public const int MaxNestingDepth = 128;
+
     protected Token<NzToken>[] _tokens;
     protected int _pos;
     protected readonly List<ValidationError> _errors = new();
     private static readonly KeywordTypoChecker _typoChecker = new();
     private readonly bool _strictNetezzaIntervalSyntax;
+    private int _nestingDepth;
+
+    /// <summary>
+    /// Counts one grammar recursion for as long as the returned scope lives. Disposing the scope runs
+    /// from every return path, including an exception, so a recovered statement never leaves the
+    /// parser poisoned for the next one.
+    /// </summary>
+    protected readonly struct ParserDepthGuard : IDisposable
+    {
+        private readonly NzSqlParser _parser;
+
+        internal ParserDepthGuard(NzSqlParser parser, string what)
+        {
+            _parser = parser;
+            int depth = ++parser._nestingDepth;
+            if (depth > MaxNestingDepth)
+            {
+                parser._nestingDepth--;
+                throw new NzParserDepthException(what, depth, MaxNestingDepth);
+            }
+        }
+
+        public void Dispose() => _parser._nestingDepth--;
+    }
+
+    protected ParserDepthGuard EnterDepth(string what) => new(this, what);
 
     /// <summary>
     /// Dialects may reserve IN as a clause marker instead of an expression

@@ -1,6 +1,7 @@
 using JustyBase.NetezzaSqlParser.Ast;
 using JustyBase.NetezzaSqlParser.Dialects;
 using JustyBase.NetezzaSqlParser.Lexer;
+using JustyBase.NetezzaSqlParser.Parser;
 using JustyBase.NetezzaSqlParser.Visitor;
 using Superpower.Model;
 
@@ -117,16 +118,24 @@ internal sealed class NzColumnIdentityCollector
 
         var global = new Frame(null);
         var index = 0;
-        while (index < _tokens.Length)
+        try
         {
-            while (index < _tokens.Length && _tokens[index].Kind == NzToken.Semicolon) index++;
-            if (index >= _tokens.Length) break;
+            while (index < _tokens.Length)
+            {
+                while (index < _tokens.Length && _tokens[index].Kind == NzToken.Semicolon) index++;
+                if (index >= _tokens.Length) break;
 
-            var parser = DialectRuntime.CreateParser(_tokens[index..], dialect);
-            var statement = parser.Parse();
-            if (statement is null || parser.Position <= 0) break;
-            ProcessStatement(statement, global);
-            index += parser.Position;
+                var parser = DialectRuntime.CreateParser(_tokens[index..], dialect);
+                var statement = parser.Parse();
+                if (statement is null || parser.Position <= 0) break;
+                ProcessStatement(statement, global);
+                index += parser.Position;
+            }
+        }
+        catch (NzParserDepthException)
+        {
+            // Keep the identities collected so far; a document nested beyond the parser limit
+            // still gets best-effort authoring instead of an exception.
         }
     }
 

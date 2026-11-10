@@ -1,6 +1,7 @@
 using JustyBase.NetezzaSqlParser.Visitor;
 using JustyBase.NetezzaSqlParser.Ast;
 using JustyBase.NetezzaSqlParser.Dialects;
+using JustyBase.NetezzaSqlParser.Parser;
 
 namespace JustyBase.NetezzaSqlParser.Caching;
 
@@ -190,6 +191,13 @@ public sealed class DocumentParseSession : IDisposable
             return new ParseResult([], [new ValidationError(
                 $"Lexer error: {ex.Message}", "error",
                 new SourcePosition(1, 1, 0), "LEX001")], false);
+        }
+        catch (NzParserDepthException ex)
+        {
+            // Excessive nesting is refused before the CLR stack can overflow. A stack overflow
+            // cannot be caught, so this ordinary message is the only way to report it.
+            return new ParseResult([], [new ValidationError(
+                ex.Message, "error", new SourcePosition(1, 1, 0), "PAR102")], false);
         }
         catch (Exception ex)
         {

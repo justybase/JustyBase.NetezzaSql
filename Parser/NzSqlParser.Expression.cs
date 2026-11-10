@@ -15,6 +15,7 @@ public partial class NzSqlParser
 
     protected Expression ParseExpression()
     {
+        using var depth = EnterDepth("Expression");
         return ParseOrExpression();
     }
 
@@ -255,6 +256,7 @@ public partial class NzSqlParser
 
     private Expression ParseUnary()
     {
+        using var depth = EnterDepth("Unary expression");
         Expression expr;
         if (Peek().Kind == NzToken.Not)
         {
