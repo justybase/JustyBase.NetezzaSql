@@ -2,7 +2,7 @@
 
 ## Target framework
 
-The first public release targets `.NET 10` (`net10.0`). The repository is tested with the .NET 10 SDK.
+The first public release targets `.NET 10` (`net11.0`). The repository is tested with the .NET 10 SDK.
 
 ## SQL surface
 

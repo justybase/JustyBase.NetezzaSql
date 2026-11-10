@@ -19,7 +19,7 @@ The solution ships ten NuGet libraries:
 
 ## Status
 
-This project is in active development and currently targets `net10.0`. Netezza SQL and NZPLSQL remain the primary grammar and tooling focus. Oracle, Db2, MSSQL, MySQL 8, PostgreSQL and Microsoft Access / Jet / ACE dialects share the same lexer/parser/formatter/lint/completion/hover surfaces via `SqlDialect` (see [docs/node-parity.md](docs/node-parity.md)). The libraries are not a database driver and do not open connections or execute SQL by themselves. Shared app-core packages (`JustyBase.Core`, `JustyBase.ImportExport`) hold host-agnostic risk/import/export/scripting surfaces; see [docs/shared-core-status.md](docs/shared-core-status.md) for production vs scaffold.
+This project is in active development and currently targets `net11.0`. Netezza SQL and NZPLSQL remain the primary grammar and tooling focus. Oracle, Db2, MSSQL, MySQL 8, PostgreSQL and Microsoft Access / Jet / ACE dialects share the same lexer/parser/formatter/lint/completion/hover surfaces via `SqlDialect` (see [docs/node-parity.md](docs/node-parity.md)). The libraries are not a database driver and do not open connections or execute SQL by themselves. Shared app-core packages (`JustyBase.Core`, `JustyBase.ImportExport`) hold host-agnostic risk/import/export/scripting surfaces; see [docs/shared-core-status.md](docs/shared-core-status.md) for production vs scaffold.
 
 The public API and supported grammar may evolve before the first stable `1.0.0` release. Prefer tagged GitHub releases when consuming packages.
 

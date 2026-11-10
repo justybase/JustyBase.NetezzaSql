@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsAotCompatible>true</IsAotCompatible>
@@ -17,7 +17,7 @@
     <ProjectReference Include="..\JustyBase.NetezzaSqlParser.csproj" />
     <ProjectReference Include="..\JustyBase.NetezzaDdl\JustyBase.NetezzaDdl.csproj" />
     <ProjectReference Include="..\JustyBase.NetezzaCatalogSql\JustyBase.NetezzaCatalogSql.csproj" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <!-- .NET 11 provides Microsoft.Extensions.DependencyInjection.Abstractions in the shared framework; pruning flags an explicit reference (NU1510). -->
   </ItemGroup>
 
   <ItemGroup>
