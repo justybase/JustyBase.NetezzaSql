@@ -65,6 +65,7 @@ public sealed class ReferenceInvalidParserCorpusTests
         new object[] { "SELECT * FROM TESTDB..EMPLOYEES GROUP BY;" },
         new object[] { "SELECT * FROM TESTDB..EMPLOYEES LIMIT;" },
         new object[] { "SELECT * FROM TESTDB..EMPLOYEES ORDER BY;" },
+        new object[] { "SELECT * AS SOME_ALIAS FROM DIMDATE;" },
         new object[] { "SELECT * FROM TESTDB..EMPLOYEES WHER SALARY > 100;" },
         new object[] { "SELECT * FROM TESTDB..EMPLOYEES WHERE SALARY = ;" },
         new object[] { "SELECT * FROM TESTDB..EMPLOYEES WHERE;" },

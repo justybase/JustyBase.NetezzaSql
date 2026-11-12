@@ -132,6 +132,41 @@ public sealed class NzValidatorServiceTests
     }
 
     [Fact]
+    public void Validate_ParserError_WildcardCannotBeAliased()
+    {
+        // Live Netezza: found "AS" (at char 10) expecting a keyword
+        var result = SqlTestHelpers.Validate("SELECT * AS SOME_ALIAS FROM DIMDATE");
+
+        var err = Assert.Single(result.Errors);
+        Assert.Equal("PAR001", err.Code);
+        Assert.Contains("Wildcard '*' cannot have an alias", err.Message);
+        Assert.Equal(9, err.Position.Absolute);
+        Assert.Equal(10, err.Position.Column);
+    }
+
+    [Fact]
+    public void Validate_ParserError_QualifiedWildcardCannotBeAliased()
+    {
+        var result = SqlTestHelpers.Validate("SELECT E.* AS SOME_ALIAS FROM DIMDATE E");
+
+        var err = Assert.Single(result.Errors);
+        Assert.Equal("PAR001", err.Code);
+        Assert.Contains("Wildcard '*' cannot have an alias", err.Message);
+    }
+
+    [Theory]
+    [InlineData("SELECT * FROM DIMDATE")]
+    [InlineData("SELECT E.* FROM DIMDATE E")]
+    [InlineData("SELECT COUNT(*) AS CNT FROM DIMDATE")]
+    [InlineData("SELECT 1 AS ONE FROM DIMDATE")]
+    public void Validate_WildcardWithoutAlias_RemainsValid(string sql)
+    {
+        var result = SqlTestHelpers.Validate(sql);
+
+        Assert.Empty(result.Errors);
+    }
+
+    [Fact]
     public void Validate_ParserError_FriendlyMessageForMissingSourceAfterFromGroupBy()
     {
         // SELECT * FROM GROUP BY → clearly missing table source

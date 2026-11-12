@@ -574,13 +574,35 @@ public partial class NzSqlParser
         }
 
         var expr = ParseExpression();
-        var aliasHasAs = Peek().Kind == NzToken.As;
+        var aliasStartToken = Peek();
+        var aliasHasAs = aliasStartToken.Kind == NzToken.As;
         string? alias = ParseAliasName(out var aliasQuote);
+
+        // A target list accepts either a wildcard or an aliased expression,
+        // never a wildcard with an alias. Live Netezza reports:
+        //   SELECT * AS X FROM T  ->  found "AS" ... expecting a keyword
+        // The parser used to swallow the alias and assemble a SelectItem, so
+        // the linter stayed silent while the server rejected the statement.
+        if (alias is not null && IsWildcardSelectExpression(expr))
+        {
+            AddParserError(
+                "Wildcard '*' cannot have an alias in the select list; alias individual columns instead",
+                aliasStartToken, "PAR001");
+        }
 
         return new SelectItem(
             expr.Position, expr, alias, aliasQuote,
             ImplicitAlias: alias is not null && !aliasHasAs);
     }
+
+    /// <summary>
+    /// True for <c>*</c> and <c>alias.*</c>. The latter is parsed as a
+    /// <see cref="ColumnReference"/> named <c>*</c>, but only when it is not a
+    /// quoted identifier that legitimately names a column called <c>*</c>.
+    /// </summary>
+    private static bool IsWildcardSelectExpression(Expression expr) =>
+        expr is StarExpression
+        || expr is ColumnReference { Name: "*", NameQuote: null };
 
     private Expression ParseSubqueryExpression()
     {

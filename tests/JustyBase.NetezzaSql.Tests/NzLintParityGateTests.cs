@@ -125,6 +125,22 @@ public sealed class NzLintParityGateTests : IDisposable
     }
 
     [Fact]
+    public void LintParityGate_StarAlias_ReturnsParserError() =>
+        Assert.True(HasAnyRule(RunExpensive("SELECT * AS SOME_ALIAS FROM EMPLOYEES"), "PAR001"));
+
+    [Fact]
+    public void LintParityGate_QualifiedStarAlias_ReturnsParserError() =>
+        Assert.True(HasAnyRule(RunExpensive("SELECT E.* AS SOME_ALIAS FROM EMPLOYEES E"), "PAR001"));
+
+    [Fact]
+    public void LintParityGate_StarWithoutAlias_NoParserError() =>
+        Assert.False(HasRule(RunExpensive("SELECT E.* FROM EMPLOYEES E"), "PAR001"));
+
+    [Fact]
+    public void LintParityGate_CountStarWithAlias_NoParserError() =>
+        Assert.False(HasRule(RunExpensive("SELECT COUNT(*) AS CNT FROM EMPLOYEES"), "PAR001"));
+
+    [Fact]
     public void LintParityGate_InvalidSelectFrom_ReturnsParserError() =>
         Assert.True(HasAnyRule(RunExpensive("SELECT FROM employees"), "PAR001", "PAR002"));
 
