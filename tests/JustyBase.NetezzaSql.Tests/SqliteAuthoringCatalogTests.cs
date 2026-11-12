@@ -23,12 +23,24 @@ public sealed class SqliteAuthoringCatalogTests
     [InlineData("STRFTIME")]
     [InlineData("IFNULL")]
     [InlineData("UNIXEPOCH")]
+    [InlineData("TIMEDIFF")]
     [InlineData("RANDOMBLOB")]
     [InlineData("TOTAL")]
     public void Functions_IncludeSqliteBuiltins(string name)
     {
         Assert.True(Catalog.TryGetFunction(name, out var function));
         Assert.Equal(name, function.Name, ignoreCase: true);
+    }
+
+    [Theory]
+    [InlineData("GROUP_CONCAT", "GROUP_CONCAT(value, separator?)")]
+    [InlineData("DATE", "DATE(time_value?, modifier...)")]
+    [InlineData("TIMEDIFF", "TIMEDIFF(time_value, other_time_value)")]
+    [InlineData("UNIXEPOCH", "UNIXEPOCH(time_value?, modifier...)")]
+    public void Functions_UseSharedSignatureLabels(string name, string label)
+    {
+        Assert.True(Catalog.TryGetFunction(name, out var function));
+        Assert.Contains(function.Signatures, signature => signature.Label == label);
     }
 
     [Fact]

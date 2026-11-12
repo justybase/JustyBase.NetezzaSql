@@ -24,18 +24,28 @@ public sealed class SqliteSqlCatalog : ISqlAuthoringCatalog
         new("TIMESTAMP", ["TIMESTAMP"]),
     ];
 
-    private static NetezzaBuiltinFunction Function(string name, NetezzaFunctionCategory category, string label) =>
-        new(name, category, [new NetezzaFunctionSignature(label, "SQLite built-in function.", [])]);
+    private static NetezzaBuiltinFunction Function(
+        string name,
+        NetezzaFunctionCategory category,
+        string label,
+        params string[] parameters) =>
+        new(name, category,
+        [
+            new NetezzaFunctionSignature(
+                label,
+                "SQLite built-in function.",
+                parameters.Select(parameter => new SqlSignatureParameterInfo(parameter, null)).ToArray())
+        ]);
 
     private static readonly IReadOnlyList<NetezzaBuiltinFunction> SqliteFunctions =
     [
         Function("CHANGES", NetezzaFunctionCategory.System, "CHANGES()"),
         Function("CHAR", NetezzaFunctionCategory.String, "CHAR(value1, value2, ...)"),
-        Function("DATE", NetezzaFunctionCategory.DateTime, "DATE(timestring [, modifier, ...])"),
-        Function("DATETIME", NetezzaFunctionCategory.DateTime, "DATETIME(timestring [, modifier, ...])"),
+        Function("DATE", NetezzaFunctionCategory.DateTime, "DATE(time_value?, modifier...)", "time_value", "modifier"),
+        Function("DATETIME", NetezzaFunctionCategory.DateTime, "DATETIME(time_value?, modifier...)", "time_value", "modifier"),
         Function("FORMAT", NetezzaFunctionCategory.String, "FORMAT(format, value1, value2, ...)"),
         Function("GLOB", NetezzaFunctionCategory.String, "GLOB(pattern, string)"),
-        Function("GROUP_CONCAT", NetezzaFunctionCategory.Aggregate, "GROUP_CONCAT(expression [, separator])"),
+        Function("GROUP_CONCAT", NetezzaFunctionCategory.Aggregate, "GROUP_CONCAT(value, separator?)", "value", "separator"),
         Function("HEX", NetezzaFunctionCategory.Conversion, "HEX(blob)"),
         Function("IFNULL", NetezzaFunctionCategory.Conversion, "IFNULL(value1, value2)"),
         Function("IIF", NetezzaFunctionCategory.Conversion, "IIF(condition, trueValue, falseValue)"),
@@ -53,7 +63,7 @@ public sealed class SqliteSqlCatalog : ISqlAuthoringCatalog
         Function("JSON_SET", NetezzaFunctionCategory.Conversion, "JSON_SET(json, path, value, ...)"),
         Function("JSON_TYPE", NetezzaFunctionCategory.Conversion, "JSON_TYPE(json [, path])"),
         Function("JSON_VALID", NetezzaFunctionCategory.Conversion, "JSON_VALID(json)"),
-        Function("JULIANDAY", NetezzaFunctionCategory.DateTime, "JULIANDAY(timestring [, modifier, ...])"),
+        Function("JULIANDAY", NetezzaFunctionCategory.DateTime, "JULIANDAY(time_value?, modifier...)", "time_value", "modifier"),
         Function("LAST_INSERT_ROWID", NetezzaFunctionCategory.System, "LAST_INSERT_ROWID()"),
         Function("LIKELIHOOD", NetezzaFunctionCategory.System, "LIKELIHOOD(value, probability)"),
         Function("LN", NetezzaFunctionCategory.Numeric, "LN(value)"),
@@ -69,14 +79,15 @@ public sealed class SqliteSqlCatalog : ISqlAuthoringCatalog
         Function("RTRIM", NetezzaFunctionCategory.String, "RTRIM(string [, characters])"),
         Function("SIGN", NetezzaFunctionCategory.Numeric, "SIGN(value)"),
         Function("SOUNDEX", NetezzaFunctionCategory.String, "SOUNDEX(string)"),
-        Function("STRFTIME", NetezzaFunctionCategory.DateTime, "STRFTIME(format, timestring [, modifier, ...])"),
+        Function("STRFTIME", NetezzaFunctionCategory.DateTime, "STRFTIME(format, time_value?, modifier...)", "format", "time_value", "modifier"),
         Function("SUBSTR", NetezzaFunctionCategory.String, "SUBSTR(string, start [, length])"),
         Function("TOTAL", NetezzaFunctionCategory.Aggregate, "TOTAL(expression)"),
         Function("TOTAL_CHANGES", NetezzaFunctionCategory.System, "TOTAL_CHANGES()"),
         Function("TRIM", NetezzaFunctionCategory.String, "TRIM(string [, characters])"),
         Function("UNICODE", NetezzaFunctionCategory.String, "UNICODE(string)"),
-        Function("UNIXEPOCH", NetezzaFunctionCategory.DateTime, "UNIXEPOCH(timestring [, modifier, ...])"),
-        Function("UNIX_TIMESTAMP", NetezzaFunctionCategory.DateTime, "UNIX_TIMESTAMP(timestring [, modifier, ...])"),
+        Function("UNIXEPOCH", NetezzaFunctionCategory.DateTime, "UNIXEPOCH(time_value?, modifier...)", "time_value", "modifier"),
+        Function("UNIX_TIMESTAMP", NetezzaFunctionCategory.DateTime, "UNIX_TIMESTAMP(time_value?, modifier...)", "time_value", "modifier"),
+        Function("TIMEDIFF", NetezzaFunctionCategory.DateTime, "TIMEDIFF(time_value, other_time_value)", "time_value", "other_time_value"),
         Function("ZEROBLOB", NetezzaFunctionCategory.String, "ZEROBLOB(size)"),
     ];
 
