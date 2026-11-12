@@ -52,7 +52,7 @@ public sealed class CsvRowReader : IDisposable
         {
             CsvCompression.Brotli => new BrotliStream(buffered, CompressionMode.Decompress),
             CsvCompression.Gzip => new GZipStream(buffered, CompressionMode.Decompress),
-            CsvCompression.Zstd => new ZstdSharp.DecompressionStream(buffered),
+            CsvCompression.Zstd => new ZstandardStream(buffered, CompressionMode.Decompress),
             _ => buffered
         };
         _streamReader = _encoding is null

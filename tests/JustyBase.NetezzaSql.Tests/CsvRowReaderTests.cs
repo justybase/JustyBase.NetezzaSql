@@ -144,7 +144,7 @@ public sealed class CsvRowReaderTests : IDisposable
         string path = Path.Combine(_dir, Path.GetRandomFileName() + ".csv");
         using (var file = File.Create(path))
         {
-            using var zstdStream = new ZstdSharp.CompressionStream(file);
+            using var zstdStream = new ZstandardStream(file, CompressionLevel.Optimal);
             byte[] bytes = Encoding.UTF8.GetBytes(payload);
             zstdStream.Write(bytes, 0, bytes.Length);
         }

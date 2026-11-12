@@ -13,7 +13,6 @@
     <ProjectReference Include="..\JustyBase.NetezzaDdl\JustyBase.NetezzaDdl.csproj" />
     <PackageReference Include="Parquet.Net" />
     <PackageReference Include="Sylvan.Data.Csv" />
-    <PackageReference Include="ZstdSharp.Port" />
     <None Include="..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
   <ItemGroup>
