@@ -591,6 +591,67 @@ public sealed partial class NzSqlValidatorDdlTests
 
 
     [Fact]
+    public void TableLevelForeignKeyReferentialActions()
+    {
+        ExpectValid(
+            "CREATE TABLE t (id INT, dept_id INT, FOREIGN KEY (dept_id) " +
+            "REFERENCES departments (id) ON DELETE CASCADE ON UPDATE RESTRICT)",
+            _schema);
+    }
+
+
+    [Fact]
+    public void TableLevelForeignKeyMatchAndDeferrableTail()
+    {
+        ExpectValid(
+            "CREATE TABLE t (id INT, dept_id INT, FOREIGN KEY (dept_id) " +
+            "REFERENCES departments (id) MATCH FULL ON DELETE NO ACTION " +
+            "ON UPDATE SET NULL NOT DEFERRABLE)",
+            _schema);
+    }
+
+
+    [Fact]
+    public void ColumnLevelForeignKeyReferentialActions()
+    {
+        ExpectValid(
+            "CREATE TABLE t (id INT, dept_id INT REFERENCES departments (id) " +
+            "ON DELETE SET DEFAULT)",
+            _schema);
+    }
+
+
+    [Fact]
+    public void AlterTableForeignKeyReferentialActions()
+    {
+        ExpectValid(
+            "ALTER TABLE t ADD CONSTRAINT fk_t FOREIGN KEY (dept_id) " +
+            "REFERENCES departments (id) ON DELETE CASCADE ON UPDATE RESTRICT",
+            _schema);
+    }
+
+
+    [Fact]
+    public void ForeignKeyInvalidReferentialActionIsSyntaxError()
+    {
+        ExpectSyntaxError(
+            "CREATE TABLE t (id INT, dept_id INT, FOREIGN KEY (dept_id) " +
+            "REFERENCES departments (id) ON DELETE SOMETHING)",
+            _schema);
+    }
+
+
+    [Fact]
+    public void AlterTableForeignKeyInvalidReferentialActionIsSyntaxError()
+    {
+        ExpectSyntaxError(
+            "ALTER TABLE t ADD CONSTRAINT fk_t FOREIGN KEY (dept_id) " +
+            "REFERENCES departments (id) ON DELETE SOMETHING",
+            _schema);
+    }
+
+
+    [Fact]
     public void NamedTableConstraint()
     {
         ExpectValid(

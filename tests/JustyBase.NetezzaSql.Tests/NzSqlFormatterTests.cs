@@ -162,6 +162,29 @@ public sealed class NzSqlFormatterTests
     }
 
     [Fact]
+    public void Format_CreateTableForeignKeyReferentialActions()
+    {
+        var result = ParseAndFormatStatement(
+            "CREATE TABLE employees (id INT, dept_id INT, FOREIGN KEY (dept_id) " +
+            "REFERENCES departments (id) ON DELETE CASCADE ON UPDATE RESTRICT)");
+
+        Assert.Contains("FOREIGN KEY (dept_id)", result);
+        Assert.Contains("ON DELETE CASCADE", result);
+        Assert.Contains("ON UPDATE RESTRICT", result);
+    }
+
+    [Fact]
+    public void Format_ColumnForeignKeyReferentialActions()
+    {
+        var result = ParseAndFormatStatement(
+            "CREATE TABLE employees (id INT, dept_id INT REFERENCES departments (id) " +
+            "ON DELETE SET NULL)");
+
+        Assert.Contains("REFERENCES departments (id)", result);
+        Assert.Contains("ON DELETE SET NULL", result);
+    }
+
+    [Fact]
     public void Format_CreateViewStatement()
     {
         var result = ParseAndFormatStatement("CREATE OR REPLACE VIEW v_emp AS SELECT 1");

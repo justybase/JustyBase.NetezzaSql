@@ -533,8 +533,14 @@ public record NullConstraint(SourcePosition Position) : ColumnConstraint(Positio
 public record DefaultConstraint(SourcePosition Position, Expression Value) : ColumnConstraint(Position);
 public record PrimaryKeyColumnConstraint(SourcePosition Position) : ColumnConstraint(Position);
 public record UniqueColumnConstraint(SourcePosition Position) : ColumnConstraint(Position);
-public record ReferencesConstraint(SourcePosition Position, TableName ReferencedTable, IReadOnlyList<string>? Columns)
-    : ColumnConstraint(Position);
+public record ReferencesConstraint(
+    SourcePosition Position,
+    TableName ReferencedTable,
+    IReadOnlyList<string>? Columns,
+    // SQLite and Netezza: opaque referential-action tail tokens (ON DELETE ...,
+    // MATCH ..., DEFERRABLE ...). Kept as tokens so formatting preserves source.
+    IReadOnlyList<Token<NzToken>>? TailTokens = null
+) : ColumnConstraint(Position);
 public record NamedColumnConstraint(SourcePosition Position, string Name, ColumnConstraint Constraint)
     : ColumnConstraint(Position);
 

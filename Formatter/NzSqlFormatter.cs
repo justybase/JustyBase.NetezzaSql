@@ -2102,6 +2102,8 @@ public sealed class NzSqlFormatter
                     }
                     Write(")");
                 }
+                if (referencesConstraint.TailTokens is { Count: > 0 })
+                    Write(" " + FormatOpaqueTokens(referencesConstraint.TailTokens));
                 break;
             case NamedColumnConstraint namedColumnConstraint:
                 Write("CONSTRAINT ");

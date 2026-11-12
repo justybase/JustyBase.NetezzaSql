@@ -337,10 +337,123 @@ public partial class NzSqlParser
                 }
                 Expect(NzToken.RParen);
             }
-            return new ReferencesConstraint(pos, refTable, refCols);
+            return new ReferencesConstraint(pos, refTable, refCols, ConsumeNetezzaReferentialTail());
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Consumes the optional Netezza referential-action tail after a
+    /// <c>REFERENCES</c> clause: <c>MATCH</c>, <c>ON DELETE</c>,
+    /// <c>ON UPDATE</c>, and <c>[NOT] DEFERRABLE [INITIALLY ...]</c>.
+    /// Live Netezza 11.2.2.1 accepts all of these forms; the tokens are kept so
+    /// the formatter can round-trip the original clause.
+    /// </summary>
+    private IReadOnlyList<Token<NzToken>>? ConsumeNetezzaReferentialTail()
+    {
+        List<Token<NzToken>>? tail = null;
+        void Add()
+        {
+            (tail ??= new List<Token<NzToken>>()).Add(Advance());
+        }
+
+        while (true)
+        {
+            if (Peek().Kind == NzToken.On && Peek(1).Kind is NzToken.Delete or NzToken.Update)
+            {
+                Add(); // ON
+                Add(); // DELETE | UPDATE
+                var action = Peek().Kind;
+                if (action == NzToken.Set)
+                {
+                    Add(); // SET
+                    if (Peek().Kind is NzToken.Null or NzToken.Default)
+                    {
+                        Add();
+                    }
+                    else
+                    {
+                        AddParserError(
+                            "Expected NULL or DEFAULT after SET in a referential action",
+                            Peek(), "PAR001");
+                        break;
+                    }
+                }
+                else if (action is NzToken.Cascade or NzToken.Restrict)
+                {
+                    Add();
+                }
+                else if (action == NzToken.Identifier
+                         && Peek().ToStringValue().Equals("NO", StringComparison.OrdinalIgnoreCase)
+                         && Peek(1).Kind == NzToken.Action)
+                {
+                    Add(); // NO
+                    Add(); // ACTION
+                }
+                else
+                {
+                    AddParserError(
+                        "Expected CASCADE, RESTRICT, SET NULL, SET DEFAULT or NO ACTION " +
+                        "after ON DELETE/UPDATE",
+                        Peek(), "PAR001");
+                    break;
+                }
+                continue;
+            }
+
+            if (Peek().Kind == NzToken.Match)
+            {
+                Add(); // MATCH
+                if (Peek().Kind == NzToken.Full
+                    || (Peek().Kind == NzToken.Identifier
+                        && (Peek().ToStringValue().Equals("PARTIAL", StringComparison.OrdinalIgnoreCase)
+                            || Peek().ToStringValue().Equals("SIMPLE", StringComparison.OrdinalIgnoreCase))))
+                {
+                    Add();
+                }
+                else
+                {
+                    AddParserError("Expected FULL, PARTIAL or SIMPLE after MATCH", Peek(), "PAR001");
+                    break;
+                }
+                continue;
+            }
+
+            if (Peek().Kind == NzToken.Deferrable)
+            {
+                Add(); // DEFERRABLE
+                ConsumeNetezzaInitially(tail);
+                continue;
+            }
+
+            if (Peek().Kind == NzToken.Not && Peek(1).Kind == NzToken.Deferrable)
+            {
+                Add(); // NOT
+                Add(); // DEFERRABLE
+                ConsumeNetezzaInitially(tail);
+                continue;
+            }
+
+            break;
+        }
+
+        return tail;
+    }
+
+    private void ConsumeNetezzaInitially(List<Token<NzToken>>? tail)
+    {
+        if (Peek().Kind != NzToken.Initially)
+            return;
+        tail!.Add(Advance()); // INITIALLY
+        if (Peek().Kind is NzToken.Deferred or NzToken.Immediate)
+        {
+            tail.Add(Advance());
+        }
+        else
+        {
+            AddParserError("Expected DEFERRED or IMMEDIATE after INITIALLY", Peek(), "PAR001");
+        }
     }
 
     private TableConstraint? ParseTableConstraint()
@@ -404,7 +517,8 @@ public partial class NzSqlParser
                 refCols = ParseIdentifierList();
                 Expect(NzToken.RParen);
             }
-            return new ForeignKeyConstraint(pos, cols, refTable, refCols, name);
+            return new ForeignKeyConstraint(
+                pos, cols, refTable, refCols, name, ConsumeNetezzaReferentialTail());
         }
 
         if (k == NzToken.Check)
@@ -825,7 +939,10 @@ public partial class NzSqlParser
         var position = FromToken(tokens[0]);
         if (first == NzToken.Add && second == NzToken.Column) return new AddColumnAlterAction(position, raw);
         if (first == NzToken.Add && second == NzToken.Constraint)
+        {
+            ValidateAddConstraintReferentialTail(tokens);
             return new AddConstraintAlterAction(position, raw, CollectConstraintKeyColumns(tokens));
+        }
         if (first == NzToken.Alter && second == NzToken.Column) return new AlterColumnAlterAction(position, raw);
         if (first == NzToken.Drop
             && second is NzToken.Column or NzToken.Constraint)
@@ -863,6 +980,143 @@ public partial class NzSqlParser
         if (first == NzToken.Organize) return new OrganizeOnAlterAction(position, raw);
         if (first is NzToken.Cascade or NzToken.Restrict) return new CascadeAlterAction(position, raw);
         return new UnknownAlterAction(position, raw);
+    }
+
+    /// <summary>
+    /// Validates the referential tail inside an ALTER TABLE ADD CONSTRAINT
+    /// action. Unlike CREATE TABLE, ALTER actions are kept as opaque tokens, so
+    /// the malformed ON DELETE/ON UPDATE action would otherwise be accepted.
+    /// </summary>
+    private void ValidateAddConstraintReferentialTail(IReadOnlyList<Token<NzToken>> tokens)
+    {
+        var referencesIndex = -1;
+        for (var i = 0; i < tokens.Count; i++)
+        {
+            if (tokens[i].Kind == NzToken.References)
+            {
+                referencesIndex = i;
+                break;
+            }
+        }
+        if (referencesIndex < 0)
+            return;
+
+        var cursor = referencesIndex + 1;
+        while (cursor < tokens.Count
+               && tokens[cursor].Kind is not (NzToken.LParen or NzToken.On
+                   or NzToken.Match or NzToken.Deferrable or NzToken.Not))
+        {
+            cursor++;
+        }
+        if (cursor < tokens.Count && tokens[cursor].Kind == NzToken.LParen)
+        {
+            var depth = 0;
+            do
+            {
+                if (tokens[cursor].Kind == NzToken.LParen) depth++;
+                else if (tokens[cursor].Kind == NzToken.RParen) depth--;
+                cursor++;
+            } while (cursor < tokens.Count && depth > 0);
+        }
+
+        while (cursor < tokens.Count)
+        {
+            var kind = tokens[cursor].Kind;
+            if (kind == NzToken.On
+                && cursor + 1 < tokens.Count
+                && tokens[cursor + 1].Kind is NzToken.Delete or NzToken.Update)
+            {
+                cursor += 2;
+                var action = cursor < tokens.Count ? tokens[cursor] : tokens[cursor - 1];
+                if (cursor >= tokens.Count)
+                {
+                    AddParserError("Expected a referential action after ON DELETE/UPDATE",
+                        action, "PAR001");
+                    return;
+                }
+                if (action.Kind == NzToken.Set)
+                {
+                    cursor++;
+                    if (cursor < tokens.Count
+                        && tokens[cursor].Kind is NzToken.Null or NzToken.Default)
+                    {
+                        cursor++;
+                    }
+                    else
+                    {
+                        AddParserError("Expected NULL or DEFAULT after SET in a referential action",
+                            action, "PAR001");
+                        return;
+                    }
+                }
+                else if (action.Kind is NzToken.Cascade or NzToken.Restrict)
+                {
+                    cursor++;
+                }
+                else if (action.Kind == NzToken.Identifier
+                         && (action.ToStringValue() ?? string.Empty)
+                             .Equals("NO", StringComparison.OrdinalIgnoreCase)
+                         && cursor + 1 < tokens.Count
+                         && tokens[cursor + 1].Kind == NzToken.Action)
+                {
+                    cursor += 2;
+                }
+                else
+                {
+                    AddParserError(
+                        "Expected CASCADE, RESTRICT, SET NULL, SET DEFAULT or NO ACTION " +
+                        "after ON DELETE/UPDATE", action, "PAR001");
+                    return;
+                }
+                continue;
+            }
+
+            if (kind == NzToken.Match)
+            {
+                var match = tokens[cursor];
+                cursor++;
+                if (cursor < tokens.Count
+                    && (tokens[cursor].Kind == NzToken.Full
+                        || (tokens[cursor].Kind == NzToken.Identifier
+                            && IsMatchKind(tokens[cursor].ToStringValue()))))
+                {
+                    cursor++;
+                }
+                else
+                {
+                    AddParserError("Expected FULL, PARTIAL or SIMPLE after MATCH", match, "PAR001");
+                    return;
+                }
+                continue;
+            }
+
+            if (kind == NzToken.Deferrable
+                || (kind == NzToken.Not
+                    && cursor + 1 < tokens.Count
+                    && tokens[cursor + 1].Kind == NzToken.Deferrable))
+            {
+                cursor += kind == NzToken.Not ? 2 : 1;
+                cursor = ConsumeInitially(tokens, cursor);
+                continue;
+            }
+
+            break;
+        }
+    }
+
+    private static bool IsMatchKind(string? value) =>
+        string.Equals(value, "PARTIAL", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(value, "SIMPLE", StringComparison.OrdinalIgnoreCase);
+
+    private int ConsumeInitially(IReadOnlyList<Token<NzToken>> tokens, int cursor)
+    {
+        if (cursor >= tokens.Count || tokens[cursor].Kind != NzToken.Initially)
+            return cursor;
+        var initially = tokens[cursor++];
+        if (cursor < tokens.Count && tokens[cursor].Kind is NzToken.Deferred or NzToken.Immediate)
+            return cursor + 1;
+        AddParserError("Expected DEFERRED or IMMEDIATE after INITIALLY", initially, "PAR001");
+        return cursor;
     }
 
     private static IReadOnlyList<ConstraintKeyColumn>? CollectConstraintKeyColumns(IReadOnlyList<Token<NzToken>> tokens)
