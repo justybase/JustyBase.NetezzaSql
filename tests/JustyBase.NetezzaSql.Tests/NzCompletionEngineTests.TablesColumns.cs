@@ -527,6 +527,23 @@ public sealed partial class NzCompletionEngineTests
         Assert.DoesNotContain(i, x => x.Label == "orders");
     }
 
+    [Fact]
+    public void QualifiedReference_database_double_dot_uses_default_schema()
+    {
+        var schema = new InMemorySchemaProvider();
+        schema.AddTable(new TableInfo("employees", Schema: "PUBLIC", Database: "MYDB"));
+        schema.AddTable(new TableInfo("orders", Schema: "SALES", Database: "MYDB"));
+        schema.SetDefaultSchema("MYDB", "PUBLIC");
+        var engine = new NzCompletionEngine(schema);
+
+        // Live Netezza resolves DB..TABLE in the database DEFSCHEMA.
+        const string sql = "SELECT * FROM MYDB..";
+        var i = engine.GetCompletions(sql, sql.Length);
+
+        Assert.Contains(i, x => x.Label == "employees" && x.Kind == CompletionKind.Table);
+        Assert.DoesNotContain(i, x => x.Label == "orders");
+    }
+
     // ===== FromClauseTail: continuation keywords after a completed FROM reference/alias =====
 
     [Fact]

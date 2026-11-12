@@ -981,6 +981,11 @@ public sealed class SharedSqlConformanceAuthoringTests
             var databaseName = GetString(database, "name");
             if (!database.TryGetProperty("schemas", out var schemas))
                 continue;
+            var defaultSchema = GetString(database, "defaultSchema");
+            if (defaultSchema.Length == 0 && schemas.GetArrayLength() > 0)
+                defaultSchema = GetString(schemas[0], "name");
+            if (defaultSchema.Length > 0)
+                schema.SetDefaultSchema(databaseName, defaultSchema);
             foreach (var schemaElement in schemas.EnumerateArray())
             {
                 var schemaName = GetString(schemaElement, "name");

@@ -13,6 +13,13 @@ public interface ISchemaProvider
     IReadOnlyList<(string Name, TableKind Kind)>? GetTableNames(string? database, string? schema);
     IReadOnlyList<string>? GetDatabases();
     IReadOnlyList<string>? GetSchemas(string? database);
+
+    /// <summary>
+    /// Database default schema (Netezza <c>DEFSCHEMA</c>) when the host knows it.
+    /// Completion uses it to resolve <c>DB..TABLE</c>; <see langword="null"/>
+    /// keeps the legacy all-schema listing for providers without that metadata.
+    /// </summary>
+    string? GetDefaultSchema(string? database) => null;
     bool CanValidateUnqualifiedTableReferences();
     IReadOnlyList<TableQualificationProposal>? ProposeTableQualification(
         string? database, string? schema, string tableName) => null;
@@ -39,6 +46,7 @@ public class InMemorySchemaProvider : ISchemaProvider, IForeignKeyProvider
     private readonly Dictionary<string, TableInfo> _tables = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, List<ForeignKeyRelation>> _foreignKeys = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, List<TableQualificationProposal>> _qualificationProposals = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _defaultSchemas = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _absentTables = new(StringComparer.OrdinalIgnoreCase);
     private int _metadataEpoch;
 
@@ -219,6 +227,29 @@ public class InMemorySchemaProvider : ISchemaProvider, IForeignKeyProvider
         }
     }
 
+    /// <summary>Registers the database default schema used by <c>DB..TABLE</c> completion.</summary>
+    public void SetDefaultSchema(string database, string? schema)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(database);
+        lock (_lock)
+        {
+            if (string.IsNullOrWhiteSpace(schema))
+                _defaultSchemas.Remove(database);
+            else
+                _defaultSchemas[database] = schema.Trim();
+        }
+    }
+
+    public string? GetDefaultSchema(string? database)
+    {
+        if (string.IsNullOrWhiteSpace(database))
+            return null;
+        lock (_lock)
+        {
+            return _defaultSchemas.TryGetValue(database, out var schema) ? schema : null;
+        }
+    }
+
     public IReadOnlyList<(string Name, TableKind Kind)>? GetTableNames(string? database, string? schema)
     {
         lock (_lock)
@@ -300,6 +331,7 @@ public class InMemorySchemaProvider : ISchemaProvider, IForeignKeyProvider
             _tables.Clear();
             _foreignKeys.Clear();
             _qualificationProposals.Clear();
+            _defaultSchemas.Clear();
             _absentTables.Clear();
             _metadataEpoch++;
         }

@@ -1004,7 +1004,10 @@ public class NzCompletionEngine
         {
             if (isDoubleDotPath)
             {
-                AddTablesAndViews(list, database, null);
+                // Live Netezza resolves DB..TABLE in the database DEFSCHEMA;
+                // do not offer objects from other schemas when the host knows it.
+                string? defaultSchema = _schema.GetDefaultSchema(database);
+                AddTablesAndViews(list, database, defaultSchema);
                 return list.Count > 0;
             }
 
