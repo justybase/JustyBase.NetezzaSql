@@ -27,7 +27,7 @@ public sealed partial class NzSqlValidatorDdlTests
     public void CommentOn_Column()
     {
         ExpectValid(
-            "COMMENT ON COLUMN TESTDB.PUBLIC.EMPLOYEES.SALARY IS 'Annual salary';",
+            "COMMENT ON COLUMN TESTDB.\"PUBLIC\".EMPLOYEES.SALARY IS 'Annual salary';",
             _schema);
     }
 

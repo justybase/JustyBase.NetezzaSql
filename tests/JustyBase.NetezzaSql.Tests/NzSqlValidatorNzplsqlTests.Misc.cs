@@ -100,7 +100,7 @@ public sealed partial class NzSqlValidatorNzplsqlTests
     {
         ExpectValid(@"
             CREATE OR REPLACE PROCEDURE RT_PROC()
-            RETURNS REFTABLE(TESTDB.PUBLIC.EMPLOYEES)
+            RETURNS REFTABLE(TESTDB.""PUBLIC"".EMPLOYEES)
             LANGUAGE NZPLSQL AS
             BEGIN_PROC
             BEGIN
@@ -375,7 +375,7 @@ public sealed partial class NzSqlValidatorNzplsqlTests
     {
         ExpectValid(@"
             CREATE OR REPLACE PROCEDURE RET_REFTABLE()
-            RETURNS REFTABLE(TESTDB.PUBLIC.EMPLOYEES)
+            RETURNS REFTABLE(TESTDB.""PUBLIC"".EMPLOYEES)
             LANGUAGE NZPLSQL AS
             BEGIN_PROC
             BEGIN
@@ -675,7 +675,7 @@ public sealed partial class NzSqlValidatorNzplsqlTests
     public void Validate_Advanced_RecordFieldAssignment()
     {
         ExpectValid(@"
-            CREATE OR REPLACE PROCEDURE TESTDB.PUBLIC.P_REC_FIELD()
+            CREATE OR REPLACE PROCEDURE TESTDB.""PUBLIC"".P_REC_FIELD()
             RETURNS INT4
             LANGUAGE NZPLSQL AS
             BEGIN_PROC

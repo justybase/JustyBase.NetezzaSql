@@ -118,7 +118,7 @@ public sealed class NzSqlValidatorSelectTests
     [Fact]
     public void Validate_Select_TableWithFinal()
     {
-        SqlTestHelpers.ExpectValid("SELECT F.* FROM TABLE WITH FINAL (TESTDB.PUBLIC.FLUID_FN()) F;", _schema);
+        SqlTestHelpers.ExpectValid("SELECT F.* FROM TABLE WITH FINAL (TESTDB.\"PUBLIC\".FLUID_FN()) F;", _schema);
     }
 
     [Fact]

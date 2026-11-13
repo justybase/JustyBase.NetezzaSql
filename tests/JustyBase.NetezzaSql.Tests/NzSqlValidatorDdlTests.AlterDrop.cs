@@ -29,14 +29,14 @@ public sealed partial class NzSqlValidatorDdlTests
     [Fact]
     public void DropSequence()
     {
-        ExpectValid("DROP SEQUENCE TESTDB.PUBLIC.SEQ_1;", _schema);
+        ExpectValid("DROP SEQUENCE TESTDB.\"PUBLIC\".SEQ_1;", _schema);
     }
 
 
     [Fact]
     public void DropSynonym()
     {
-        ExpectValid("DROP SYNONYM TESTDB.PUBLIC.SYN_1;", _schema);
+        ExpectValid("DROP SYNONYM TESTDB.\"PUBLIC\".SYN_1;", _schema);
     }
 
 
@@ -52,7 +52,7 @@ public sealed partial class NzSqlValidatorDdlTests
     [Fact]
     public void AlterSequence_RestartWith()
     {
-        ExpectValid("ALTER SEQUENCE TESTDB.PUBLIC.SEQ_1 RESTART WITH 1;", _schema);
+        ExpectValid("ALTER SEQUENCE TESTDB.\"PUBLIC\".SEQ_1 RESTART WITH 1;", _schema);
     }
 
 
@@ -66,7 +66,7 @@ public sealed partial class NzSqlValidatorDdlTests
     [Fact]
     public void AlterView_RenameTo()
     {
-        ExpectValid("ALTER VIEW TESTDB.PUBLIC.V_EMP RENAME TO V_EMPLOYEES;", _schema);
+        ExpectValid("ALTER VIEW TESTDB.\"PUBLIC\".V_EMP RENAME TO V_EMPLOYEES;", _schema);
     }
 
 

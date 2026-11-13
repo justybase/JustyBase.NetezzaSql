@@ -11,6 +11,8 @@ public sealed partial class MySqlSqlParser : NzSqlParser
     {
     }
 
+    protected override bool RejectsUnquotedPublic => false;
+
     public override Statement? Parse()
     {
         SkipSemicolons();

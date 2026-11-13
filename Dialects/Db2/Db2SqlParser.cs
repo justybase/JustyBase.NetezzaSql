@@ -16,6 +16,8 @@ public partial class Db2SqlParser : NzSqlParser
     {
     }
 
+    protected override bool RejectsUnquotedPublic => false;
+
     protected override bool SupportsValuesQuery => true;
     protected override bool SupportsScalarValuesRows => true;
 

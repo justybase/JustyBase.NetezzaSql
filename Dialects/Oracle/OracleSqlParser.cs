@@ -19,6 +19,8 @@ public partial class OracleSqlParser : NzSqlParser
     {
     }
 
+    protected override bool RejectsUnquotedPublic => false;
+
     protected override bool SupportsFetchFirst => true;
 
     // ====== Top-Level Dispatch ======

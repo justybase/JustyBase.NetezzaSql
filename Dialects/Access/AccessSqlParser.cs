@@ -17,6 +17,8 @@ public sealed class AccessSqlParser : Parser.NzSqlParser
     {
     }
 
+    protected override bool RejectsUnquotedPublic => false;
+
     protected override bool StopInExpression => _parsingPivotExpression;
 
     public override Statement? Parse()

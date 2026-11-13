@@ -51,7 +51,7 @@ public sealed class NzSqlValidatorDmlTests
     public void Insert_WithSchemaPrefix()
     {
         SqlTestHelpers.ExpectValid(
-            "INSERT INTO TESTDB.PUBLIC.EMPLOYEES (EMPLOYEE_ID, FIRST_NAME) VALUES (1, 'John');", _schema);
+            "INSERT INTO TESTDB.\"PUBLIC\".EMPLOYEES (EMPLOYEE_ID, FIRST_NAME) VALUES (1, 'John');", _schema);
     }
 
     [Fact]
@@ -188,7 +188,7 @@ public sealed class NzSqlValidatorDmlTests
     public void Update_WithSchemaPrefix()
     {
         SqlTestHelpers.ExpectValid(
-            "UPDATE TESTDB.PUBLIC.EMPLOYEES SET SALARY = 60000 WHERE EMPLOYEE_ID = 200;", _schema);
+            "UPDATE TESTDB.\"PUBLIC\".EMPLOYEES SET SALARY = 60000 WHERE EMPLOYEE_ID = 200;", _schema);
     }
 
     [Fact]
@@ -290,7 +290,7 @@ public sealed class NzSqlValidatorDmlTests
     public void Delete_WithSchemaPrefix()
     {
         SqlTestHelpers.ExpectValid(
-            "DELETE FROM TESTDB.PUBLIC.EMPLOYEES WHERE EMPLOYEE_ID = 300;", _schema);
+            "DELETE FROM TESTDB.\"PUBLIC\".EMPLOYEES WHERE EMPLOYEE_ID = 300;", _schema);
     }
 
     [Fact]

@@ -365,7 +365,7 @@ public sealed partial class NzSqlValidatorNzplsqlTests
     public void Validate_Variables_AmpersandVariableInLimit()
     {
         ExpectValid(
-            "SELECT STATUS FROM TESTDB.PUBLIC.ORDERS WHERE STATUS LIKE &searched LIMIT &limit OFFSET &offset;",
+            "SELECT STATUS FROM TESTDB.\"PUBLIC\".ORDERS WHERE STATUS LIKE &searched LIMIT &limit OFFSET &offset;",
             _schema);
     }
 
@@ -380,7 +380,7 @@ public sealed partial class NzSqlValidatorNzplsqlTests
     [Fact]
     public void Validate_Variables_AmpersandVariableInCompositeName()
     {
-        ExpectValid("SELECT NAME_&suffix FROM TESTDB.PUBLIC.ORDERS;", _schema);
+        ExpectValid("SELECT NAME_&suffix FROM TESTDB.\"PUBLIC\".ORDERS;", _schema);
     }
 
 
@@ -394,7 +394,7 @@ public sealed partial class NzSqlValidatorNzplsqlTests
     [Fact]
     public void Validate_Variables_AmpersandVariableIsNotColumnWithSchema()
     {
-        ExpectValid("SELECT STATUS FROM TESTDB.PUBLIC.ORDERS WHERE STATUS LIKE &searched;", _schema);
+        ExpectValid("SELECT STATUS FROM TESTDB.\"PUBLIC\".ORDERS WHERE STATUS LIKE &searched;", _schema);
     }
 
 

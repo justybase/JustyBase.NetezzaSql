@@ -163,7 +163,7 @@ public sealed partial class NzSqlValidatorDdlTests
     [Fact]
     public void CreateView_WithQualifiedName()
     {
-        ExpectValid("CREATE VIEW TESTDB.PUBLIC.V_EMP AS SELECT 1 AS X;", _schema);
+        ExpectValid("CREATE VIEW TESTDB.\"PUBLIC\".V_EMP AS SELECT 1 AS X;", _schema);
     }
 
 
@@ -213,7 +213,7 @@ public sealed partial class NzSqlValidatorDdlTests
     [Fact]
     public void DropTable()
     {
-        ExpectValid("DROP TABLE TESTDB.PUBLIC.EMPLOYEES;", _schema);
+        ExpectValid("DROP TABLE TESTDB.\"PUBLIC\".EMPLOYEES;", _schema);
     }
 
 
@@ -221,35 +221,35 @@ public sealed partial class NzSqlValidatorDdlTests
     public void DropTableIfExists()
     {
         // Netezza documents the trailing form: DROP TABLE <table> [, ...] [IF EXISTS].
-        ExpectValid("DROP TABLE TESTDB.PUBLIC.EMPLOYEES IF EXISTS;", _schema);
+        ExpectValid("DROP TABLE TESTDB.\"PUBLIC\".EMPLOYEES IF EXISTS;", _schema);
     }
 
 
     [Fact]
     public void DropTableIfExists_LeadingFormIsRejected()
     {
-        ExpectSyntaxError("DROP TABLE IF EXISTS TESTDB.PUBLIC.EMPLOYEES;", _schema);
+        ExpectSyntaxError("DROP TABLE IF EXISTS TESTDB.\"PUBLIC\".EMPLOYEES;", _schema);
     }
 
 
     [Fact]
     public void DropTableIfExists_MultipleTargets()
     {
-        ExpectValid("DROP TABLE TESTDB.PUBLIC.EMPLOYEES, TESTDB.PUBLIC.DEPARTMENTS IF EXISTS;", _schema);
+        ExpectValid("DROP TABLE TESTDB.\"PUBLIC\".EMPLOYEES, TESTDB.\"PUBLIC\".DEPARTMENTS IF EXISTS;", _schema);
     }
 
 
     [Fact]
     public void DropViewIfExistsIsRejected()
     {
-        ExpectSyntaxError("DROP VIEW TESTDB.PUBLIC.EMP_VIEW IF EXISTS;", _schema);
+        ExpectSyntaxError("DROP VIEW TESTDB.\"PUBLIC\".EMP_VIEW IF EXISTS;", _schema);
     }
 
 
     [Fact]
     public void DropTable_MultipleTargets()
     {
-        ExpectValid("DROP TABLE TESTDB.PUBLIC.EMPLOYEES, TESTDB.PUBLIC.DEPARTMENTS;", _schema);
+        ExpectValid("DROP TABLE TESTDB.\"PUBLIC\".EMPLOYEES, TESTDB.\"PUBLIC\".DEPARTMENTS;", _schema);
     }
 
 
@@ -302,14 +302,14 @@ public sealed partial class NzSqlValidatorDdlTests
     [Fact]
     public void TruncateTable()
     {
-        ExpectValid("TRUNCATE TABLE TESTDB.PUBLIC.EMPLOYEES;", _schema);
+        ExpectValid("TRUNCATE TABLE TESTDB.\"PUBLIC\".EMPLOYEES;", _schema);
     }
 
 
     [Fact]
     public void Truncate_WithoutTableKeyword()
     {
-        ExpectValid("TRUNCATE TESTDB.PUBLIC.EMPLOYEES;", _schema);
+        ExpectValid("TRUNCATE TESTDB.\"PUBLIC\".EMPLOYEES;", _schema);
     }
 
 
@@ -319,7 +319,7 @@ public sealed partial class NzSqlValidatorDdlTests
     public void AlterTable_AddConstraintPrimaryKey()
     {
         ExpectValid(
-            "ALTER TABLE TESTDB.PUBLIC.EMPLOYEES ADD CONSTRAINT PK_EMP PRIMARY KEY (EMPLOYEE_ID);",
+            "ALTER TABLE TESTDB.\"PUBLIC\".EMPLOYEES ADD CONSTRAINT PK_EMP PRIMARY KEY (EMPLOYEE_ID);",
             _schema);
     }
 
@@ -328,7 +328,7 @@ public sealed partial class NzSqlValidatorDdlTests
     public void AlterTable_RenameTo()
     {
         ExpectValid(
-            "ALTER TABLE TESTDB.PUBLIC.EMPLOYEES RENAME TO EMPLOYEES_OLD;",
+            "ALTER TABLE TESTDB.\"PUBLIC\".EMPLOYEES RENAME TO EMPLOYEES_OLD;",
             _schema);
     }
 
@@ -337,7 +337,7 @@ public sealed partial class NzSqlValidatorDdlTests
     public void AlterTable_AddColumn()
     {
         ExpectValid(
-            "ALTER TABLE TESTDB.PUBLIC.EMPLOYEES ADD COLUMN EMAIL VARCHAR(200);",
+            "ALTER TABLE TESTDB.\"PUBLIC\".EMPLOYEES ADD COLUMN EMAIL VARCHAR(200);",
             _schema);
     }
 
@@ -346,7 +346,7 @@ public sealed partial class NzSqlValidatorDdlTests
     public void AlterTable_DropColumnCascade()
     {
         ExpectValid(
-            "ALTER TABLE TESTDB.PUBLIC.EMPLOYEES DROP COLUMN STATUS CASCADE;",
+            "ALTER TABLE TESTDB.\"PUBLIC\".EMPLOYEES DROP COLUMN STATUS CASCADE;",
             _schema);
     }
 
@@ -355,7 +355,7 @@ public sealed partial class NzSqlValidatorDdlTests
     public void CommentOn_Table()
     {
         ExpectValid(
-            "COMMENT ON TABLE TESTDB.PUBLIC.EMPLOYEES IS 'Main employee table';",
+            "COMMENT ON TABLE TESTDB.\"PUBLIC\".EMPLOYEES IS 'Main employee table';",
             _schema);
     }
 
@@ -363,14 +363,14 @@ public sealed partial class NzSqlValidatorDdlTests
     [Fact]
     public void GroomTable_Versions()
     {
-        ExpectValid("GROOM TABLE TESTDB.PUBLIC.EMPLOYEES VERSIONS;", _schema);
+        ExpectValid("GROOM TABLE TESTDB.\"PUBLIC\".EMPLOYEES VERSIONS;", _schema);
     }
 
 
     [Fact]
     public void GroomTable_RecordsAll()
     {
-        ExpectValid("GROOM TABLE TESTDB.PUBLIC.EMPLOYEES RECORDS ALL;", _schema);
+        ExpectValid("GROOM TABLE TESTDB.\"PUBLIC\".EMPLOYEES RECORDS ALL;", _schema);
     }
 
 
@@ -378,7 +378,7 @@ public sealed partial class NzSqlValidatorDdlTests
     public void GroomTable_PagesStartReclaim()
     {
         ExpectValid(
-            "GROOM TABLE TESTDB.PUBLIC.EMPLOYEES PAGES START RECLAIM BACKUPSET DEFAULT;",
+            "GROOM TABLE TESTDB.\"PUBLIC\".EMPLOYEES PAGES START RECLAIM BACKUPSET DEFAULT;",
             _schema);
     }
 
@@ -507,7 +507,9 @@ public sealed partial class NzSqlValidatorDdlTests
     [Fact]
     public void CreateExternalTable_Simple()
     {
-        ExpectValid("CREATE EXTERNAL TABLE ext_table SAMEAS source_table", _schema);
+        ExpectValid(
+            "CREATE EXTERNAL TABLE ext_table SAMEAS source_table USING (DATAOBJECT ('/tmp/data.csv') FORMAT TEXT)",
+            _schema);
     }
 
 

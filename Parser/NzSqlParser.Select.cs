@@ -1063,7 +1063,19 @@ public partial class NzSqlParser
     protected Token<NzToken> ExpectNameToken()
     {
         var t = Peek();
-        if (t.Kind is NzToken.Identifier or NzToken.QuotedIdentifier or NzToken.Public
+        // Unquoted PUBLIC is a keyword in Netezza, not an identifier. Live
+        // Netezza rejects it in every identifier position (relation, column,
+        // alias, schema, routine, view, sequence, synonym); only GRANT/REVOKE
+        // grantees accept it, and those parse through ParseCommandTail rather
+        // than this method. The general keyword fallback below would otherwise
+        // keep accepting it.
+        if (RejectsUnquotedPublic && t.Kind == NzToken.Public)
+        {
+            AddParserError("PUBLIC is a Netezza keyword and cannot be used as an unquoted identifier; write \"PUBLIC\" instead.",
+                t, "PAR001");
+            return Advance();
+        }
+        if (t.Kind is NzToken.Identifier or NzToken.QuotedIdentifier
             or NzToken.Owner or NzToken.Hash or NzToken.Start
             // Mssql-only tokens (never emitted by the other lexers).
             or NzToken.MssqlVariable or NzToken.MssqlBracketedIdentifier

@@ -661,6 +661,14 @@ public partial class NzSqlParser
             Expect(NzToken.RParen);
         }
 
+        // Live Netezza requires USING (...) after SAMEAS; without it the
+        // server reports `found ";" ... expecting USING`.
+        if (sameAs is not null && options is null)
+        {
+            AddParserError("CREATE EXTERNAL TABLE ... SAMEAS requires a USING clause.",
+                Peek(), "PAR001");
+        }
+
         return new CreateExternalTableStatement(FromToken(createTok), table, sameAs, columns, options);
     }
 
@@ -1235,6 +1243,13 @@ public partial class NzSqlParser
         }
 
         // Now parse the actual statement being explained
+        if (Peek().Kind == NzToken.Create)
+        {
+            AddParserError(
+                "Netezza EXPLAIN supports only SELECT, INSERT, UPDATE, DELETE, or WITH statements.",
+                Peek(),
+                "PAR001");
+        }
         var inner = Parse();
         return inner ?? new SetStatement(FromToken(explainTok));
     }
@@ -1363,7 +1378,7 @@ public partial class NzSqlParser
             if (Peek(ahead).Kind != NzToken.On) continue;
             var cls = Peek(ahead + 1);
             var next = Peek(ahead + 2);
-            if (cls.Kind is NzToken.Table
+            if (cls.Kind is NzToken.Table or NzToken.Schema
                 && !next.ToStringValue().Equals(roleClause, StringComparison.OrdinalIgnoreCase)
                 && next.Kind is not (NzToken.Semicolon or NzToken.Unknown))
             {

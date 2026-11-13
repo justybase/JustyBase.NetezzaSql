@@ -20,7 +20,7 @@ public sealed partial class NzSqlValidatorSemanticTests
     public void Validate_Semantic_NonExistentTableQualified()
     {
         SqlTestHelpers.ExpectErrorCode(
-            "SELECT * FROM TESTDB.PUBLIC.NONEXISTENT_TABLE;",
+            "SELECT * FROM TESTDB.\"PUBLIC\".NONEXISTENT_TABLE;",
             "SQL006",
             _schema);
     }

@@ -11,6 +11,8 @@ public sealed partial class SqliteSqlParser : NzSqlParser
     {
     }
 
+    protected override bool RejectsUnquotedPublic => false;
+
     public override Statement? Parse()
     {
         SkipSemicolons();

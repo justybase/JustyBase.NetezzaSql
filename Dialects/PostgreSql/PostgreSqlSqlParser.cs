@@ -13,6 +13,8 @@ public sealed partial class PostgreSqlSqlParser : NzSqlParser
     {
     }
 
+    protected override bool RejectsUnquotedPublic => false;
+
     protected override bool SupportsValuesQuery => true;
     protected override bool AllowOrderedAggregateArguments => true;
     protected override bool AllowWindowNameAfterOver => true;

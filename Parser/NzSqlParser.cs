@@ -59,6 +59,14 @@ public partial class NzSqlParser
         _strictNetezzaIntervalSyntax = strictNetezzaIntervalSyntax;
     }
 
+    /// <summary>
+    /// Unquoted PUBLIC is a Netezza keyword and is rejected wherever Netezza
+    /// expects an identifier. Dialect parsers that reuse this grammar for
+    /// other engines (PostgreSQL, SQLite, Db2, ...) treat it as an ordinary
+    /// schema name and override this to false.
+    /// </summary>
+    protected virtual bool RejectsUnquotedPublic => true;
+
     protected bool StrictNetezzaIntervalSyntax => _strictNetezzaIntervalSyntax;
 
     public IReadOnlyList<ValidationError> Errors => GetErrorsSince(0);

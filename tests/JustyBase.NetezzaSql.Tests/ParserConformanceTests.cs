@@ -55,4 +55,48 @@ public sealed class ParserConformanceTests
         Assert.Equal("S", statement.Table.Schema);
         Assert.Equal("DB", statement.Table.Database);
     }
+
+    [Fact]
+    public void Parse_UnquotedPublicIdentifier_IsRejectedButGranteeIsAccepted()
+    {
+        using var runtime = new ParsingRuntime();
+
+        var rejected = runtime.Parse("SELECT * FROM DB.PUBLIC.T;");
+        Assert.False(rejected.Valid);
+        Assert.Contains(rejected.Errors, error => error.Message.Contains("PUBLIC"));
+
+        var ddl = runtime.Parse("CREATE TABLE DB.PUBLIC.T (ID INT);");
+        Assert.False(ddl.Valid);
+        Assert.Contains(ddl.Errors, error => error.Message.Contains("PUBLIC"));
+
+        var alias = runtime.Parse("SELECT ID AS PUBLIC FROM T;");
+        Assert.False(alias.Valid);
+        Assert.NotEmpty(alias.Errors);
+
+        var grant = runtime.Parse("GRANT SELECT ON T TO PUBLIC;");
+        Assert.True(grant.Valid);
+
+        var quoted = runtime.Parse("SELECT * FROM DB.\"PUBLIC\".T;");
+        Assert.True(quoted.Valid);
+    }
+
+    [Fact]
+    public void Parse_ExternalTableSameAsWithoutUsing_IsRejected()
+    {
+        using var runtime = new ParsingRuntime();
+
+        var rejected = runtime.Parse("CREATE EXTERNAL TABLE EXT SAMEAS SRC;");
+        Assert.False(rejected.Valid);
+        Assert.Contains(rejected.Errors, error => error.Message.Contains("USING"));
+
+        var accepted = runtime.Parse(
+            "CREATE EXTERNAL TABLE EXT SAMEAS SRC USING (DATAOBJECT '/tmp/ext.csv');");
+        Assert.True(accepted.Valid);
+
+        var explainCreate = runtime.Parse("EXPLAIN CREATE TABLE TMP_EX AS (SELECT 1 AS C);");
+        Assert.False(explainCreate.Valid);
+
+        var grantSchema = runtime.Parse("GRANT LIST ON SCHEMA MY_SCHEMA TO ROLE;");
+        Assert.False(grantSchema.Valid);
+    }
 }

@@ -18,7 +18,7 @@ public sealed partial class NzSqlValidatorRemainingTests
     [Fact]
     public void Validate_EdgeCases_DatabaseSchemaTableNotation()
     {
-        ExpectValid("SELECT * FROM TESTDB.PUBLIC.EMPLOYEES;", _schema);
+        ExpectValid("SELECT * FROM TESTDB.\"PUBLIC\".EMPLOYEES;", _schema);
     }
 
 

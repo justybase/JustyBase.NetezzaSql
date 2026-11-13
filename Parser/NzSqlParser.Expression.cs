@@ -361,9 +361,10 @@ public partial class NzSqlParser
             return new ExtractExpression(FromToken(extract), StripQuotes(field), source);
         }
 
-        // Netezza interval units belong inside the quoted literal (INTERVAL '1 day').
-        // Keep the broader postfix qualifier form available to dialect parsers which
-        // inherit this grammar but accept standard interval qualifiers.
+        // Netezza validates the interval representation after parsing: live accepts
+        // INTERVAL '1' DAY syntactically and then fails literal validation with
+        // "Bad interval external representation '1'". Consume the postfix qualifier
+        // so the statement still parses, but do not report a parser error.
         if (t.Kind == NzToken.Identifier && t.ToStringValue().Equals("INTERVAL", StringComparison.OrdinalIgnoreCase))
         {
             var iv = Advance();
@@ -371,14 +372,13 @@ public partial class NzSqlParser
                 Advance();
             if (StrictNetezzaIntervalSyntax && IsPostfixIntervalQualifier(Peek()))
             {
-                var qualifier = Advance();
+                Advance();
                 if (Peek().Kind == NzToken.Identifier && Peek().ToStringValue().Equals("TO", StringComparison.OrdinalIgnoreCase))
                 {
                     Advance();
                     if (IsPostfixIntervalQualifier(Peek()))
                         Advance();
                 }
-                AddParserError("Netezza interval units must be included inside the quoted interval literal.", qualifier, "PAR001");
             }
             else if (!StrictNetezzaIntervalSyntax && Peek().Kind == NzToken.Identifier)
                 Advance();

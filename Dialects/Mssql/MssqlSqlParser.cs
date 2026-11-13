@@ -17,6 +17,8 @@ public partial class MssqlSqlParser : NzSqlParser
     {
     }
 
+    protected override bool RejectsUnquotedPublic => false;
+
     protected override bool SupportsFetchFirst => true;
 
     protected override bool SupportsMultiRowValues => true;

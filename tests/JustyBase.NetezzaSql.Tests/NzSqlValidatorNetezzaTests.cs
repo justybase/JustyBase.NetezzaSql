@@ -162,7 +162,9 @@ public sealed class NzSqlValidatorNetezzaTests
     [Fact]
     public void Validate_BuiltinValues_InExpressions()
     {
-        SqlTestHelpers.ExpectSyntaxError("SELECT CURRENT_TIMESTAMP + INTERVAL '1' DAY FROM TESTDB..EMPLOYEES;", _schema);
+        // Live Netezza accepts the interval syntax and fails later at literal
+        // validation with "Bad interval external representation '1'".
+        ExpectValid("SELECT CURRENT_TIMESTAMP + INTERVAL '1' DAY FROM TESTDB..EMPLOYEES;", _schema);
     }
 
     // ========================================================================

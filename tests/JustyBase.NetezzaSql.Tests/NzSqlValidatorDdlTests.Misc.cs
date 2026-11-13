@@ -101,7 +101,7 @@ public sealed partial class NzSqlValidatorDdlTests
     [Fact]
     public void Explain_WithCtas()
     {
-        ExpectValid("EXPLAIN CREATE TABLE TMP_EX AS (SELECT 1 AS C);", _schema);
+        ExpectSyntaxError("EXPLAIN CREATE TABLE TMP_EX AS (SELECT 1 AS C);", _schema);
     }
 
 
@@ -158,7 +158,7 @@ public sealed partial class NzSqlValidatorDdlTests
     [Fact]
     public void Grant_AdminPrivileges()
     {
-        ExpectValid("GRANT LIST ON SCHEMA my_schema TO admin", _schema);
+        ExpectSyntaxError("GRANT LIST ON SCHEMA my_schema TO admin", _schema);
     }
 
 

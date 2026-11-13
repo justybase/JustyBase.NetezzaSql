@@ -365,7 +365,7 @@ public sealed partial class NzSqlValidatorNzplsqlTests
     public void Validate_Advanced_AutocommitOn()
     {
         ExpectValid(@"
-            CREATE OR REPLACE PROCEDURE TESTDB.PUBLIC.P_AUTOCOMMIT()
+            CREATE OR REPLACE PROCEDURE TESTDB.""PUBLIC"".P_AUTOCOMMIT()
             RETURNS INT4
             LANGUAGE NZPLSQL AS
             BEGIN_PROC

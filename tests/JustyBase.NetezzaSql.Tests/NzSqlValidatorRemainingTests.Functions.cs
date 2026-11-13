@@ -323,6 +323,8 @@ public sealed partial class NzSqlValidatorRemainingTests
     [Fact]
     public void Validate_NodeParity_TypeLiteralInterval()
     {
-        SqlTestHelpers.ExpectSyntaxError("SELECT INTERVAL '1' DAY;");
+        // Live Netezza accepts the interval syntax and fails later at literal
+        // validation with "Bad interval external representation '1'".
+        ExpectValid("SELECT INTERVAL '1' DAY;", _schema);
     }
 }
