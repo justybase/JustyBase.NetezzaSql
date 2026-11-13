@@ -15,7 +15,7 @@ public sealed partial class NzSqlValidatorDdlTests
     [Fact]
     public void DropProcedure()
     {
-        ExpectValid("DROP PROCEDURE MY_PROC;", _schema);
+        ExpectValid("DROP PROCEDURE MY_PROC();", _schema);
     }
 
 
@@ -124,7 +124,15 @@ public sealed partial class NzSqlValidatorDdlTests
     [Fact]
     public void DropProcedure_Simple()
     {
+        // Unterminated typing form stays quiet: the signature may still follow.
         ExpectValid("DROP PROCEDURE my_proc", _schema);
+    }
+
+    [Fact]
+    public void DropProcedure_RequiresSignatureWhenTerminated()
+    {
+        // Live Netezza rejects a bare name: found ";" expecting '('.
+        ExpectSyntaxError("DROP PROCEDURE MY_PROC;", _schema);
     }
 
 

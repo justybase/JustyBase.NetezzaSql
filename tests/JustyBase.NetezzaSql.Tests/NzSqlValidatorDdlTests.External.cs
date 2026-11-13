@@ -35,7 +35,14 @@ public sealed partial class NzSqlValidatorDdlTests
     [Fact]
     public void CommentOn_Procedure()
     {
-        ExpectValid("COMMENT ON PROCEDURE MY_PROC IS 'Helper procedure';", _schema);
+        ExpectValid("COMMENT ON PROCEDURE MY_PROC() IS 'Helper procedure';", _schema);
+    }
+
+    [Fact]
+    public void CommentOn_ProcedureRequiresSignatureWhenTerminated()
+    {
+        // Live Netezza rejects a bare name: found "IS" expecting '('.
+        ExpectSyntaxError("COMMENT ON PROCEDURE MY_PROC IS 'Helper procedure';", _schema);
     }
 
 

@@ -839,12 +839,12 @@ public partial class NzSqlParser
             }
         }
 
-        targets.Add(ParseDropTarget());
+        targets.Add(ParseProcedureDropTarget(objectType));
 
         while (Peek().Kind == NzToken.Comma)
         {
             Advance();
-            targets.Add(ParseDropTarget());
+            targets.Add(ParseProcedureDropTarget(objectType));
         }
 
         // Trailing IF EXISTS is the documented Netezza form, but only for DROP TABLE.
@@ -896,6 +896,47 @@ public partial class NzSqlParser
         }
         var (name, _) = ParseTableName();
         return name;
+    }
+
+    private TableName ParseProcedureDropTarget(string objectType)
+    {
+        var name = ParseDropTarget();
+        if (!string.Equals(objectType, "PROCEDURE", StringComparison.Ordinal))
+            return name;
+
+        // Live Netezza resolves a routine by name plus its argument-type
+        // signature (`DROP PROCEDURE MY_PROC;` fails with found ";" expecting
+        // '('). The parens may be empty. An unterminated statement stays quiet
+        // so typing is not flagged before `(` is typed.
+        if (Peek().Kind == NzToken.LParen)
+        {
+            Advance();
+            var signatureDepth = 1;
+            while (signatureDepth > 0 && Peek().Kind != NzToken.Unknown)
+            {
+                if (Peek().Kind == NzToken.LParen) signatureDepth++;
+                else if (Peek().Kind == NzToken.RParen) signatureDepth--;
+                Advance();
+            }
+            return name;
+        }
+
+        if (!HasSemicolonAhead())
+            return name;
+
+        AddParserError("Netezza identifies a procedure by name plus its argument-type signature; add parentheses, e.g. `MY_PROC()`.",
+            Peek(), "PAR001");
+        return name;
+    }
+
+    private bool HasSemicolonAhead()
+    {
+        for (var i = _pos; i < _tokens.Length; i++)
+        {
+            if (_tokens[i].Kind == NzToken.Semicolon)
+                return true;
+        }
+        return false;
     }
 
     // ====== ALTER TABLE ======
@@ -1245,15 +1286,27 @@ public partial class NzSqlParser
             (obj, _) = ParseTableName();
         }
 
-        if (objectType == "PROCEDURE" && Peek().Kind == NzToken.LParen)
+        if (objectType == "PROCEDURE")
         {
-            Advance();
-            var signatureDepth = 1;
-            while (signatureDepth > 0 && Peek().Kind != NzToken.Unknown)
+            // Live Netezza resolves a routine by name plus its argument-type
+            // signature (`COMMENT ON PROCEDURE MY_PROC IS ...` fails with found
+            // "IS" expecting '('). The parens may be empty. An unterminated
+            // statement stays quiet so typing is not flagged before `(`.
+            if (Peek().Kind == NzToken.LParen)
             {
-                if (Peek().Kind == NzToken.LParen) signatureDepth++;
-                else if (Peek().Kind == NzToken.RParen) signatureDepth--;
                 Advance();
+                var signatureDepth = 1;
+                while (signatureDepth > 0 && Peek().Kind != NzToken.Unknown)
+                {
+                    if (Peek().Kind == NzToken.LParen) signatureDepth++;
+                    else if (Peek().Kind == NzToken.RParen) signatureDepth--;
+                    Advance();
+                }
+            }
+            else if (HasSemicolonAhead())
+            {
+                AddParserError("Netezza identifies a procedure by name plus its argument-type signature; add parentheses, e.g. `MY_PROC()`.",
+                    Peek(), "PAR001");
             }
         }
 
