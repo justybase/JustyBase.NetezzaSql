@@ -14,6 +14,7 @@ public sealed class SharedSqlConformanceTests
     };
 
     internal const string MissingRepoSentinelId = "__conformance_repo_missing__";
+    internal const string NoUnverifiedTemplateCasesId = "__no_unverified_template_cases__";
     internal const string MissingRepoMessage =
         "JUSTYBASE_SQL_CONFORMANCE_PATH is required for local SQL conformance tests.";
 
@@ -80,6 +81,7 @@ public sealed class SharedSqlConformanceTests
     public static IEnumerable<object[]> DotnetUnverifiedTemplateBaselineCases()
     {
         var yielded = false;
+        var matched = false;
         foreach (var (caseJson, dialect) in LoadCases())
         {
             yielded = true;
@@ -105,6 +107,7 @@ public sealed class SharedSqlConformanceTests
             if (expectedValid is null)
                 continue;
 
+            matched = true;
             yield return
             [
                 GetString(root, "id"), dialect, GetString(root, "category"),
@@ -113,6 +116,10 @@ public sealed class SharedSqlConformanceTests
         }
         if (!yielded)
             yield return [MissingRepoSentinelId, SqlDialect.Netezza, "", false, "", ""];
+        else if (!matched)
+            // The shared corpus currently has no unresolved Netezza template
+            // cases; keep the theory runnable without inventing an assertion.
+            yield return [NoUnverifiedTemplateCasesId, SqlDialect.Netezza, "", false, "", ""];
     }
 
     [Theory]
@@ -125,6 +132,8 @@ public sealed class SharedSqlConformanceTests
         string sourceSql,
         string cursorMarker)
     {
+        if (id == NoUnverifiedTemplateCasesId)
+            return;
         if (id == MissingRepoSentinelId)
             throw RequireConformanceRootException();
         var sql = RenderSql(sourceSql);

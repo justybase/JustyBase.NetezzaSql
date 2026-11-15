@@ -102,28 +102,12 @@ public class RuleNZP004_UnmatchedBeginEnd : LintRule
         var endPos = endProcMatch.Success ? beginPos + endProcMatch.Index : sql.Length;
         var body = sql[beginPos..endPos];
 
-        int begCount = 0, endCount = 0;
-        foreach (Match m in Regex.Matches(body, @"\bBEGIN\b", RegexOptions.IgnoreCase))
-        {
-            if (!LintHelpers.IsInsideStringOrComment(body, m.Index) && !IsBeginProc(body, m.Index))
-                begCount++;
-        }
-        foreach (Match m in Regex.Matches(body, @"\bEND\b(?!\s*IF\b|\s*LOOP\b|\s*_PROC\b)", RegexOptions.IgnoreCase))
-        {
-            if (!LintHelpers.IsInsideStringOrComment(body, m.Index) && !IsEndProc(body, m.Index))
-                endCount++;
-        }
-
-        if (begCount != endCount)
+        var balance = ProcedureBlockScanner.Measure(body);
+        if (balance.Begins != balance.Ends)
             yield return new LintIssue(Id,
-                $"{Id}: {begCount} BEGIN vs {endCount} END", DefaultSeverity,
+                $"{Id}: {balance.Begins} BEGIN vs {balance.Ends} END", DefaultSeverity,
                 beginPos, beginPos + body.Length);
     }
-
-    private static bool IsBeginProc(string s, int idx) =>
-        idx + 10 <= s.Length && s[idx..(idx + 10)].Equals("BEGIN_PROC", StringComparison.OrdinalIgnoreCase);
-    private static bool IsEndProc(string s, int idx) =>
-        idx + 8 <= s.Length && s[idx..(idx + 8)].Equals("END_PROC", StringComparison.OrdinalIgnoreCase);
 }
 
 // ====== NZP005: IF without END IF ======
@@ -598,38 +582,11 @@ public class RuleNZP017_UnmatchedCaseEndCase : LintRule
             RegexOptions.IgnoreCase | RegexOptions.Singleline))
         {
             if (LintHelpers.IsInsideStringOrComment(sql, procMatch.Index)) continue;
-            var body = procMatch.Value;
-
-            int caseCount = 0, endCaseCount = 0;
-            int firstUnmatchedCase = -1;
-            int depth = 0;
-
-            // Track both searched CASE expressions and procedural CASE blocks.
-            foreach (Match m in Regex.Matches(body, @"\bCASE\b", RegexOptions.IgnoreCase))
-            {
-                if (LintHelpers.IsInsideStringOrComment(body, m.Index)) continue;
-                caseCount++;
-                if (depth == 0) firstUnmatchedCase = procMatch.Index + m.Index;
-                depth++;
-            }
-            foreach (Match m in Regex.Matches(body, @"\bEND\b(?!\s+(?:IF|LOOP|PROC)\b)", RegexOptions.IgnoreCase))
-            {
-                if (LintHelpers.IsInsideStringOrComment(body, m.Index)) continue;
-                if (depth == 0) continue; // stray END CASE
-                depth--;
-                endCaseCount++;
-            }
-
-            if (depth > 0 && firstUnmatchedCase >= 0)
+            var balance = ProcedureBlockScanner.Measure(procMatch.Value);
+            if (balance.UnmatchedCases > 0)
             {
                 yield return new LintIssue(Id,
-                    $"{Id}: {depth} unmatched CASE — expected END CASE",
-                    DefaultSeverity, firstUnmatchedCase, firstUnmatchedCase + 4);
-            }
-            else if (endCaseCount > caseCount)
-            {
-                yield return new LintIssue(Id,
-                    $"{Id}: {endCaseCount - caseCount} stray END CASE without matching CASE",
+                    $"{Id}: {balance.UnmatchedCases} unmatched CASE — expected END CASE",
                     DefaultSeverity, procMatch.Index, procMatch.Index + 10);
             }
         }
@@ -670,34 +627,10 @@ public class RuleNZP019_MissingDefault : LintRule
 
     public override IEnumerable<LintIssue> Check(string sql)
     {
-        foreach (Match m in Regex.Matches(sql,
-            @"\bCREATE\s+(?:OR\s+REPLACE\s+)?PROCEDURE\s+\w+\s*\((.*?)\)",
-            RegexOptions.IgnoreCase | RegexOptions.Singleline))
-        {
-            if (LintHelpers.IsInsideStringOrComment(sql, m.Index)) continue;
-            var paramList = m.Groups[1].Value.Trim();
-            if (string.IsNullOrEmpty(paramList)) continue;
-
-            var paramSpecs = paramList.Split(',');
-            foreach (var p in paramSpecs)
-            {
-                var trimmed = p.Trim();
-                if (trimmed.Length == 0) continue;
-                // Skip OUT/INOUT parameters
-                if (Regex.IsMatch(trimmed, @"\bOUT\b|\bINOUT\b", RegexOptions.IgnoreCase)) continue;
-                // If it's a parameter name followed by type (not preceded by DEFAULT or =)
-                var pMatch = Regex.Match(trimmed, @"^\s*(\w+)\s+\w+", RegexOptions.IgnoreCase);
-                if (pMatch.Success && !Regex.IsMatch(trimmed, @"\bDEFAULT\b|:=", RegexOptions.IgnoreCase))
-                {
-                    var pName = pMatch.Groups[1].Value;
-                    if (!LintHelpers.IsInsideStringOrComment(sql, m.Index + trimmed.IndexOf(pName, StringComparison.OrdinalIgnoreCase)))
-                        yield return new LintIssue(Id,
-                            $"{Id}: Parameter '{pName}' has no DEFAULT value", DefaultSeverity,
-                            m.Index + m.Groups[1].Index + paramList.IndexOf(trimmed, StringComparison.OrdinalIgnoreCase),
-                            m.Index + m.Groups[1].Index + paramList.IndexOf(trimmed, StringComparison.OrdinalIgnoreCase) + pName.Length);
-                }
-            }
-        }
+        // Retired: Netezza procedure arguments take no DEFAULT (live-verified
+        // CREATE error), so there is no "optional parameter" form to advise on.
+        _ = sql;
+        yield break;
     }
 }
 
@@ -781,31 +714,11 @@ public class RuleNZP023_UnclosedCursor : LintRule
 
     public override IEnumerable<LintIssue> Check(string sql)
     {
-        // Find OPEN cursor statements
-        foreach (Match open in Regex.Matches(sql, @"\bOPEN\s+(\w+)\b", RegexOptions.IgnoreCase))
-        {
-            if (LintHelpers.IsInsideStringOrComment(sql, open.Index)) continue;
-            var cursorName = open.Groups[1].Value;
-            // Skip FOR loops (auto-close)
-            if (IsForLoopCursor(sql, open.Index)) continue;
-
-            // Look for matching CLOSE after this OPEN
-            var after = sql[(open.Index + open.Length)..];
-            if (!Regex.IsMatch(after, $@"\bCLOSE\s+{Regex.Escape(cursorName)}\b", RegexOptions.IgnoreCase))
-            {
-                yield return new LintIssue(Id,
-                    $"{Id}: Cursor '{cursorName}' is opened but may not be closed", DefaultSeverity,
-                    open.Index, open.Index + open.Length);
-            }
-        }
-    }
-
-    private static bool IsForLoopCursor(string sql, int openPos)
-    {
-        // Check if OPEN is actually part of FOR cursor IN (SELECT...) construct
-        int searchStart = Math.Max(0, openPos - 20);
-        var before = sql[searchStart..openPos];
-        return Regex.IsMatch(before, @"\bFOR\b", RegexOptions.IgnoreCase);
+        // Retired: explicit cursors (DECLARE ... CURSOR, OPEN/FETCH/CLOSE) are
+        // not supported by NZPLSQL (live-verified), so an "unclosed cursor"
+        // warning describes a construct the engine rejects outright.
+        _ = sql;
+        yield break;
     }
 }
 
@@ -820,20 +733,10 @@ public class RuleNZP024_MissingReturn : LintRule
 
     public override IEnumerable<LintIssue> Check(string sql)
     {
-        var returns = Regex.Match(sql, @"\bRETURNS\s+(\w+)", RegexOptions.IgnoreCase);
-        if (!returns.Success) yield break;
-
-        var begin = Regex.Match(sql, @"\bBEGIN_PROC\b", RegexOptions.IgnoreCase);
-        if (!begin.Success) yield break;
-        var end = Regex.Match(sql[(begin.Index + begin.Length)..], @"\bEND_PROC\b", RegexOptions.IgnoreCase);
-        var bodyStart = begin.Index + begin.Length;
-        var body = end.Success ? sql[bodyStart..(bodyStart + end.Index)] : sql[bodyStart..];
-        if (!Regex.IsMatch(body, @"\bRETURN\b", RegexOptions.IgnoreCase))
-        {
-            yield return new LintIssue(Id,
-                $"{Id}: Procedure declares RETURNS {returns.Groups[1].Value} but has no RETURN statement",
-                DefaultSeverity, bodyStart, bodyStart + Math.Min(20, body.Length));
-        }
+        // Retired: Netezza accepts RETURNS without a RETURN statement; a
+        // singleton CALL yields NULL (live-verified).
+        _ = sql;
+        yield break;
     }
 }
 
@@ -879,23 +782,10 @@ public class RuleNZP026_PerformInsteadOfSelect : LintRule
 
     public override IEnumerable<LintIssue> Check(string sql)
     {
-        var procMatch = Regex.Match(sql, @"\bCREATE\s+(?:OR\s+REPLACE\s+)?PROCEDURE\b", RegexOptions.IgnoreCase);
-        if (!procMatch.Success || LintHelpers.IsInsideStringOrComment(sql, procMatch.Index)) yield break;
-
-        var beginProc = Regex.Match(sql[procMatch.Index..], @"\bBEGIN_PROC\b", RegexOptions.IgnoreCase);
-        if (!beginProc.Success) yield break;
-        var bodyStart = procMatch.Index + beginProc.Index;
-        var endProc = Regex.Match(sql[bodyStart..], @"\bEND_PROC\b", RegexOptions.IgnoreCase);
-        var body = endProc.Success ? sql[bodyStart..(bodyStart + endProc.Index)] : sql[bodyStart..];
-
-        foreach (Match m in Regex.Matches(body, @"\bSELECT\s+\w+\([^)]*\)\s*(?!INTO\b)", RegexOptions.IgnoreCase))
-        {
-            if (LintHelpers.IsInsideStringOrComment(body, m.Index)) continue;
-            // This is a function call via SELECT that's discarded — suggest PERFORM
-            yield return new LintIssue(Id,
-                $"{Id}: Use PERFORM instead of SELECT when discarding function results",
-                DefaultSeverity, bodyStart + m.Index, bodyStart + m.Index + m.Length);
-        }
+        // Retired: PERFORM is not supported by NZPLSQL (live-verified); the
+        // parser reports SELECT without INTO as SQL037 instead.
+        _ = sql;
+        yield break;
     }
 }
 
@@ -1019,13 +909,11 @@ public class RuleNZP030_NamedExceptions : LintRule
 
     public override IEnumerable<LintIssue> Check(string sql)
     {
-        foreach (Match m in Regex.Matches(sql, @"WHEN\s+SQLSTATE\s+'(\d+)'", RegexOptions.IgnoreCase))
-        {
-            if (LintHelpers.IsInsideStringOrComment(sql, m.Index)) continue;
-            yield return new LintIssue(Id,
-                $"{Id}: Use named exception instead of SQLSTATE '{m.Groups[1].Value}'",
-                DefaultSeverity, m.Index, m.Index + m.Length);
-        }
+        // Retired: NZPLSQL exception handlers accept only OTHERS and
+        // TRANSACTION_ABORTED; SQLSTATE/named exceptions are rejected
+        // (live-verified), so advising "named exceptions" is not actionable.
+        _ = sql;
+        yield break;
     }
 }
 

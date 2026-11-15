@@ -195,7 +195,6 @@ public sealed class ConformanceProductionRegressionTests
     }
 
     [Theory]
-    [InlineData("SELECT 1 FROM t WHERR 1=1", "PAR004")]
     [InlineData("SELECT 1 WHERE 1 IN ()", "NZL008")]
     [InlineData("SELECT 1 FETCH FIRST 5 ROWS ONLY", "NZS002")]
     [InlineData("SELECT 1 WHERE 1 = NULL", "NZL006")]

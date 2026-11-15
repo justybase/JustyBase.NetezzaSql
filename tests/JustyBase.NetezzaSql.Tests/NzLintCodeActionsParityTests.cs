@@ -82,11 +82,11 @@ public sealed class NzLintCodeActionsParityTests
     [Fact]
     public void SuggestedFix_IsHonored()
     {
-        var sql = "SELEC 1;";
-        var issue = new LintIssue("PAR004", "typo", LintSeverity.Error, 0, 5, SuggestedFix: "SELECT");
+        var sql = "SELECT * FROM t;";
+        var issue = new LintIssue("SQL048", "qualify", LintSeverity.Information, 14, 15, SuggestedFix: "t.id");
         var fix = NzLintCodeActions.GetQuickFix(issue, sql);
         Assert.NotNull(fix);
-        Assert.Equal("SELECT 1;", fix!.Value.Apply(sql));
+        Assert.Equal("SELECT * FROM t.id;", fix!.Value.Apply(sql));
     }
 
     [Fact]
@@ -198,7 +198,6 @@ public sealed class NzLintCodeActionsParityTests
     }
 
     [Theory]
-    [InlineData("PAR004")]
     [InlineData("SQL048")]
     [InlineData("NZL006")]
     public void SuggestionFixes_AreSafeButNotFixAll(string ruleId)

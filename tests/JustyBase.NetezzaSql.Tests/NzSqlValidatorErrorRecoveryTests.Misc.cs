@@ -308,24 +308,6 @@ JOIN ABC_123 x ON 1=1",
 
 
     [Fact]
-    public void Validate_ErrorRecovery_KeywordTypo_PAR004_SuggestsFrom()
-    {
-        var result = SqlTestHelpers.Validate("FORM t");
-        Assert.Contains(result.Errors, e =>
-            e.Code == "PAR004" && e.SuggestedFix == "FROM");
-    }
-
-
-    [Fact]
-    public void Validate_ErrorRecovery_KeywordTypo_PAR004_SuggestsWhere()
-    {
-        var result = SqlTestHelpers.Validate("WEHRE 1=1");
-        Assert.Contains(result.Errors, e =>
-            e.Code == "PAR004" && e.SuggestedFix == "WHERE");
-    }
-
-
-    [Fact]
     public void Validate_ErrorRecovery_UpdateMissingSet_PAR115()
     {
         var result = SqlTestHelpers.Validate(
@@ -359,10 +341,10 @@ JOIN ABC_123 x ON 1=1",
     public void Compare_WithJsParser_FormTypo()
     {
         var result = SqlTestHelpers.Validate("FORM t", _schema);
-        // JS: PAR004 - "Possible typo: 'FORM' looks like keyword 'FROM'." [fix: FROM]
-        // C#: should produce PAR004 with SuggestedFix FROM
-        Assert.Contains(result.Errors, e =>
-            e.Code == "PAR004" && e.SuggestedFix == "FROM");
+        // The keyword-typo heuristic (PAR004) was removed: near-keyword tokens
+        // are ordinary identifiers, so this is a plain parser diagnostic.
+        Assert.NotEmpty(result.Errors);
+        Assert.DoesNotContain(result.Errors, e => e.Code == "PAR004");
     }
 
 
@@ -370,9 +352,8 @@ JOIN ABC_123 x ON 1=1",
     public void Compare_WithJsParser_WehreTypo()
     {
         var result = SqlTestHelpers.Validate("WEHRE 1=1", _schema);
-        // JS: PAR001 - "Redundant input, expecting EOF but found: WEHRE" (typo NOT detected by JS)
-        // C#: Should detect as PAR004 with WEHRE->WHERE via Levenshtein (distance 2, threshold 2 for 5 chars)
-        Assert.Contains(result.Errors, e => e.Code is "PAR004" or "PAR001");
+        // Typo suggestions are no longer produced; the token is unexpected.
+        Assert.Contains(result.Errors, e => e.Code == "PAR001");
     }
 
 
@@ -380,9 +361,9 @@ JOIN ABC_123 x ON 1=1",
     public void Compare_WithJsParser_FormTypoInSelect()
     {
         var result = SqlTestHelpers.Validate("SELECT 1 FORM t", _schema);
-        // JS: PAR004 - "Possible typo: 'FORM' looks like keyword 'FROM'." [fix: FROM]
-        // C#: FORM consumed as alias, then t unexpected - should produce some error
+        // FORM is consumed as an alias, then t is unexpected.
         Assert.NotEmpty(result.Errors);
+        Assert.DoesNotContain(result.Errors, e => e.Code == "PAR004");
     }
 
 
@@ -390,9 +371,9 @@ JOIN ABC_123 x ON 1=1",
     public void Compare_WithJsParser_WehreTypoAfterFrom()
     {
         var result = SqlTestHelpers.Validate("SELECT * FROM t WEHRE 1=1", _schema);
-        // Authoring contract: a WHERE typo preceding a predicate must expose
-        // the typo diagnostic and its replacement instead of consuming an alias.
-        Assert.Contains(result.Errors, e => e.Code == "PAR004" && e.SuggestedFix == "WHERE");
+        // No typo rule: WEHRE is a table alias and the predicate is unexpected.
+        Assert.NotEmpty(result.Errors);
+        Assert.DoesNotContain(result.Errors, e => e.Code == "PAR004");
     }
 
 

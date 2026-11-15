@@ -637,10 +637,6 @@ public partial class NzSqlParser
                 SourcePosition.FromToken(Peek()), "PARSE001"));
             return null;
         }
-        if (Peek().Kind == NzToken.Identifier
-            && Peek(1).Kind is NzToken.NumberLiteral or NzToken.LParen
-            && _typoChecker.CheckTypo(Peek().ToStringValue()) == "WHERE")
-            return null;
         if (IsContextualIdentifier(Peek().Kind) && !IsReservedAliasWord(Peek()))
         {
             var token = Advance();
@@ -820,8 +816,7 @@ public partial class NzSqlParser
         {
             // Check this is truly a table alias, not a keyword
             var nxt = Peek(1).Kind;
-            if (nxt != NzToken.Dot && nxt != NzToken.LParen
-                && !(nxt == NzToken.NumberLiteral && _typoChecker.CheckTypo(Peek().ToStringValue()) == "WHERE"))
+            if (nxt != NzToken.Dot && nxt != NzToken.LParen)
             {
                 var aliasToken = Advance();
                 tableAlias = StripQuotes(aliasToken.ToStringValue());
@@ -1096,17 +1091,7 @@ public partial class NzSqlParser
             return Advance();
         }
 
-        // Check for keyword typo
-        var typoSuggestion = _typoChecker.CheckTypo(t.ToStringValue());
-        if (typoSuggestion is not null)
-        {
-            AddParserError($"Unknown keyword '{t.ToStringValue()}'. Did you mean '{typoSuggestion}'?",
-                t, "PAR004");
-        }
-        else
-        {
-            AddParserError($"Expected identifier or keyword, got {DescribeToken(t)}", t, "PAR001");
-        }
+        AddParserError($"Expected identifier or keyword, got {DescribeToken(t)}", t, "PAR001");
         return t;
     }
 

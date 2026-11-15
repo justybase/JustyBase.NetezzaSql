@@ -18,7 +18,6 @@ public partial class NzSqlParser
     protected Token<NzToken>[] _tokens;
     protected int _pos;
     protected readonly List<ValidationError> _errors = new();
-    private static readonly KeywordTypoChecker _typoChecker = new();
     private readonly bool _strictNetezzaIntervalSyntax;
     private int _nestingDepth;
 
@@ -292,16 +291,11 @@ public partial class NzSqlParser
     private Statement? ReportUnexpectedTopLevelToken()
     {
         var t = Peek();
-        var typoSuggestion = _typoChecker.CheckTypo(t.ToStringValue());
-        var msg = typoSuggestion is not null
-            ? $"Unexpected token {t.Kind}. Did you mean '{typoSuggestion}'?"
-            : $"Unexpected token {DescribeToken(t)}";
-        _errors.Add(new ValidationError(msg, "error",
+        _errors.Add(new ValidationError($"Unexpected token {DescribeToken(t)}", "error",
             SourcePosition.FromToken(t),
-            typoSuggestion is not null ? "PAR004" : "PAR001",
+            "PAR001",
             EndLine: t.Position.Line,
-            EndColumn: t.Position.Column + Math.Max(t.Span.Length, 1),
-            SuggestedFix: typoSuggestion));
+            EndColumn: t.Position.Column + Math.Max(t.Span.Length, 1)));
         Advance();
         if (_pos == _tokens.Length && t.Kind == NzToken.Identifier
             && t.ToStringValue().Length >= 2

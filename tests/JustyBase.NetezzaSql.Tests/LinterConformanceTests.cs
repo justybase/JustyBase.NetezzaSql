@@ -70,13 +70,12 @@ public sealed class LinterConformanceTests
     }
 
     [Fact]
-    public void MissingReturnRule_FlagsProcedureWithReturnsButNoReturn()
+    public void MissingReturnRule_IsRetiredBecauseNetezzaAcceptsIt()
     {
         var rule = new RuleNZP024_MissingReturn();
-        var issue = Assert.Single(rule.Check(
-            "CREATE PROCEDURE p() RETURNS INTEGER LANGUAGE NZPLSQL AS BEGIN_PROC NULL; END_PROC;"));
 
-        Assert.Equal("NZP024", issue.RuleId);
+        Assert.Empty(rule.Check(
+            "CREATE PROCEDURE p() RETURNS INTEGER LANGUAGE NZPLSQL AS BEGIN_PROC NULL; END_PROC;"));
     }
 
     [Fact]

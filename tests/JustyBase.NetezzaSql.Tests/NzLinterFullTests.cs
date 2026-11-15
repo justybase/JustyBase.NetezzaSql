@@ -190,6 +190,44 @@ public sealed class NzLinterFullTests
         AssertIssues(NzLintRulesExtensions.ProcedureRules, sql, "NZP004", 0);
     }
 
+    [Fact] public void NZP004_case_expressions_do_not_break_balance()
+    {
+        var sql =
+            "CREATE PROCEDURE test_proc() RETURNS INT LANGUAGE NZPLSQL AS BEGIN_PROC DECLARE v INT; BEGIN " +
+            "v := CASE WHEN 1 = 1 THEN 1 ELSE 0 END + 1; " +
+            "UPDATE t SET c = CASE WHEN 1 = 1 THEN 1 ELSE 0 END WHERE id = 1; " +
+            "BEGIN SELECT CASE v WHEN 1 THEN 1 ELSE 0 END INTO v FROM (SELECT 1 AS x) t; END; " +
+            "RAISE NOTICE 'BEGIN END IF END'; " +
+            "-- BEGIN END CASE END\n" +
+            "RETURN v; END; END_PROC;";
+        AssertIssues(NzLintRulesExtensions.ProcedureRules, sql, "NZP004", 0);
+    }
+
+    [Fact] public void NZP004_missing_block_end_with_case_expression()
+    {
+        var sql = "CREATE PROCEDURE test_proc() RETURNS INT LANGUAGE NZPLSQL AS BEGIN_PROC DECLARE v INT; BEGIN " +
+                  "BEGIN v := CASE WHEN 1 = 1 THEN 1 ELSE 0 END; RETURN v; END; END_PROC;";
+        AssertIssues(NzLintRulesExtensions.ProcedureRules, sql, "NZP004", 1);
+    }
+
+    [Fact] public void NZP017_case_end_continuations_are_matched()
+    {
+        var sql =
+            "CREATE PROCEDURE test_proc() RETURNS INT LANGUAGE NZPLSQL AS BEGIN_PROC DECLARE v INT; BEGIN " +
+            "v := CASE WHEN 1 = 1 THEN 1 ELSE 0 END + 1; " +
+            "v := CASE WHEN 1 = 1 THEN 1 ELSE 0 END::INT; " +
+            "v := CASE WHEN 1 = 1 THEN CASE WHEN 2 = 2 THEN 1 ELSE 0 END ELSE 2 END; " +
+            "RETURN v; END; END_PROC;";
+        AssertIssues(NzLintRulesExtensions.ProcedureRules, sql, "NZP017", 0);
+    }
+
+    [Fact] public void NZP017_missing_case_end_reports_issue()
+    {
+        var sql = "CREATE PROCEDURE test_proc() RETURNS INT LANGUAGE NZPLSQL AS BEGIN_PROC DECLARE v INT; BEGIN " +
+                  "v := CASE WHEN 1 = 1 THEN 1 ELSE 0; RETURN v; END; END_PROC;";
+        AssertIssues(NzLintRulesExtensions.ProcedureRules, sql, "NZP017", 1);
+    }
+
     [Fact] public void NZP005_if_without_end_if()
     {
         var sql = "CREATE PROCEDURE test_proc() LANGUAGE NZPLSQL IS BEGIN_PROC IF x = 1 THEN SELECT 1; END_PROC;";

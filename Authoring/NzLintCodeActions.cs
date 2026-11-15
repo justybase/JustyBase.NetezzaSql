@@ -29,12 +29,12 @@ public static class NzLintCodeActions
     // deterministic and cannot change query meaning.
     private static readonly HashSet<string> SafeQuickFixCodes = new(StringComparer.OrdinalIgnoreCase)
     {
-        "PAR004", "PAR002", "SQL012", "SQL046", "NZ012", "NZL006", "SQL007", "NZP012", "SQL048",
+        "PAR002", "SQL012", "SQL046", "NZ012", "NZL006", "SQL007", "NZP012", "SQL048",
         "NZ007", "NZ021", "PARSE001", "NZ024", "PAR101"
     };
 
     // Fix-all applies a subset of the Safe fixes. Safe fixes that apply a
-    // suggestion choice (PAR004 typo, SQL048 qualification, NZL006) stay explicit-only.
+    // suggestion choice (SQL048 qualification, NZL006) stay explicit-only.
     private static readonly HashSet<string> SafeFixAllCodes = new(StringComparer.OrdinalIgnoreCase)
     {
         "SQL007", "SQL012", "NZ007", "NZ012", "SQL046", "NZP012",
@@ -66,7 +66,7 @@ public static class NzLintCodeActions
     public static (string Description, Func<string, string> Apply)? GetQuickFix(
         LintIssue issue, string fullSql, ISchemaProvider? schema)
     {
-        // Prefer SuggestedFix from parser when present (e.g. PAR004 typos).
+        // Prefer SuggestedFix from parser when present (e.g. SQL048 qualification).
         if (!string.IsNullOrWhiteSpace(issue.SuggestedFix)
             && issue.StartOffset >= 0
             && issue.EndOffset > issue.StartOffset

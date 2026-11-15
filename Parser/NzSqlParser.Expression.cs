@@ -460,17 +460,7 @@ public partial class NzSqlParser
                 IsScriptVariable: isScriptVariable);
         }
 
-        // Check for keyword typo in expression context
-        var typoSuggestion = _typoChecker.CheckTypo(t.ToStringValue());
-        if (typoSuggestion is not null)
-        {
-            AddParserError($"Unknown keyword '{t.ToStringValue()}'. Did you mean '{typoSuggestion}'?",
-                t, "PAR004");
-        }
-        else
-        {
-            AddParserError($"Unexpected token {DescribeToken(t)} in expression", t, "PAR103");
-        }
+        AddParserError($"Unexpected token {DescribeToken(t)} in expression", t, "PAR103");
         SynchronizeTo(SyncTokensExpr);
         return new Literal(FromToken(t), LiteralKind.Null, "NULL");
     }

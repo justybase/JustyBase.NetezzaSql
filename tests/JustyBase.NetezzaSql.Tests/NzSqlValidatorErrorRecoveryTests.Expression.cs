@@ -139,18 +139,9 @@ END_PROC;");
     }
 
     // ========================================================================
-    // New error recovery features: PAR004 keyword typo, PAR107 unclosed paren,
+    // New error recovery features: PAR107 unclosed paren,
     // PAR108 CASE without END, PAR110 unclosed string, PAR111 unclosed comment
     // ========================================================================
-
-    [Fact]
-    public void Validate_ErrorRecovery_KeywordTypo_PAR004_SuggestsSelect()
-    {
-        var result = SqlTestHelpers.Validate("SELEC 1");
-        Assert.Contains(result.Errors, e =>
-            e.Code == "PAR004" && e.SuggestedFix == "SELECT");
-    }
-
 
     [Fact]
     public void Validate_ErrorRecovery_CaseWithoutEnd_PAR108_Detected()
