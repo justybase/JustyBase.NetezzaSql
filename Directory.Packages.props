@@ -6,7 +6,7 @@
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
     <PackageVersion Include="coverlet.collector" Version="10.1.0" />
     <PackageVersion Include="DiffPlex" Version="1.9.0" />
-    <PackageVersion Include="GitHub.Copilot.SDK" Version="1.0.31" />
+    <PackageVersion Include="GitHub.Copilot.SDK" Version="1.0.34" />
     <PackageVersion Include="JustyBase.NetezzaDriver" Version="1.9.5" />
     <PackageVersion Include="Microsoft.Data.SqlClient" Version="7.1.1" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.12" />
